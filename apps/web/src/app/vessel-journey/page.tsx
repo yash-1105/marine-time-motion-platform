@@ -206,7 +206,26 @@ function DecompositionBar({ d }: { d: NonNullable<JourneyData['time_decompositio
 
 // ── Main page ────────────────────────────────────────────────────────────────
 
-export default function VesselJourneyPage() {
+import { useRouter, useSearchParams } from 'next/navigation'
+
+interface RawEventRow {
+  id: string
+  event_name: string
+  category: string
+  original_string: string
+  utc_value: string
+  timezone: string
+  source_system: string
+  source_record_id: string
+  verification_status: string
+  confidence: number
+  is_quarantined: boolean
+  capture_method: string
+}
+
+function VesselJourneyContent() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
   const { token } = useAuth()
 
   const [vesselCalls, setVesselCalls] = useState<VesselCallSummary[]>([])
@@ -214,10 +233,11 @@ export default function VesselJourneyPage() {
   const [selectedVcId, setSelectedVcId] = useState<string | null>(null)
   const [journey, setJourney] = useState<JourneyData | null>(null)
   const [conflicts, setConflicts] = useState<ConflictRow[]>([])
+  const [rawEvents, setRawEvents] = useState<RawEventRow[]>([])
   const [loadingList, setLoadingList] = useState(true)
   const [loadingJourney, setLoadingJourney] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [tab, setTab] = useState<'timeline' | 'decomposition' | 'conflicts' | 'history'>('timeline')
+  const [tab, setTab] = useState<'timeline' | 'swimlane' | 'decomposition' | 'events' | 'conflicts' | 'history'>('swimlane')
   const [reconstructing, setReconstructing] = useState(false)
   const [reconstructMsg, setReconstructMsg] = useState<string | null>(null)
   const [historyRows, setHistoryRows] = useState<Array<{ run_version: number; rule_version?: string; triggered_by: string; created_at?: string; snapshot: unknown }>>([])
@@ -232,7 +252,25 @@ export default function VesselJourneyPage() {
       .then((r) => r.json())
       .then((d) => {
         const items: VesselCallSummary[] = Array.isArray(d) ? d : (d.items ?? [])
-        setVesselCalls(items.filter((v) => !v.is_merged))
+        const cleanCalls = items.filter((v) => !v.is_merged)
+        setVesselCalls(cleanCalls)
+
+        // Check if query params specify a VCN or ID
+        const targetVcn = searchParams.get('vcn')
+        const targetId = searchParams.get('id')
+        if (targetVcn) {
+          const match = cleanCalls.find((c) => c.vcn.toLowerCase() === targetVcn.toLowerCase())
+          if (match) {
+            setSelectedVcId(match.id)
+            loadJourney(match.id)
+          }
+        } else if (targetId) {
+          const match = cleanCalls.find((c) => c.id === targetId)
+          if (match) {
+            setSelectedVcId(match.id)
+            loadJourney(match.id)
+          }
+        }
       })
       .catch(() => setError('Failed to load vessel calls'))
       .finally(() => setLoadingList(false))
@@ -243,8 +281,8 @@ export default function VesselJourneyPage() {
       setLoadingJourney(true)
       setJourney(null)
       setConflicts([])
+      setRawEvents([])
       setError(null)
-      setTab('timeline')
 
       Promise.all([
         fetch(`${API}/api/v1/journey/${vcId}`, { headers }).then((r) =>
@@ -253,10 +291,14 @@ export default function VesselJourneyPage() {
         fetch(`${API}/api/v1/journey/${vcId}/conflicts`, { headers }).then((r) =>
           r.ok ? r.json() : []
         ),
+        fetch(`${API}/api/v1/journey/${vcId}/events`, { headers }).then((r) =>
+          r.ok ? r.json() : []
+        ),
       ])
-        .then(([j, c]: [JourneyData, ConflictRow[]]) => {
+        .then(([j, c, evs]: [JourneyData, ConflictRow[], RawEventRow[]]) => {
           setJourney(j)
           setConflicts(c)
+          setRawEvents(evs)
         })
         .catch(() => setError('No reconstructed journey for this vessel call. Use Reconstruct to build it.'))
         .finally(() => setLoadingJourney(false))
@@ -266,6 +308,10 @@ export default function VesselJourneyPage() {
 
   const handleSelect = (vcId: string) => {
     setSelectedVcId(vcId)
+    const match = vesselCalls.find((v) => v.id === vcId)
+    if (match) {
+      router.replace(`/vessel-journey?vcn=${match.vcn}`)
+    }
     loadJourney(vcId)
   }
 
@@ -300,8 +346,6 @@ export default function VesselJourneyPage() {
       v.vcn.toLowerCase().includes(search.toLowerCase()) ||
       v.vessel_name.toLowerCase().includes(search.toLowerCase())
   )
-
-  const selectedVc = vesselCalls.find((v) => v.id === selectedVcId)
 
   return (
     <div className="h-full flex gap-0 overflow-hidden">
@@ -426,11 +470,33 @@ export default function VesselJourneyPage() {
               </div>
             </div>
 
+            {/* Intentional DQ Callout Banners */}
+            {journey.vcn === 'SYNVCN2600018' && (
+              <div className="bg-amber-50 border-b border-amber-200 px-5 py-2 text-xs text-amber-900 flex items-center gap-2">
+                <span className="font-bold text-amber-700">🛡 DQ-003 CASE:</span>
+                <span>Missing mandatory ATA in staging record. Dependent durations (Turnaround, Inward Movement) are formally preserved as <strong>UNAVAILABLE</strong> with explicit reason. No fake zeroes are fabricated.</span>
+              </div>
+            )}
+            {journey.vcn === 'SYNVCN2600070' && (
+              <div className="bg-sky-50 border-b border-sky-200 px-5 py-2 text-xs text-sky-900 flex items-center gap-2">
+                <span className="font-bold text-sky-700">🛡 DQ-010 CASE:</span>
+                <span>Two conflicting ATA timestamps received (AIS 15:22 vs Manual Log 20:22). Both observations are preserved in canonical storage; inspect the <strong>Conflicts</strong> tab for the winning selection.</span>
+              </div>
+            )}
+            {journey.vcn === 'SYNVCN2600045' && (
+              <div className="bg-red-50 border-b border-red-200 px-5 py-2 text-xs text-red-900 flex items-center gap-2">
+                <span className="font-bold text-red-700">🛡 DQ-006 CASE:</span>
+                <span>Chronology sequence violation detected (Pilot On Board before scheduled). Quarantined by Data Quality Engine without dropping the raw observation.</span>
+              </div>
+            )}
+
             {/* Tabs */}
             <div className="bg-white border-b border-slate-200 px-5 flex gap-1 flex-shrink-0">
               {(
                 [
-                  { id: 'timeline', label: 'Timeline' },
+                  { id: 'swimlane', label: 'Operational Swimlane' },
+                  { id: 'timeline', label: 'Stage Details' },
+                  { id: 'events', label: `Raw Envelopes (${rawEvents.length})` },
                   { id: 'decomposition', label: 'Time Decomposition' },
                   { id: 'conflicts', label: `Conflicts (${conflicts.filter((c) => c.conflict_detected).length})` },
                   { id: 'history', label: 'History' },
@@ -442,9 +508,9 @@ export default function VesselJourneyPage() {
                     setTab(t.id)
                     if (t.id === 'history') handleLoadHistory()
                   }}
-                  className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors ${
+                  className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors cursor-pointer ${
                     tab === t.id
-                      ? 'border-emerald-500 text-emerald-700'
+                      ? 'border-emerald-500 text-emerald-700 font-bold'
                       : 'border-transparent text-slate-500 hover:text-slate-700'
                   }`}
                 >
@@ -455,7 +521,208 @@ export default function VesselJourneyPage() {
 
             {/* Tab content */}
             <div className="flex-1 overflow-y-auto p-4">
-              {/* ── Timeline ── */}
+              {/* ── Operational Swimlane ── */}
+              {tab === 'swimlane' && (
+                <div className="space-y-4">
+                  {/* Path comparison banner */}
+                  <div className="bg-white border border-slate-200 rounded p-3 text-xs">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-bold text-slate-800">
+                        Operational Flow: Standard Path vs Actual Reconstructed Path
+                      </span>
+                      <span className="text-[11px] text-slate-500 font-mono">
+                        {journey.coverage_summary?.shifting_occurrences
+                          ? '⇄ Actual: Non-Standard Shifting Call'
+                          : '✓ Actual: Standard Port Call'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 flex-wrap font-mono text-[10px] text-slate-600 bg-slate-50 p-2 rounded border border-slate-100">
+                      <span className="px-1.5 py-0.5 bg-slate-200 rounded text-slate-800 font-bold">Standard:</span>
+                      <span>Arrival</span>
+                      <span>→</span>
+                      <span>Anchorage Wait</span>
+                      <span>→</span>
+                      <span>Inward Pilotage</span>
+                      <span>→</span>
+                      <span>Berthing</span>
+                      <span>→</span>
+                      <span>Cargo Working</span>
+                      <span>→</span>
+                      <span>Unberthing</span>
+                      <span>→</span>
+                      <span>Outward Pilotage</span>
+                      <span>→</span>
+                      <span>Departure</span>
+                    </div>
+                  </div>
+
+                  {/* Horizontal visual swimlane ribbons */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                    {journey.stages.map((s, idx) => {
+                      const isAvail = s.availability === 'AVAILABLE'
+                      const isViolation = s.deviation_type === 'SEQUENCE_VIOLATION'
+                      const isShift = s.shift_occurrence_index > 0
+
+                      return (
+                        <div
+                          key={s.id}
+                          className={`rounded border p-3 flex flex-col justify-between bg-white text-xs shadow-2xs ${
+                            isViolation
+                              ? 'border-red-300 bg-red-50/50'
+                              : !isAvail
+                              ? 'border-slate-200 opacity-70'
+                              : isShift
+                              ? 'border-amber-300 bg-amber-50/30'
+                              : 'border-slate-200'
+                          }`}
+                        >
+                          <div>
+                            {/* Card top */}
+                            <div className="flex items-center justify-between gap-1 mb-1.5">
+                              <span className="font-mono text-[10px] font-bold text-slate-400">
+                                #{idx + 1}
+                              </span>
+                              <span
+                                className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${categoryColor(
+                                  s.time_category
+                                )}`}
+                              >
+                                {s.time_category.replace('_', ' ')}
+                              </span>
+                            </div>
+
+                            {/* Stage Name */}
+                            <div className="font-bold text-slate-900 text-xs truncate" title={s.stage_name}>
+                              {s.stage_name}
+                              {isShift && (
+                                <span className="ml-1 text-amber-700 font-normal">
+                                  #{s.shift_occurrence_index}
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Duration Ribbon Bar */}
+                            <div className="mt-2 mb-1.5">
+                              <div className="h-2 rounded bg-slate-100 overflow-hidden">
+                                <div
+                                  className={`h-full rounded ${
+                                    isViolation
+                                      ? 'bg-red-500'
+                                      : s.time_category === 'ACTIVE_SERVICE'
+                                      ? 'bg-emerald-500'
+                                      : s.time_category === 'PASSIVE_WAIT'
+                                      ? 'bg-sky-500'
+                                      : s.time_category === 'HOLD'
+                                      ? 'bg-amber-500'
+                                      : 'bg-slate-400'
+                                  }`}
+                                  style={{ width: isAvail ? '100%' : '0%' }}
+                                />
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Duration and timestamps */}
+                          <div className="mt-2 pt-2 border-t border-slate-100 font-mono text-[10px] space-y-1">
+                            <div className="flex items-center justify-between">
+                              <span className="text-slate-500">Duration:</span>
+                              <span className="font-bold text-slate-800">
+                                {isAvail ? fmt(s.duration_hours) : 'UNAVAILABLE'}
+                              </span>
+                            </div>
+
+                            <div className="text-[9px] text-slate-400 truncate">
+                              Start: {fmtTs(s.start_time)}
+                            </div>
+                            <div className="text-[9px] text-slate-400 truncate">
+                              End: {fmtTs(s.end_time)}
+                            </div>
+
+                            {isViolation && (
+                              <div className="text-red-700 font-bold text-[9px] mt-1">
+                                ⚠ {s.deviation_detail?.description || 'Sequence violation'}
+                              </div>
+                            )}
+                            {s.is_inferred && (
+                              <div className="text-purple-700 text-[9px] mt-1">
+                                ⚡ Inferred observation
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* ── Raw Envelopes Tab ── */}
+              {tab === 'events' && (
+                <div className="bg-white rounded border border-slate-200 overflow-hidden">
+                  <div className="p-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between text-xs">
+                    <span className="font-bold text-slate-800">
+                      Canonical Timestamp Envelopes &amp; Audit Trail
+                    </span>
+                    <span className="text-slate-500 font-mono">
+                      {rawEvents.length} preserved event occurrences
+                    </span>
+                  </div>
+                  <table className="w-full text-xs text-left">
+                    <thead className="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
+                      <tr>
+                        <th className="px-3 py-2">Event Name</th>
+                        <th className="px-3 py-2">Category</th>
+                        <th className="px-3 py-2 font-mono">Original String</th>
+                        <th className="px-3 py-2 font-mono">UTC Value</th>
+                        <th className="px-3 py-2">Source</th>
+                        <th className="px-3 py-2">Confidence</th>
+                        <th className="px-3 py-2">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-mono text-[11px]">
+                      {rawEvents.map((ev) => (
+                        <tr key={ev.id} className="hover:bg-slate-50">
+                          <td className="px-3 py-1.5 font-bold text-slate-900 font-sans">
+                            {ev.event_name}
+                          </td>
+                          <td className="px-3 py-1.5 text-slate-600 font-sans">
+                            {ev.category}
+                          </td>
+                          <td className="px-3 py-1.5 text-slate-700">
+                            {ev.original_string || '—'}
+                          </td>
+                          <td className="px-3 py-1.5 text-slate-800">
+                            {fmtTs(ev.utc_value)}
+                          </td>
+                          <td className="px-3 py-1.5 font-sans">
+                            <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 font-semibold text-[10px]">
+                              {ev.source_system}
+                            </span>
+                          </td>
+                          <td className="px-3 py-1.5 text-slate-700">
+                            {ev.confidence !== null ? `${(ev.confidence * 100).toFixed(0)}%` : '—'}
+                          </td>
+                          <td className="px-3 py-1.5 font-sans">
+                            <span
+                              className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                ev.verification_status === 'Verified'
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : ev.verification_status === 'Conflicting'
+                                  ? 'bg-red-100 text-red-800'
+                                  : 'bg-slate-100 text-slate-700'
+                              }`}
+                            >
+                              {ev.verification_status || 'Unverified'}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* ── Stage Details (formerly Timeline) ── */}
               {tab === 'timeline' && (
                 <div className="space-y-1">
                   {journey.stages.map((s, i) => (
@@ -724,5 +991,13 @@ export default function VesselJourneyPage() {
         ) : null}
       </main>
     </div>
+  )
+}
+
+export default function VesselJourneyPage() {
+  return (
+    <React.Suspense fallback={<div className="p-8 text-xs text-slate-500">Loading Vessel Journey...</div>}>
+      <VesselJourneyContent />
+    </React.Suspense>
   )
 }

@@ -160,6 +160,42 @@ def get_conflicts(
     ]
 
 
+@router.get("/{vessel_call_id}/events")
+def get_vessel_events(
+    vessel_call_id: str,
+    db: Session = Depends(get_db),
+    principal: UserPrincipal = Depends(require("view", "vessel_call")),
+):
+    """Retrieves all canonical event occurrences and timestamp envelopes for a vessel call."""
+    from apps.api.models.canonical import EventOccurrence
+    from apps.api.models.config import EventDefinition
+
+    events = db.execute(
+        select(EventOccurrence, EventDefinition)
+        .join(EventDefinition, EventOccurrence.event_definition_id == EventDefinition.id)
+        .where(EventOccurrence.vessel_call_id == vessel_call_id)
+        .order_by(EventOccurrence.utc_value.asc().nulls_last())
+    ).all()
+
+    return [
+        {
+            "id": str(ev.id),
+            "event_name": defn.name,
+            "category": defn.category,
+            "original_string": ev.original_string,
+            "utc_value": ev.utc_value.isoformat() if ev.utc_value else None,
+            "timezone": ev.source_timezone,
+            "source_system": ev.source_system,
+            "source_record_id": ev.source_record_id,
+            "verification_status": ev.verification_status,
+            "confidence": ev.confidence,
+            "is_quarantined": ev.is_quarantined,
+            "capture_method": ev.capture_method,
+        }
+        for ev, defn in events
+    ]
+
+
 @router.post("/{vessel_call_id}/corrections")
 def create_correction(
     vessel_call_id: str,

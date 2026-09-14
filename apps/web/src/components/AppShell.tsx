@@ -5,11 +5,13 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useAuth } from '../lib/auth-context'
 import { SyntheticBanner } from './SyntheticBanner'
+import { GlobalFilterBar } from './GlobalFilterBar'
 
 interface NavItem {
   label: string
   path: string
   requiredAction: string
+  glyph: string
 }
 
 const ALL_ROLES = [
@@ -25,24 +27,15 @@ const ALL_ROLES = [
 ]
 
 const NAV_ITEMS: NavItem[] = [
-  { label: 'Home / Executive Overview', path: '/', requiredAction: 'view' },
-  { label: 'Live Operations', path: '/live-operations', requiredAction: 'view' },
-  { label: 'Vessel Calls', path: '/vessel-calls', requiredAction: 'view' },
-  { label: 'Vessel Journey', path: '/vessel-journey', requiredAction: 'view' },
-  { label: 'Time and Motion Analysis', path: '/time-and-motion', requiredAction: 'view' },
-  { label: 'KPIs', path: '/kpis', requiredAction: 'view' },
-  { label: 'Delays and Bottlenecks', path: '/delays', requiredAction: 'view' },
-  { label: 'Resources', path: '/resources', requiredAction: 'view' },
-  { label: 'Data Quality', path: '/data-quality', requiredAction: 'approve' },
-  { label: 'Data Ingestion', path: '/ingestion', requiredAction: 'create' },
-  { label: 'Identity & Merge', path: '/identity', requiredAction: 'merge' },
-  { label: 'Reports', path: '/reports', requiredAction: 'publish' },
-  { label: 'Copilot', path: '/copilot', requiredAction: 'view' },
-  { label: 'Alerts and Actions', path: '/alerts', requiredAction: 'view' },
-  { label: 'Master Data', path: '/master-data', requiredAction: 'edit' },
-  { label: 'Configuration', path: '/config', requiredAction: 'configure' },
-  { label: 'Administration', path: '/admin', requiredAction: 'administer' },
-  { label: 'Audit and Lineage', path: '/audit', requiredAction: 'audit' },
+  { label: 'Vessel Calls', path: '/vessel-calls', requiredAction: 'view', glyph: '🚢' },
+  { label: 'Vessel Journey', path: '/vessel-journey', requiredAction: 'view', glyph: '⏱' },
+  { label: 'Data Quality', path: '/data-quality', requiredAction: 'view', glyph: '🛡' },
+  { label: 'Time & Motion Analysis', path: '/time-and-motion', requiredAction: 'view', glyph: '📊' },
+  { label: 'Governed KPIs', path: '/kpis', requiredAction: 'view', glyph: '🎯' },
+  { label: 'Delays & Bottlenecks', path: '/delays', requiredAction: 'view', glyph: '⏳' },
+  { label: 'Alerts & Actions', path: '/alerts', requiredAction: 'view', glyph: '🚨' },
+  { label: 'Identity & Merges', path: '/identity', requiredAction: 'view', glyph: '🔗' },
+  { label: 'Data Ingestion', path: '/ingestion', requiredAction: 'view', glyph: '📥' },
 ]
 
 export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -55,28 +48,50 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
   const visibleNavItems = NAV_ITEMS.filter((item) => can(item.requiredAction))
 
   return (
-    <div className="flex flex-col h-screen w-screen overflow-hidden bg-slate-50 text-slate-900">
+    <div className="flex flex-col h-screen w-screen overflow-hidden bg-slate-900 text-slate-900">
       {/* 1. Mandatory Synthetic Data Banner */}
       <SyntheticBanner isSynthetic={isSynthetic} />
 
       <div className="flex flex-1 overflow-hidden">
         {/* 2. Sidebar with Role-Aware Navigation */}
-        <aside className="w-64 bg-slate-900 text-slate-200 flex flex-col flex-shrink-0 border-r border-slate-800">
-          <div className="p-4 border-b border-slate-800 font-bold text-base tracking-wide flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 inline-block"></span>
-            Marine T&amp;M Platform
+        <aside className="w-60 bg-slate-950 text-slate-200 flex flex-col flex-shrink-0 border-r border-slate-800">
+          <div className="p-3 border-b border-slate-800 font-bold text-sm tracking-wide flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 inline-block shadow-xs shadow-emerald-400"></span>
+            <span className="text-white font-semibold">Marine Control Room</span>
           </div>
 
-          <div className="px-4 py-3 bg-slate-800/50 border-b border-slate-800">
-            <div className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold mb-1">
-              Active Role
+          <div className="px-3 py-2 bg-slate-900/60 border-b border-slate-800">
+            <div className="flex items-center justify-between">
+              <label htmlFor="role-select" className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">
+                Role Context
+              </label>
+              <button
+                onClick={() => logout()}
+                className="text-[10px] text-slate-500 hover:text-slate-300 cursor-pointer"
+                title="Sign out"
+              >
+                Sign out
+              </button>
             </div>
-            <div className="text-xs font-medium text-emerald-400 truncate">
-              {currentRole}
+            <select
+              id="role-select"
+              aria-label="Switch Role"
+              value={currentRole}
+              onChange={(e) => switchRole(e.target.value)}
+              className="w-full mt-1 bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-xs text-emerald-400 font-semibold focus:outline-none focus:ring-1 focus:ring-emerald-500 cursor-pointer"
+            >
+              {ALL_ROLES.map((r) => (
+                <option key={r} value={r}>
+                  {r}
+                </option>
+              ))}
+            </select>
+            <div className="text-[10px] text-slate-500 truncate mt-1">
+              {user?.email || 'admin@port.local'}
             </div>
           </div>
 
-          <nav className="flex-1 py-3 overflow-y-auto" aria-label="Primary Navigation">
+          <nav className="flex-1 py-2 overflow-y-auto" aria-label="Primary Navigation">
             <ul className="space-y-0.5 px-2">
               {visibleNavItems.map((item) => {
                 const isActive = pathname === item.path
@@ -84,13 +99,14 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
                   <li key={item.path}>
                     <Link
                       href={item.path}
-                      className={`block px-3 py-2 text-xs rounded transition-colors ${
+                      className={`flex items-center gap-2 px-2.5 py-1.5 text-xs rounded font-medium transition-colors ${
                         isActive
-                          ? 'bg-emerald-600 text-white font-medium'
+                          ? 'bg-emerald-600 text-white shadow-xs'
                           : 'text-slate-300 hover:bg-slate-800 hover:text-white'
                       }`}
                     >
-                      {item.label}
+                      <span className="text-sm">{item.glyph}</span>
+                      <span className="truncate">{item.label}</span>
                     </Link>
                   </li>
                 )
@@ -98,51 +114,21 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
             </ul>
           </nav>
 
-          <div className="p-3 border-t border-slate-800 text-[11px] text-slate-500">
-            <span>Permissions: {permissions.length} actions</span>
+          <div className="p-3 border-t border-slate-800 text-[10px] text-slate-400 flex items-center justify-between">
+            <span>Auth: {permissions.length} actions</span>
+            <span className="text-emerald-400 font-bold">V1 LIVE</span>
           </div>
         </aside>
 
         {/* 3. Main Workspace */}
-        <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-white">
-          <header className="h-14 border-b border-slate-200 flex items-center justify-between px-6 bg-white shadow-xs flex-shrink-0">
-            <div className="flex items-center gap-3">
-              <span className="text-xs font-semibold text-slate-700">Scope:</span>
-              <span className="px-2 py-0.5 bg-slate-100 border border-slate-200 rounded text-xs text-slate-600">
-                Tenant: {user?.data_scope?.tenant_id || 'synthetic'}
-              </span>
-              <span className="px-2 py-0.5 bg-slate-100 border border-slate-200 rounded text-xs text-slate-600">
-                Port: {user?.data_scope?.port_id || '*'}
-              </span>
-            </div>
+        <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-slate-100">
+          {/* Global Filter Bar wrapped in Suspense */}
+          <React.Suspense fallback={<div className="h-9 bg-slate-900 border-b border-slate-800" />}>
+            <GlobalFilterBar />
+          </React.Suspense>
 
-            {/* Role Switcher (Development Tooling) */}
-            <div className="flex items-center gap-3">
-              <label htmlFor="role-select" className="text-xs text-slate-500 font-medium">
-                Switch Dev Role:
-              </label>
-              <select
-                id="role-select"
-                value={currentRole}
-                onChange={(e) => switchRole(e.target.value)}
-                className="text-xs border border-slate-300 rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500 text-slate-800 font-medium"
-              >
-                {ALL_ROLES.map((r) => (
-                  <option key={r} value={r}>
-                    {r}
-                  </option>
-                ))}
-              </select>
-              <button
-                onClick={() => logout()}
-                className="text-xs px-2.5 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium transition-colors"
-              >
-                Sign Out
-              </button>
-            </div>
-          </header>
-
-          <main className="flex-1 overflow-y-auto p-6 bg-slate-50">
+          {/* Screen Content Container */}
+          <main className="flex-1 overflow-hidden flex flex-col min-w-0">
             {children}
           </main>
         </div>
