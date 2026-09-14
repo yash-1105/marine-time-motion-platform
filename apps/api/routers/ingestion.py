@@ -1,0 +1,56 @@
+from fastapi import APIRouter, Depends, UploadFile, File, BackgroundTasks, HTTPException, Request
+from sqlalchemy.orm import Session
+from sqlalchemy import select, desc
+import shutil
+import os
+import uuid
+
+from apps.api.core.database import get_db
+from apps.api.auth.dependencies import require
+from apps.api.models.ingestion import IngestionBatch, RawRecord, StagingRecord
+from apps.api.services.ingestion.pipeline import IngestionPipeline
+from apps.api.services.ingestion.synthetic import load_synthetic_dataset
+
+router = APIRouter(prefix="/ingestion", tags=["ingestion"])
+
+@router.post("/upload")
+def upload_file(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    principal = Depends(require("create", "vessel_call"))
+):
+    # Save to temp disk as object storage substitute
+    os.makedirs("/tmp/uploads", exist_ok=True)
+    temp_path = f"/tmp/uploads/{uuid.uuid4()}_{file.filename}"
+    with open(temp_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+        
+    pipeline = IngestionPipeline(db, tenant_id=principal.data_scope.tenant_id)
+    
+    # Normally we would queue this using Dramatiq, but for synchronous return we do it here or via background task
+    try:
+        batch_id = pipeline.process_file(temp_path, file.filename)
+        return {"batch_id": batch_id, "status": "PROCESSING"}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.post("/synthetic")
+def load_synthetic(
+    db: Session = Depends(get_db),
+    principal = Depends(require("administer", "tenant"))
+):
+    try:
+        batch_id = load_synthetic_dataset(db, "fixtures/Synthetic_Marine_Time_Motion_Test_Data.xlsx")
+        return {"batch_id": batch_id, "status": "COMPLETED"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/batches")
+def list_batches(
+    db: Session = Depends(get_db),
+    principal = Depends(require("view", "vessel_call"))
+):
+    batches = db.execute(select(IngestionBatch).order_by(desc(IngestionBatch.created_at))).scalars().all()
+    return [{"batch_id": b.batch_id, "file_name": b.file_name, "status": b.status} for b in batches]
+

@@ -1,0 +1,27 @@
+--- apps/api/services/ingestion/pipeline.py
++++ apps/api/services/ingestion/pipeline.py
+@@ -147,6 +147,8 @@
+         
+         from dateutil import parser
+         import pytz
++        
++        event_counters = {}
+         
+         for r in event_records:
+             pd = r.parsed_data
+@@ -188,9 +190,13 @@
+                 
+             if utc_val and event_def_id:
++                counter_key = (vc_id, event_def_id)
++                if counter_key not in event_counters:
++                    event_counters[counter_key] = 1
++                else:
++                    event_counters[counter_key] += 1
++                    
+                 ev = EventOccurrence(
+                     vessel_call_id=vc_id,
+                     event_definition_id=event_def_id,
+-                    occurrence_index=1,
++                    occurrence_index=event_counters[counter_key],
+                     movement_scope=scope,
+                     original_string=timestamp_str,

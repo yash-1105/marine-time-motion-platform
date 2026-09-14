@@ -29,5 +29,6 @@ migrate:
 seed:
 	source .venv/bin/activate && python seed.py
 
+
 validate:
-	echo "Not implemented yet"
+	source .venv/bin/activate && python run_synthetic_validation.py

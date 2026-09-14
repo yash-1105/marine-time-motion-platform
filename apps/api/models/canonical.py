@@ -20,7 +20,7 @@ class VesselCall(BaseModel):
     # Master attributes
     vessel_name = Column(String, nullable=False)
     imo_number = Column(String, nullable=True)
-    vcn = Column(String, nullable=True, unique=True)
+    vcn = Column(String, nullable=True)
     vessel_type = Column(String, nullable=True)
     vessel_size_teu = Column(Integer, nullable=True)
     flag = Column(String, nullable=True)

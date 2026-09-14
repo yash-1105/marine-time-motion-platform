@@ -11,3 +11,7 @@ pandas
 openpyxl
 pyjwt
 cryptography
+fastexcel
+python-multipart
+pytz
+python-dateutil
