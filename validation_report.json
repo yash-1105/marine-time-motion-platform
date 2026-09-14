@@ -4,11 +4,11 @@
     "file_size_bytes": 173374,
     "sha256": "90919984816264e44f0e83bf47a6ef11cc98f000ca375bebc77bf3f7e49b0763",
     "manifest_verified": true,
-    "execution_time_seconds": 19.04,
+    "execution_time_seconds": 55.52,
     "app_version": "1.0.0",
     "rule_version": "1.0",
     "formula_version": "1.0",
-    "run_timestamp": "2026-09-14T16:06:27.909099+00:00"
+    "run_timestamp": "2026-09-14T17:29:46.694097+00:00"
   },
   "row_counts": {
     "VesselCalls": {
@@ -334,6 +334,63 @@
     "database_cargo_ops": 72,
     "database_services": 432,
     "status": "PASS"
+  },
+  "dashboard_reconciliation": {
+    "status": "PASS",
+    "all_combinations_reconciled": true,
+    "combinations_tested": 7,
+    "throughput_segmented": true,
+    "results": [
+      {
+        "combination": "All Calls (Unfiltered)",
+        "dashboard_total": 72,
+        "api_total": 72,
+        "db_total": 72,
+        "reconciled": true
+      },
+      {
+        "combination": "Containerships",
+        "dashboard_total": 25,
+        "api_total": 25,
+        "db_total": 25,
+        "reconciled": true
+      },
+      {
+        "combination": "Bulk Carriers",
+        "dashboard_total": 14,
+        "api_total": 14,
+        "db_total": 14,
+        "reconciled": true
+      },
+      {
+        "combination": "Container Cargo",
+        "dashboard_total": 25,
+        "api_total": 25,
+        "db_total": 25,
+        "reconciled": true
+      },
+      {
+        "combination": "Bulk Cargo",
+        "dashboard_total": 14,
+        "api_total": 14,
+        "db_total": 14,
+        "reconciled": true
+      },
+      {
+        "combination": "Clean Quality Calls",
+        "dashboard_total": 26,
+        "api_total": 26,
+        "db_total": 26,
+        "reconciled": true
+      },
+      {
+        "combination": "Quarantined Quality Calls",
+        "dashboard_total": 1,
+        "api_total": 1,
+        "db_total": 1,
+        "reconciled": true
+      }
+    ]
   },
   "final_verdict": "PASS"
 }

@@ -1,6 +1,8 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
+import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import { useAuth } from '../../lib/auth-context'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
@@ -135,7 +137,7 @@ function fmtTs(ts?: string | null): string {
 
 // ── Main Page ────────────────────────────────────────────────────────────────
 
-export default function TimeAndMotionPage() {
+function TimeAndMotionContent() {
   const { token, can } = useAuth()
   const headers = { Authorization: `Bearer ${token || 'dev-token'}` }
 
@@ -160,6 +162,17 @@ export default function TimeAndMotionPage() {
   const [selectedResult, setSelectedResult] = useState<PerCallResult | null>(null)
 
   // Custom Builder state
+  const searchParams = useSearchParams()
+  const globalVesselType = searchParams.get('vesselType') || ''
+  const globalCargoType = searchParams.get('cargoType') || ''
+  const [customVesselType, setCustomVesselType] = useState(globalVesselType)
+  const [customCargoType, setCustomCargoType] = useState(globalCargoType)
+
+  useEffect(() => {
+    if (globalVesselType) setCustomVesselType(globalVesselType)
+    if (globalCargoType) setCustomCargoType(globalCargoType)
+  }, [globalVesselType, globalCargoType])
+
   const [events, setEvents] = useState<EventDef[]>([])
   const [customStart, setCustomStart] = useState('')
   const [customEnd, setCustomEnd] = useState('')
@@ -171,10 +184,31 @@ export default function TimeAndMotionPage() {
     formula?: string
     aggregate?: {
       observation_count?: number
+      missing_count?: number
       mean_hours?: number
       median_hours?: number
       p90_hours?: number
+      min_hours?: number
+      max_hours?: number
+      cv?: number
+      tail_risk_ratio?: number
       percentile_method?: string
+    }
+    distribution?: Array<{
+      bin_label: string
+      start_hours: number
+      end_hours: number
+      count: number
+      pct: number
+    }>
+    outliers?: Array<{ vcn?: string; vessel_name?: string; status?: string; duration_hours?: number }>
+    methodology?: {
+      eligibility?: string
+      exclusions?: string
+      missing_events?: string
+      percentile_method?: string
+      formula_version?: string
+      sample_size?: number
     }
     results?: Array<{ vcn?: string; vessel_name?: string; status?: string; duration_hours?: number }>
   } | null>(null)
@@ -293,6 +327,10 @@ export default function TimeAndMotionPage() {
         end_event: customEnd,
         occurrence_selection: customOcc,
         movement_scope: customScope || null,
+        cohort_filters: {
+          vessel_type: customVesselType && customVesselType !== 'ALL' ? customVesselType : null,
+          cargo_type: customCargoType && customCargoType !== 'ALL' ? customCargoType : null,
+        },
         save_as_name: customSaveName || null,
       }),
     })
@@ -820,6 +858,48 @@ export default function TimeAndMotionPage() {
                 </div>
 
                 <div className="pt-2 border-t border-slate-100">
+                  <div className="font-semibold text-slate-700 mb-2">Cohort Filters</div>
+                  <div className="space-y-2">
+                    <div>
+                      <label htmlFor="cohort-vessel-type" className="block text-slate-500 text-[11px] mb-0.5">
+                        Vessel Type
+                      </label>
+                      <select
+                        id="cohort-vessel-type"
+                        value={customVesselType}
+                        onChange={(e) => setCustomVesselType(e.target.value)}
+                        className="w-full border border-slate-300 rounded px-2 py-1 bg-white"
+                      >
+                        <option value="">All Vessel Types</option>
+                        <option value="Fully Cellular Containership">Fully Cellular Containership</option>
+                        <option value="Bulk Carrier">Bulk Carrier</option>
+                        <option value="Product Tanker">Product Tanker</option>
+                        <option value="Vehicle Carrier">Vehicle Carrier</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label htmlFor="cohort-cargo-type" className="block text-slate-500 text-[11px] mb-0.5">
+                        Cargo Type
+                      </label>
+                      <select
+                        id="cohort-cargo-type"
+                        value={customCargoType}
+                        onChange={(e) => setCustomCargoType(e.target.value)}
+                        className="w-full border border-slate-300 rounded px-2 py-1 bg-white"
+                      >
+                        <option value="">All Cargo Types</option>
+                        <option value="Container">Container</option>
+                        <option value="Bulk">Bulk</option>
+                        <option value="Liquid Bulk">Liquid Bulk</option>
+                        <option value="RoRo">RoRo</option>
+                        <option value="Break Bulk">Break Bulk</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-slate-100">
                   <label htmlFor="save-name-input" className="block text-slate-600 font-semibold mb-1">
                     Save as Catalogue Metric (Optional)
                   </label>
@@ -853,57 +933,166 @@ export default function TimeAndMotionPage() {
                 </div>
               ) : (
                 <>
-                  {/* Summary Cards */}
-                  <div className="grid grid-cols-4 gap-3">
-                    <div className="bg-white border border-slate-200 rounded-lg p-3 text-center">
-                      <div className="text-[10px] uppercase font-bold text-slate-500">Observation Count</div>
-                      <div className="text-base font-bold text-slate-800">
+                  {/* 1. Extended Summary Cards */}
+                  <div className="grid grid-cols-6 gap-2 text-xs">
+                    <div className="bg-white border border-slate-200 rounded p-2.5 text-center">
+                      <div className="text-[10px] uppercase font-bold text-slate-500">Sample Size</div>
+                      <div className="text-base font-bold text-slate-800 font-mono">
                         {customOutput.aggregate?.observation_count ?? 0}
                       </div>
+                      <div className="text-[10px] text-slate-400">
+                        {customOutput.aggregate?.missing_count ?? 0} missing
+                      </div>
                     </div>
-                    <div className="bg-white border border-slate-200 rounded-lg p-3 text-center">
+                    <div className="bg-white border border-slate-200 rounded p-2.5 text-center">
                       <div className="text-[10px] uppercase font-bold text-slate-500">Mean Duration</div>
                       <div className="text-base font-bold text-emerald-700 font-mono">
                         {customOutput.aggregate?.mean_hours != null ? `${customOutput.aggregate.mean_hours.toFixed(2)}h` : '—'}
                       </div>
+                      <div className="text-[10px] text-slate-400">Average</div>
                     </div>
-                    <div className="bg-white border border-slate-200 rounded-lg p-3 text-center">
-                      <div className="text-[10px] uppercase font-bold text-slate-500">Median Duration</div>
+                    <div className="bg-white border border-slate-200 rounded p-2.5 text-center">
+                      <div className="text-[10px] uppercase font-bold text-slate-500">Median (P50)</div>
                       <div className="text-base font-bold text-emerald-700 font-mono">
                         {customOutput.aggregate?.median_hours != null ? `${customOutput.aggregate.median_hours.toFixed(2)}h` : '—'}
                       </div>
+                      <div className="text-[10px] text-slate-400">50th percentile</div>
                     </div>
-                    <div className="bg-white border border-slate-200 rounded-lg p-3 text-center">
+                    <div className="bg-white border border-slate-200 rounded p-2.5 text-center">
                       <div className="text-[10px] uppercase font-bold text-slate-500">P90 Tail Risk</div>
-                      <div className="text-base font-bold text-slate-800 font-mono">
+                      <div className="text-base font-bold text-amber-700 font-mono">
                         {customOutput.aggregate?.p90_hours != null ? `${customOutput.aggregate.p90_hours.toFixed(2)}h` : '—'}
+                      </div>
+                      <div className="text-[10px] text-slate-400">90th percentile</div>
+                    </div>
+                    <div className="bg-white border border-slate-200 rounded p-2.5 text-center">
+                      <div className="text-[10px] uppercase font-bold text-slate-500">Minimum</div>
+                      <div className="text-base font-bold text-slate-700 font-mono">
+                        {customOutput.aggregate?.min_hours != null ? `${customOutput.aggregate.min_hours.toFixed(2)}h` : '—'}
+                      </div>
+                      <div className="text-[10px] text-slate-400">Fastest call</div>
+                    </div>
+                    <div className="bg-white border border-slate-200 rounded p-2.5 text-center">
+                      <div className="text-[10px] uppercase font-bold text-slate-500">Maximum</div>
+                      <div className="text-base font-bold text-slate-700 font-mono">
+                        {customOutput.aggregate?.max_hours != null ? `${customOutput.aggregate.max_hours.toFixed(2)}h` : '—'}
+                      </div>
+                      <div className="text-[10px] text-slate-400">Slowest call</div>
+                    </div>
+                  </div>
+
+                  {/* 2. Distribution Visualization (Histogram) */}
+                  {customOutput.distribution && customOutput.distribution.length > 0 && (
+                    <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-xs">
+                      <div className="flex items-center justify-between mb-3 text-xs">
+                        <span className="font-bold text-slate-700 uppercase tracking-wide">
+                          Duration Distribution Frequency
+                        </span>
+                        <span className="text-[11px] text-slate-500">5-Bin Linear Histogram</span>
+                      </div>
+                      <div className="space-y-2">
+                        {customOutput.distribution.map((bin, idx) => (
+                          <div key={idx} className="text-xs">
+                            <div className="flex items-center justify-between text-[11px] mb-1 font-mono">
+                              <span className="text-slate-600 font-medium">{bin.bin_label}</span>
+                              <span className="text-slate-500 font-bold">
+                                {bin.count} calls ({bin.pct}%)
+                              </span>
+                            </div>
+                            <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden border border-slate-200">
+                              <div
+                                className="bg-emerald-600 h-full rounded-full transition-all"
+                                style={{ width: `${Math.max(2, bin.pct)}%` }}
+                              ></div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 3. Methodology & Governance Explanation */}
+                  <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs">
+                    <div className="font-bold text-slate-700 uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
+                      <span>📖</span>
+                      <span>Governed Methodology & Calculations</span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-3 text-[11px] text-slate-600">
+                      <div>
+                        <strong>Eligibility:</strong> {customOutput.methodology?.eligibility || 'Active non-merged calls'}
+                      </div>
+                      <div>
+                        <strong>Exclusions:</strong> {customOutput.methodology?.exclusions || 'Quarantined excluded'}
+                      </div>
+                      <div>
+                        <strong>Missing Events:</strong> {customOutput.methodology?.missing_events || 'Reported as UNAVAILABLE'}
+                      </div>
+                      <div>
+                        <strong>Percentile Method:</strong> {customOutput.methodology?.percentile_method || 'Linear interpolation'}
+                      </div>
+                      <div>
+                        <strong>Formula Version:</strong> {customOutput.methodology?.formula_version || '1.0'}
+                      </div>
+                      <div>
+                        <strong>Sample Size:</strong> {customOutput.methodology?.sample_size ?? customOutput.aggregate?.observation_count} calls
                       </div>
                     </div>
                   </div>
 
-                  {/* Results Table */}
+                  {/* 4. Outliers Table */}
+                  {customOutput.outliers && customOutput.outliers.length > 0 && (
+                    <div className="bg-amber-50/60 border border-amber-200 rounded-lg p-3 text-xs">
+                      <div className="font-bold text-amber-900 uppercase tracking-wide mb-2 flex items-center justify-between">
+                        <span>⚠ Detected Tail Outliers ({customOutput.outliers.length})</span>
+                        <span className="text-[10px] font-normal text-amber-700 font-mono">
+                          Duration &gt; P90 ({customOutput.aggregate?.p90_hours?.toFixed(1)}h) or negative
+                        </span>
+                      </div>
+                      <div className="max-h-32 overflow-y-auto space-y-1">
+                        {customOutput.outliers.map((o, idx) => (
+                          <div
+                            key={idx}
+                            className="flex items-center justify-between bg-white/80 px-2 py-1 rounded border border-amber-200/60 text-[11px]"
+                          >
+                            <span className="font-mono font-bold text-amber-900">{o.vcn}</span>
+                            <span className="text-slate-600">{o.vessel_name || '—'}</span>
+                            <span className="font-mono font-bold text-amber-800">{fmtHours(o.duration_hours)}</span>
+                            <Link
+                              href={`/vessel-journey?vcn=${o.vcn}`}
+                              className="text-emerald-600 hover:underline font-semibold text-[10px]"
+                            >
+                              Inspect Journey →
+                            </Link>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 5. Results Table */}
                   <div className="bg-white rounded-lg border border-slate-200 shadow-xs overflow-hidden">
                     <div className="px-4 py-2.5 border-b border-slate-200 bg-slate-50 flex items-center justify-between text-xs">
                       <span className="font-semibold text-slate-700">{customOutput.formula}</span>
                       <span className="text-[11px] text-slate-500">
-                        Method: {customOutput.aggregate?.percentile_method}
+                        {customOutput.results?.length || 0} vessel calls analyzed
                       </span>
                     </div>
 
-                    <div className="max-h-[400px] overflow-y-auto">
+                    <div className="max-h-[300px] overflow-y-auto">
                       <table className="w-full text-xs text-left border-collapse">
                         <thead>
-                          <tr className="border-b border-slate-200 bg-slate-50/50 text-slate-500">
+                          <tr className="border-b border-slate-200 bg-slate-50/50 text-slate-500 font-semibold">
                             <th className="py-2 px-3">VCN</th>
                             <th className="py-2 px-3">Vessel Name</th>
                             <th className="py-2 px-3 text-right">Duration</th>
                             <th className="py-2 px-3 text-center">Status</th>
+                            <th className="py-2 px-3 text-center">Action</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
                           {customOutput.results?.map((r, idx: number) => (
                             <tr key={idx} className="hover:bg-slate-50">
-                              <td className="py-1.5 px-3 font-semibold text-slate-800">{r.vcn}</td>
+                              <td className="py-1.5 px-3 font-semibold text-slate-800 font-mono">{r.vcn}</td>
                               <td className="py-1.5 px-3 text-slate-600">{r.vessel_name || '—'}</td>
                               <td className="py-1.5 px-3 text-right font-mono font-medium">
                                 {r.status === 'AVAILABLE' ? fmtHours(r.duration_hours) : '—'}
@@ -916,6 +1105,14 @@ export default function TimeAndMotionPage() {
                                 >
                                   {r.status}
                                 </span>
+                              </td>
+                              <td className="py-1.5 px-3 text-center">
+                                <Link
+                                  href={`/vessel-journey?vcn=${r.vcn}`}
+                                  className="text-emerald-600 hover:underline font-semibold text-[11px]"
+                                >
+                                  Drill down
+                                </Link>
                               </td>
                             </tr>
                           ))}
@@ -930,5 +1127,19 @@ export default function TimeAndMotionPage() {
         )}
       </main>
     </div>
+  )
+}
+
+export default function TimeAndMotionPage() {
+  return (
+    <React.Suspense
+      fallback={
+        <div className="flex-1 flex items-center justify-center bg-slate-50 text-slate-400 text-xs font-mono">
+          Loading Time & Motion Explorer…
+        </div>
+      }
+    >
+      <TimeAndMotionContent />
+    </React.Suspense>
   )
 }

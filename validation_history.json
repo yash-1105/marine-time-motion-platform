@@ -28,5 +28,25 @@
     "base_calls": 72,
     "metrics_reconciled": "8 of 8",
     "dq_cases_passed": "10 of 10"
+  },
+  {
+    "run_timestamp": "2026-09-14T17:06:35.174232+00:00",
+    "execution_time_seconds": 52.1,
+    "app_version": "1.0.0",
+    "overall_status": "PASS",
+    "dataset_checksum": "90919984816264e44f0e83bf47a6ef11cc98f000ca375bebc77bf3f7e49b0763",
+    "base_calls": 72,
+    "metrics_reconciled": "8 of 8",
+    "dq_cases_passed": "10 of 10"
+  },
+  {
+    "run_timestamp": "2026-09-14T17:29:46.694097+00:00",
+    "execution_time_seconds": 55.52,
+    "app_version": "1.0.0",
+    "overall_status": "PASS",
+    "dataset_checksum": "90919984816264e44f0e83bf47a6ef11cc98f000ca375bebc77bf3f7e49b0763",
+    "base_calls": 72,
+    "metrics_reconciled": "8 of 8",
+    "dq_cases_passed": "10 of 10"
   }
 ]

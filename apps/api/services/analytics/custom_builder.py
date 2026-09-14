@@ -30,6 +30,7 @@ class CustomLeadTimeBuilder:
         occurrence_selection: str = "first",  # first | last | nth | all
         occurrence_n: int = 1,
         movement_scope: Optional[str] = None,
+        cohort_filters: Optional[Dict[str, Any]] = None,
         vessel_call_ids: Optional[List[str]] = None,
         exclude_quarantined: bool = True,
         save_as_name: Optional[str] = None,
@@ -58,6 +59,22 @@ class CustomLeadTimeBuilder:
             vc_stmt = vc_stmt.where(VesselCall.tenant_id == self.tenant_id)
         if vessel_call_ids:
             vc_stmt = vc_stmt.where(VesselCall.id.in_(vessel_call_ids))
+
+        # Cohort filters
+        if cohort_filters:
+            vt = cohort_filters.get("vessel_type")
+            if vt and vt not in ("*", "ALL"):
+                vc_stmt = vc_stmt.where(VesselCall.vessel_type == vt)
+            ct = cohort_filters.get("cargo_type")
+            if ct and ct not in ("*", "ALL"):
+                vc_stmt = vc_stmt.where(VesselCall.cargo_type == ct)
+            pid = cohort_filters.get("port_id")
+            if pid and pid not in ("*", "ALL"):
+                vc_stmt = vc_stmt.where(VesselCall.port_id == pid)
+            tid = cohort_filters.get("terminal_id")
+            if tid and tid not in ("*", "ALL"):
+                vc_stmt = vc_stmt.where(VesselCall.terminal_id == tid)
+
         vessel_calls = self.db.execute(vc_stmt).scalars().all()
 
         # 3. Calculate per-call results
@@ -212,7 +229,44 @@ class CustomLeadTimeBuilder:
                 "small_sample_warning": True,
             })
 
-        # 5. Optionally save definition to catalogue
+        # 5. Outliers and Distribution
+        outliers: List[Dict[str, Any]] = []
+        distribution: List[Dict[str, Any]] = []
+        p90 = aggregate.get("p90_hours")
+
+        if durations:
+            for r in per_call_results:
+                dur = r.get("duration_hours")
+                if dur is not None and ((p90 is not None and dur > p90) or dur < 0):
+                    outliers.append(r)
+
+            # Build histogram buckets (5 bins)
+            min_d = aggregate["min_hours"]
+            max_d = aggregate["max_hours"]
+            if min_d is not None and max_d is not None and max_d > min_d:
+                step = (max_d - min_d) / 5.0
+                for b_idx in range(5):
+                    b_start = round(min_d + b_idx * step, 2)
+                    b_end = round(b_start + step, 2)
+                    cnt = sum(1 for d in durations if (b_start <= d < b_end) or (b_idx == 4 and d == b_end))
+                    distribution.append({
+                        "bin_label": f"{b_start}h – {b_end}h",
+                        "start_hours": b_start,
+                        "end_hours": b_end,
+                        "count": cnt,
+                        "pct": round((cnt / len(durations)) * 100, 1),
+                    })
+
+        methodology = {
+            "eligibility": "All active, non-merged canonical vessel calls with eligible paired event timestamps",
+            "exclusions": "Quarantined observations with critical quality issues are excluded by default",
+            "missing_events": f"{aggregate['missing_count']} calls lacked required timestamp occurrences",
+            "percentile_method": "Linear interpolation (pl.quantile with linear interpolation per spec §10.2)",
+            "formula_version": "1.0",
+            "sample_size": aggregate["observation_count"],
+        }
+
+        # 6. Optionally save definition to catalogue
         saved_def_id = None
         if save_as_name:
             existing_def = self.db.execute(
@@ -248,6 +302,9 @@ class CustomLeadTimeBuilder:
             "saved_definition_id": saved_def_id,
             "calculated_at": datetime.now(timezone.utc).isoformat(),
             "aggregate": aggregate,
+            "distribution": distribution,
+            "outliers": outliers,
+            "methodology": methodology,
             "results": per_call_results,
             "traceability": {
                 "tenant_id": self.tenant_id,

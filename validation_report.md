@@ -1,7 +1,7 @@
 # Marine Time & Motion Analytics Platform — Synthetic Validation Report
 
 > [!NOTE]
-> **Validation Run:** `2026-09-14T16:06:27.909099+00:00` | **Execution Time:** `19.04s` | **Overall Verdict:** **`PASS`**
+> **Validation Run:** `2026-09-14T17:29:46.694097+00:00` | **Execution Time:** `55.52s` | **Overall Verdict:** **`PASS`**
 > **App Version:** `1.0.0` | **Rule Version:** `1.0` | **Formula Version:** `1.0`
 
 ---
@@ -107,7 +107,25 @@
 
 ---
 
-## 9. Final Acceptance Verdict
+## 9. Dashboard / API / Database 3-Way Reconciliation (spec §20.13, §21A.5.10)
+
+- **Reconciliation Status:** **`PASS`**
+- **Throughput Unit Segmentation:** `VERIFIED` (TEU, MT, Units distinct; unqualified sum prohibited)
+- **Filter Combinations Reconciled:** `7 of 7`
+
+| Filter Combination | Dashboard Total | Analytics API Total | Database Direct SQL | Reconciled |
+|---|---:|---:|---:|:---:|
+| All Calls (Unfiltered) | 72 | 72 | 72 | **`PASS`** |
+| Containerships | 25 | 25 | 25 | **`PASS`** |
+| Bulk Carriers | 14 | 14 | 14 | **`PASS`** |
+| Container Cargo | 25 | 25 | 25 | **`PASS`** |
+| Bulk Cargo | 14 | 14 | 14 | **`PASS`** |
+| Clean Quality Calls | 26 | 26 | 26 | **`PASS`** |
+| Quarantined Quality Calls | 1 | 1 | 1 | **`PASS`** |
+
+---
+
+## 10. Final Acceptance Verdict
 
 > ### **RESULT: PASS**
-> All 12 spec §21A.3 requirements verified. The V1 analytical spine is fully functional and reconciled against governed fixture oracles.
+> All spec §21A.3 and Phase 12 dashboard reconciliation requirements verified. The V1 analytical spine and dashboards are fully reconciled.

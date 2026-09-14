@@ -33,6 +33,7 @@ class CustomLeadTimeRequest(BaseModel):
     occurrence_selection: str = Field("first", description="first | last | nth | all")
     occurrence_n: int = Field(1, description="Index when occurrence_selection is nth")
     movement_scope: Optional[str] = Field(None, description="Optional movement scope (ARRIVAL, SAILING, SHIFTING)")
+    cohort_filters: Optional[Dict[str, Any]] = Field(None, description="Cohort filters (vessel_type, cargo_type, etc.)")
     save_as_name: Optional[str] = Field(None, description="Optional catalogue name to save this custom definition")
     description: Optional[str] = Field(None, description="Description if saving to catalogue")
 
@@ -246,6 +247,7 @@ def run_custom_lead_time(
             occurrence_selection=req.occurrence_selection,
             occurrence_n=req.occurrence_n,
             movement_scope=req.movement_scope,
+            cohort_filters=req.cohort_filters,
             save_as_name=req.save_as_name,
             description=req.description,
             created_by_user=principal.email or principal.user_id,

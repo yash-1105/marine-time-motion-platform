@@ -27,10 +27,11 @@ const ALL_ROLES = [
 ]
 
 const NAV_ITEMS: NavItem[] = [
+  { label: 'Executive Dashboard', path: '/', requiredAction: 'view', glyph: '🏛' },
   { label: 'Vessel Calls', path: '/vessel-calls', requiredAction: 'view', glyph: '🚢' },
   { label: 'Vessel Journey', path: '/vessel-journey', requiredAction: 'view', glyph: '⏱' },
   { label: 'Data Quality', path: '/data-quality', requiredAction: 'view', glyph: '🛡' },
-  { label: 'Time & Motion Analysis', path: '/time-and-motion', requiredAction: 'view', glyph: '📊' },
+  { label: 'Time & Motion Explorer', path: '/time-and-motion', requiredAction: 'view', glyph: '⚡' },
   { label: 'Governed KPIs', path: '/kpis', requiredAction: 'view', glyph: '🎯' },
   { label: 'Delays & Bottlenecks', path: '/delays', requiredAction: 'view', glyph: '⏳' },
   { label: 'Alerts & Actions', path: '/alerts', requiredAction: 'view', glyph: '🚨' },
