@@ -7,7 +7,7 @@
 | REQ-003 | 1. PRODUCT MISSION | validates completeness, timestamp accuracy, chronology, operational logic, dupli... | Core | test_req_003 | NOT_STARTED |
 | REQ-004 | 1. PRODUCT MISSION | Resolves identities and consolidates source records into one governed vessel-cal... | identity | test_identity_engine | IMPLEMENTED |
 | REQ-005 | 1. PRODUCT MISSION | Reconstructs each vessel's end-to-end journey from pre-arrival through regulator... | journey | test_req_005 | NOT_STARTED |
-| REQ-006 | 1. PRODUCT MISSION | Separates elapsed lead time, waiting time, service time, planning gaps, schedule... | Core | test_req_006 | NOT_STARTED |
+| REQ-006 | 1. PRODUCT MISSION | Separates elapsed lead time, waiting time, service time, planning gaps, schedule... | analytics | test_all_9_duration_semantics_concepts | IMPLEMENTED |
 | REQ-007 | 1. PRODUCT MISSION | Calculates marine, berth, terminal, cargo, yard, gate, rail, departure, coordina... | kpi | test_req_007 | BACKLOG |
 | REQ-008 | 1. PRODUCT MISSION | Identifies delays, bottlenecks, process deviations, stage contribution, instabil... | Core | test_req_008 | NOT_STARTED |
 | REQ-009 | 1. PRODUCT MISSION | Provides role-specific dashboards, drill-downs, vessel journey replay, automated... | reporting | test_req_009 | NOT_STARTED |
@@ -15,7 +15,7 @@
 | REQ-011 | 4. USERS, ROLES, AND AUTHORISATION | Platform Administrator: tenants/ports, users, roles, configuration, integrations... | Core | test_req_011 | NOT_STARTED |
 | REQ-012 | 4. USERS, ROLES, AND AUTHORISATION | Data Steward: mappings, aliases, quality rules, exceptions, merge/unmerge, corre... | quality | test_req_012 | NOT_STARTED |
 | REQ-013 | 4. USERS, ROLES, AND AUTHORISATION | Marine Operations Controller: live movements, resources, alerts, operational upd... | Core | test_req_013 | NOT_STARTED |
-| REQ-014 | 4. USERS, ROLES, AND AUTHORISATION | Analyst: exploratory time-motion analysis, custom event pairs, statistical analy... | Core | test_req_014 | NOT_STARTED |
+| REQ-014 | 4. USERS, ROLES, AND AUTHORISATION | Analyst: exploratory time-motion analysis, custom event pairs, statistical analy... | analytics | test_custom_builder_handles_event_pairs_and_repeated_occurrences | IMPLEMENTED |
 | REQ-015 | 4. USERS, ROLES, AND AUTHORISATION | Department Head: KPI, delay, resource, and operational dashboards; comments and ... | kpi | test_req_015 | NOT_STARTED |
 | REQ-016 | 4. USERS, ROLES, AND AUTHORISATION | Executive: read-only executive dashboard, management reports, critical risks, tr... | reporting | test_req_016 | NOT_STARTED |
 | REQ-017 | 4. USERS, ROLES, AND AUTHORISATION | Report Manager: templates, schedules, distribution lists, publication workflow.... | Core | test_req_017 | NOT_STARTED |

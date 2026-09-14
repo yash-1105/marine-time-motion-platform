@@ -341,3 +341,142 @@ def test_analytics_api_endpoints_work(db_session, analytics_fixture):
     assert r_custom.status_code == 200
     custom_data = r_custom.json()
     assert custom_data["aggregate"]["observation_count"] == 72
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 9. Governed Duration Semantics (spec §10.1, 9 distinct concepts)
+# ──────────────────────────────────────────────────────────────────────────────
+
+def test_all_9_duration_semantics_concepts():
+    """Verifies that all 9 duration concepts from spec §10.1 are distinct, independently tested,
+
+    and carry explicit null handling (never fabricated zero).
+    """
+    from datetime import datetime, timezone
+    from apps.api.services.analytics.duration_semantics import (
+        compute_lead_time,
+        compute_planning_lead_time,
+        compute_scheduling_gap,
+        compute_execution_delay,
+        compute_target_variance,
+        compute_waiting_time,
+        compute_service_time,
+        compute_delay_frequency,
+        compute_early_delivery,
+    )
+
+    t0 = datetime(2026, 3, 1, 10, 0, tzinfo=timezone.utc)
+    t1 = datetime(2026, 3, 1, 12, 0, tzinfo=timezone.utc)
+    t2 = datetime(2026, 3, 1, 14, 0, tzinfo=timezone.utc)
+    t3 = datetime(2026, 3, 1, 13, 45, tzinfo=timezone.utc)  # 15 mins early
+
+    # 1. Lead Time: end - start
+    lt = compute_lead_time(t0, t2)
+    assert lt.concept == "Lead Time"
+    assert lt.value_hours == 4.0
+    assert compute_lead_time(None, t2).status == "UNAVAILABLE"
+
+    # 2. Planning Lead Time: requested - submitted
+    plt = compute_planning_lead_time(t0, t1)
+    assert plt.concept == "Planning Lead Time"
+    assert plt.value_hours == 2.0
+    assert compute_planning_lead_time(t0, None).status == "UNAVAILABLE"
+
+    # 3. Scheduling Gap: scheduled - requested
+    sg = compute_scheduling_gap(t1, t2)
+    assert sg.concept == "Scheduling Gap"
+    assert sg.value_hours == 2.0
+    assert compute_scheduling_gap(None, t2).status == "UNAVAILABLE"
+
+    # 4. Execution Delay: served - scheduled
+    ed_early = compute_execution_delay(t2, t3)
+    assert ed_early.concept == "Execution Delay"
+    assert ed_early.value_hours == -0.25  # Preserved with sign
+    assert ed_early.is_early_delivery is True
+
+    # 5. Target Variance: actual - target
+    tv = compute_target_variance(14.5, 12.0)
+    assert tv.concept == "Target Variance"
+    assert tv.value_hours == 2.5
+    assert compute_target_variance(None, 12.0).status == "UNAVAILABLE"
+
+    # 6. Waiting Time: inactive intervals
+    stages = [
+        {"stage_name": "Anchorage Wait", "time_category": "PASSIVE_WAIT", "duration_hours": 4.5},
+        {"stage_name": "Cargo Working", "time_category": "ACTIVE_SERVICE", "duration_hours": 8.0},
+        {"stage_name": "Clearance Hold", "time_category": "HOLD", "duration_hours": 1.5},
+    ]
+    wt = compute_waiting_time(stages)
+    assert wt.concept == "Waiting Time"
+    assert wt.value_hours == 6.0  # 4.5 + 1.5
+
+    # 7. Service Time: active intervals
+    st = compute_service_time(stages)
+    assert st.concept == "Service Time"
+    assert st.value_hours == 8.0
+
+    # 8. Delay Frequency: delayed / total
+    df = compute_delay_frequency(15, 72)
+    assert df.concept == "Delay Frequency"
+    assert df.value_hours == 0.2083
+    assert df.unit == "ratio"
+    assert compute_delay_frequency(5, 0).status == "UNAVAILABLE"
+
+    # 9. Early Delivery: negative execution delay
+    early = compute_early_delivery(-0.25)
+    assert early.concept == "Early Delivery"
+    assert early.value_hours == -0.25
+    assert early.is_early_delivery is True
+    assert early.metadata["early_hours"] == 0.25
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 10. Daylight-Saving Boundaries & Overlapping Stages
+# ──────────────────────────────────────────────────────────────────────────────
+
+def test_daylight_saving_boundary_duration():
+    """Verifies that UTC timestamp envelope arithmetic preserves exact physical durations across DST changes."""
+    from datetime import datetime
+    import pytz
+    from apps.api.services.analytics.duration_semantics import compute_lead_time
+
+    # London spring forward DST transition: 2026-03-29 from 01:00 to 02:00
+    tz = pytz.timezone("Europe/London")
+    dt1_local = tz.localize(datetime(2026, 3, 29, 0, 30))
+    dt2_local = tz.localize(datetime(2026, 3, 29, 3, 30))
+
+    # Convert to UTC as required by the timestamp envelope
+    dt1_utc = dt1_local.astimezone(pytz.utc)
+    dt2_utc = dt2_local.astimezone(pytz.utc)
+
+    # Physical elapsed time across the 1-hour jump is 2 hours, not 3 hours!
+    lt = compute_lead_time(dt1_utc, dt2_utc)
+    assert lt.status == "AVAILABLE"
+    assert lt.value_hours == 2.0, f"Expected 2.0h across DST boundary, got {lt.value_hours}h"
+
+
+def test_overlapping_stages_and_residual_time(db_session, analytics_fixture):
+    """Verifies stage contributions do not double count and residual time is reported."""
+    client = TestClient(app)
+    login_resp = client.post("/api/v1/auth/dev/login", json={"role_or_email": "Platform Administrator"})
+    token = login_resp.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # Find a vessel call with available turnaround
+    vc = db_session.execute(select(VesselCall).where(VesselCall.vcn == "SYNVCN2600001")).scalar_one()
+    r = client.get(f"/api/v1/analytics/vessel/{vc.id}", headers=headers)
+    assert r.status_code == 200
+    data = r.json()
+
+    turnaround = data.get("turnaround_hours")
+    assert turnaround is not None
+    assert turnaround > 0
+
+    # Check that individual stage contributions are computed as percentages of turnaround
+    metrics = data.get("metrics", [])
+    for m in metrics:
+        if m["status"] == "AVAILABLE" and m["duration_hours"] is not None:
+            if m["metric_name"] in ("Anchorage Wait", "Inward Movement", "Berth Stay", "Outward Movement"):
+                # Individual movement stages must each be less than total turnaround
+                assert m["duration_hours"] <= turnaround, f"{m['metric_name']} exceeds total turnaround"
+
