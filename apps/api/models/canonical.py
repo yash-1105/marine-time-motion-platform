@@ -1,11 +1,22 @@
-from sqlalchemy import Column, String, Integer, Float, Boolean, ForeignKey, DateTime, JSON, UniqueConstraint
-from sqlalchemy.orm import relationship
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    Column,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    UniqueConstraint,
+)
+
 from .base import BaseModel
 
+
 class VesselCall(BaseModel):
-    __tablename__ = 'vessel_call'
-    __table_args__ = {'schema': 'canonical'}
-    
+    __tablename__ = "vessel_call"
+    __table_args__ = {"schema": "canonical"}
+
     # Master attributes
     vessel_name = Column(String, nullable=False)
     imo_number = Column(String, nullable=True)
@@ -32,18 +43,24 @@ class VesselCall(BaseModel):
     aft_draft_unit = Column(String, nullable=True)
     call_sign = Column(String, nullable=True)
 
+    # Data Scope attributes
+    tenant_id = Column(String, nullable=False, default="default-tenant")
+    port_id = Column(String, nullable=True)
+    terminal_id = Column(String, nullable=True)
+
+
 class EventOccurrence(BaseModel):
-    __tablename__ = 'event_occurrence'
+    __tablename__ = "event_occurrence"
     __table_args__ = (
-        UniqueConstraint('vessel_call_id', 'event_definition_id', 'occurrence_index', name='uq_event_occurrence'),
-        {'schema': 'canonical'}
+        UniqueConstraint("vessel_call_id", "event_definition_id", "occurrence_index", name="uq_event_occurrence"),
+        {"schema": "canonical"},
     )
-    
-    vessel_call_id = Column(ForeignKey('canonical.vessel_call.id'), nullable=False)
-    event_definition_id = Column(ForeignKey('config.event_definition.id'), nullable=False)
+
+    vessel_call_id = Column(ForeignKey("canonical.vessel_call.id"), nullable=False)
+    event_definition_id = Column(ForeignKey("config.event_definition.id"), nullable=False)
     occurrence_index = Column(Integer, default=1, nullable=False)
-    movement_scope = Column(String, nullable=False) # ARRIVAL|SHIFTING|SAILING
-    
+    movement_scope = Column(String, nullable=False)  # ARRIVAL|SHIFTING|SAILING
+
     # Timestamp envelope
     original_string = Column(String, nullable=True)
     parsed_value = Column(DateTime(timezone=True), nullable=True)
@@ -55,47 +72,52 @@ class EventOccurrence(BaseModel):
     source_record_id = Column(String, nullable=True)
     ingestion_batch_id = Column(String, nullable=True)
     correction_history = Column(JSON, nullable=True)
-    
+
     inference_status = Column(String, nullable=True)
     human_review_state = Column(String, nullable=True)
     is_quarantined = Column(Boolean, default=False)
 
+
 class ServiceRequest(BaseModel):
-    __tablename__ = 'service_request'
-    __table_args__ = {'schema': 'canonical'}
-    vessel_call_id = Column(ForeignKey('canonical.vessel_call.id'), nullable=False)
+    __tablename__ = "service_request"
+    __table_args__ = {"schema": "canonical"}
+    vessel_call_id = Column(ForeignKey("canonical.vessel_call.id"), nullable=False)
     service_type = Column(String, nullable=False)
     requested_time = Column(DateTime(timezone=True), nullable=True)
 
+
 class ServiceAssignment(BaseModel):
-    __tablename__ = 'service_assignment'
-    __table_args__ = {'schema': 'canonical'}
-    service_request_id = Column(ForeignKey('canonical.service_request.id'), nullable=False)
+    __tablename__ = "service_assignment"
+    __table_args__ = {"schema": "canonical"}
+    service_request_id = Column(ForeignKey("canonical.service_request.id"), nullable=False)
     scheduled_time = Column(DateTime(timezone=True), nullable=True)
     assigned_resource_id = Column(String, nullable=True)
     resource_type = Column(String, nullable=True)
 
+
 class ServiceExecution(BaseModel):
-    __tablename__ = 'service_execution'
-    __table_args__ = {'schema': 'canonical'}
-    service_assignment_id = Column(ForeignKey('canonical.service_assignment.id'), nullable=False)
+    __tablename__ = "service_execution"
+    __table_args__ = {"schema": "canonical"}
+    service_assignment_id = Column(ForeignKey("canonical.service_assignment.id"), nullable=False)
     served_time = Column(DateTime(timezone=True), nullable=True)
     execution_status = Column(String, nullable=True)
 
+
 class Delay(BaseModel):
-    __tablename__ = 'delay'
-    __table_args__ = {'schema': 'canonical'}
-    vessel_call_id = Column(ForeignKey('canonical.vessel_call.id'), nullable=False)
+    __tablename__ = "delay"
+    __table_args__ = {"schema": "canonical"}
+    vessel_call_id = Column(ForeignKey("canonical.vessel_call.id"), nullable=False)
     movement_stage = Column(String, nullable=False)
     total_duration_hours = Column(Float, nullable=False)
     is_early_service = Column(Boolean, default=False)
 
+
 class DelayAllocation(BaseModel):
-    __tablename__ = 'delay_allocation'
-    __table_args__ = {'schema': 'canonical'}
-    delay_id = Column(ForeignKey('canonical.delay.id'), nullable=False)
+    __tablename__ = "delay_allocation"
+    __table_args__ = {"schema": "canonical"}
+    delay_id = Column(ForeignKey("canonical.delay.id"), nullable=False)
     cause = Column(String, nullable=False)
     duration_hours = Column(Float, nullable=False)
     is_primary = Column(Boolean, default=True)
-    cause_status = Column(String, nullable=True) # CONFIRMED|INFERRED
+    cause_status = Column(String, nullable=True)  # CONFIRMED|INFERRED
     inference_evidence = Column(JSON, nullable=True)

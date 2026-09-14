@@ -1,10 +1,12 @@
-from sqlalchemy.orm import declarative_base
-from sqlalchemy import Column, DateTime, Integer, String
-from sqlalchemy.sql import func
-from sqlalchemy.dialects.postgresql import UUID
 import uuid
 
+from sqlalchemy import Column, DateTime, Integer, String
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import declarative_base
+from sqlalchemy.sql import func
+
 Base = declarative_base()
+
 
 class BaseModel(Base):
     __abstract__ = True

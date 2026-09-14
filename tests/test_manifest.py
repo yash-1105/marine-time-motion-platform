@@ -7,7 +7,7 @@ def test_manifest_checksum():
     manifest_path = Path("fixtures/MANIFEST.json")
     assert manifest_path.exists()
 
-    with open(manifest_path, "r") as f:
+    with open(manifest_path) as f:
         manifest = json.load(f)
 
     excel_path = Path("fixtures") / manifest["filename"]

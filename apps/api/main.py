@@ -1,17 +1,14 @@
 import logging
 import uuid
 
-from fastapi import FastAPI, Request
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
-from pydantic_settings import BaseSettings
 
-
-class Settings(BaseSettings):
-    database_url: str = "postgresql://admin:password@localhost:5434/marine_platform"
-    redis_url: str = "redis://localhost:6379/0"
-
-
-settings = Settings()
+from apps.api.auth.dependencies import require
+from apps.api.core.config import settings
+from apps.api.routers.audit import router as audit_router
+from apps.api.routers.auth import router as auth_router
+from apps.api.routers.operations import router as operations_router
 
 app = FastAPI(
     title="Marine Time & Motion Platform",
@@ -39,6 +36,7 @@ async def add_correlation_id(request: Request, call_next):
     return response
 
 
+# Public liveness and readiness endpoints
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
@@ -54,17 +52,38 @@ def liveness_check():
     return {"status": "alive"}
 
 
-from fastapi import APIRouter
-
+# Versioned API Router (/api/v1)
 v1_router = APIRouter(prefix="/api/v1")
 
 
 @v1_router.get("/status")
-def status():
-    return {"version": "v1"}
+def status(_=Depends(require("view", "system_status"))):
+    return {"version": "v1", "environment": settings.environment}
 
+
+v1_router.include_router(auth_router)
+v1_router.include_router(audit_router)
+v1_router.include_router(operations_router)
 
 app.include_router(v1_router)
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    correlation_id = getattr(request.state, "correlation_id", "unknown")
+    detail = exc.detail
+    if isinstance(detail, dict):
+        if "correlation_id" not in detail:
+            detail["correlation_id"] = correlation_id
+        return JSONResponse(status_code=exc.status_code, content=detail)
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "code": f"HTTP_{exc.status_code}",
+            "message": str(detail),
+            "correlation_id": correlation_id,
+        },
+    )
 
 
 @app.exception_handler(Exception)

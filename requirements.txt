@@ -9,3 +9,5 @@ alembic
 polars
 pandas
 openpyxl
+pyjwt
+cryptography

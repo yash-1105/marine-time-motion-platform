@@ -1,5 +1,85 @@
-# Roles
+# Phase 02 - Seeded Roles and Permissions based on LEVEL_100_SPEC.md §4
+# Actions: view, create, edit, approve, reject, merge, unmerge, recalculate, publish, export, configure, administer, audit
+
 roles:
-  - name: "Port Administrator"
-  - name: "Operations Manager"
+  - name: "Platform Administrator"
+    description: "Full platform administration, tenants/ports, users, roles, configuration, integrations, security, retention."
+    permissions:
+      - "view"
+      - "create"
+      - "edit"
+      - "approve"
+      - "reject"
+      - "merge"
+      - "unmerge"
+      - "recalculate"
+      - "publish"
+      - "export"
+      - "configure"
+      - "administer"
+      - "audit"
+
   - name: "Data Steward"
+    description: "Mappings, aliases, quality rules, exceptions, merge/unmerge, corrections, approvals."
+    permissions:
+      - "view"
+      - "create"
+      - "edit"
+      - "approve"
+      - "reject"
+      - "merge"
+      - "unmerge"
+      - "audit"
+
+  - name: "Marine Operations Controller"
+    description: "Live movements, resources, alerts, operational updates, event confirmation."
+    permissions:
+      - "view"
+      - "create"
+      - "edit"
+      - "approve"
+
+  - name: "Analyst"
+    description: "Exploratory time-motion analysis, custom event pairs, statistical analysis, cohorts, exports."
+    permissions:
+      - "view"
+      - "recalculate"
+      - "export"
+
+  - name: "Department Head"
+    description: "KPI, delay, resource, and operational dashboards; comments and action tracking."
+    permissions:
+      - "view"
+      - "approve"
+      - "reject"
+      - "publish"
+      - "export"
+
+  - name: "Executive"
+    description: "Read-only executive dashboard, management reports, critical risks, trends."
+    permissions:
+      - "view"
+      - "export"
+
+  - name: "Report Manager"
+    description: "Templates, schedules, distribution lists, publication workflow."
+    permissions:
+      - "view"
+      - "create"
+      - "edit"
+      - "publish"
+      - "export"
+
+  - name: "Auditor"
+    description: "Read-only lineage, version history, calculation evidence, access and correction logs."
+    permissions:
+      - "view"
+      - "audit"
+      - "export"
+
+  - name: "Integration Service Account"
+    description: "Scoped machine access with rotated credentials."
+    permissions:
+      - "view"
+      - "create"
+      - "edit"
