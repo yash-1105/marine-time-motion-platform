@@ -5,8 +5,8 @@ Spec rule: Peer-port benchmark data is absent by default and recorded as such wi
 source and period fields empty rather than populated with invented numbers.
 """
 
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import select
@@ -21,7 +21,7 @@ class KPIBenchmarkService:
     def __init__(self, db: Session):
         self.db = db
 
-    def get_benchmarks_for_kpi(self, kpi_code_or_id: str) -> Dict[str, Any]:
+    def get_benchmarks_for_kpi(self, kpi_code_or_id: str) -> dict[str, Any]:
         """Retrieves benchmarks for a given KPI, or returns absent status if none configured."""
         kpi = None
         try:
@@ -71,7 +71,7 @@ class KPIBenchmarkService:
             ],
         }
 
-    def list_all_benchmarks(self) -> List[Dict[str, Any]]:
+    def list_all_benchmarks(self) -> list[dict[str, Any]]:
         """Lists all registered benchmarks across all KPIs."""
         stmt = (
             select(KPIBenchmark, KPI)
@@ -98,9 +98,9 @@ class KPIBenchmarkService:
         kpi_code_or_id: str,
         peer_port: str,
         benchmark_value: float,
-        source: Optional[str] = None,
-        period: Optional[str] = None,
-        notes: Optional[str] = None,
+        source: str | None = None,
+        period: str | None = None,
+        notes: str | None = None,
         created_by: str = "admin",
     ) -> KPIBenchmark:
         """Admin operation to register a peer-port benchmark for a KPI."""
@@ -122,8 +122,8 @@ class KPIBenchmarkService:
             period=period,
             notes=notes,
             created_by=created_by,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
         self.db.add(benchmark)
         self.db.commit()

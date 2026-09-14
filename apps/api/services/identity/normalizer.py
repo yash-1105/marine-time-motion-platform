@@ -1,6 +1,5 @@
-import re
 import difflib
-from typing import Tuple
+import re
 
 
 class VesselNameNormalizer:
@@ -25,7 +24,7 @@ class VesselNameNormalizer:
         return s
 
     @classmethod
-    def similarity(cls, name1: str | None, name2: str | None) -> Tuple[float, str]:
+    def similarity(cls, name1: str | None, name2: str | None) -> tuple[float, str]:
         """
         Calculates similarity between two vessel names.
         Returns (similarity_score, explanation).

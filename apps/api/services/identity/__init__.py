@@ -1,8 +1,8 @@
-from .normalizer import VesselNameNormalizer
-from .matcher import IdentityMatcher, MatchResult, AttributeEvidence
-from .survivorship import SurvivorshipEngine
-from .merger import MergerService
 from .engine import IdentityEngine
+from .matcher import AttributeEvidence, IdentityMatcher, MatchResult
+from .merger import MergerService
+from .normalizer import VesselNameNormalizer
+from .survivorship import SurvivorshipEngine
 
 __all__ = [
     "VesselNameNormalizer",

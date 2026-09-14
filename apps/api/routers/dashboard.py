@@ -1,7 +1,8 @@
 """Executive Dashboard and 3-Way Reconciliation REST API (spec §12.1 & §21A.5.10, Phase 12)."""
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -17,7 +18,7 @@ from apps.api.services.dashboard.executive import ExecutiveDashboardService
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
 
-def _resolve_tenant(principal: UserPrincipal, explicit_tenant: Optional[str] = None) -> str:
+def _resolve_tenant(principal: UserPrincipal, explicit_tenant: str | None = None) -> str:
     if explicit_tenant:
         return explicit_tenant
     if principal.data_scope.tenant_id in ("*", "tenant-synthetic-01"):
@@ -27,17 +28,17 @@ def _resolve_tenant(principal: UserPrincipal, explicit_tenant: Optional[str] = N
 
 @router.get("/executive", summary="Get governed executive dashboard metrics")
 def get_executive_dashboard(
-    port_id: Optional[str] = Query(None, description="Port code filter (e.g. ZADUR)"),
-    terminal_id: Optional[str] = Query(None, description="Terminal code filter (e.g. DCT)"),
-    vessel_type: Optional[str] = Query(None, description="Vessel type filter"),
-    cargo_type: Optional[str] = Query(None, description="Cargo type filter"),
-    quality_status: Optional[str] = Query(None, description="CLEAN | FLAGGED | QUARANTINED"),
-    start_date: Optional[datetime] = Query(None, description="Reporting window start date"),
-    end_date: Optional[datetime] = Query(None, description="Reporting window end date"),
-    tenant_id: Optional[str] = Query(None),
+    port_id: str | None = Query(None, description="Port code filter (e.g. ZADUR)"),
+    terminal_id: str | None = Query(None, description="Terminal code filter (e.g. DCT)"),
+    vessel_type: str | None = Query(None, description="Vessel type filter"),
+    cargo_type: str | None = Query(None, description="Cargo type filter"),
+    quality_status: str | None = Query(None, description="CLEAN | FLAGGED | QUARANTINED"),
+    start_date: datetime | None = Query(None, description="Reporting window start date"),
+    end_date: datetime | None = Query(None, description="Reporting window end date"),
+    tenant_id: str | None = Query(None),
     db: Session = Depends(get_db),
     principal: UserPrincipal = Depends(require("view", "analytics")),
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Returns real, governed executive dashboard metrics with segmented throughput,
 
     lead times, delays, bottlenecks, outliers, and governed KPI highlights.
@@ -57,10 +58,10 @@ def get_executive_dashboard(
 
 @router.get("/reconciliation", summary="Execute 3-way reconciliation (Dashboard vs API vs Database)")
 def run_reconciliation(
-    tenant_id: Optional[str] = Query(None),
+    tenant_id: str | None = Query(None),
     db: Session = Depends(get_db),
     principal: UserPrincipal = Depends(require("view", "analytics")),
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Spec §20.13 and §21A.5.10 3-way reconciliation requirement:
 
     Asserts that under identical filter combinations:

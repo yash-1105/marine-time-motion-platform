@@ -1,20 +1,20 @@
 import uuid
+
 import pytest
+from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select, text
 from sqlalchemy.orm import sessionmaker
-from fastapi.testclient import TestClient
 
 from apps.api.main import app
-from apps.api.core.database import get_db
-from apps.api.models.canonical import VesselCall, EventOccurrence, ServiceRequest, Delay
-from apps.api.models.identity import MatchCandidate, MatchEvidence, MergeDecision
 from apps.api.models.audit import AuditEvent
+from apps.api.models.canonical import VesselCall
+from apps.api.models.identity import MatchCandidate, MatchEvidence
 from apps.api.models.quality import QualityIssue, QualityRule
-from apps.api.services.identity.normalizer import VesselNameNormalizer
-from apps.api.services.identity.matcher import IdentityMatcher
-from apps.api.services.identity.survivorship import SurvivorshipEngine
-from apps.api.services.identity.merger import MergerService
 from apps.api.services.identity.engine import IdentityEngine
+from apps.api.services.identity.matcher import IdentityMatcher
+from apps.api.services.identity.merger import MergerService
+from apps.api.services.identity.normalizer import VesselNameNormalizer
+from apps.api.services.identity.survivorship import SurvivorshipEngine
 
 
 @pytest.fixture(scope="module")

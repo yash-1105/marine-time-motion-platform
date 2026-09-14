@@ -1,12 +1,13 @@
+import datetime
+import uuid
+
 import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
-from apps.api.models.canonical import VesselCall, EventOccurrence, ServiceRequest, ServiceAssignment, ServiceExecution
-from apps.api.models.config import EventDefinition
-from apps.api.models.quality import QualityIssue
+
+from apps.api.models.canonical import EventOccurrence, ServiceAssignment, ServiceExecution, ServiceRequest, VesselCall
 from apps.api.services.quality.engine import DataQualityEngine
-import datetime
-import uuid
+
 
 @pytest.fixture(scope="module")
 def db_session():
@@ -31,18 +32,18 @@ def test_early_service_vs_sequence_violation(db_session):
     req = ServiceRequest(vessel_call_id=vc_id, service_type="Tug")
     db_session.add(req)
     db_session.flush()
-    ass = ServiceAssignment(service_request_id=req.id, scheduled_time=datetime.datetime(2026, 1, 1, 10, 0, tzinfo=datetime.timezone.utc))
+    ass = ServiceAssignment(service_request_id=req.id, scheduled_time=datetime.datetime(2026, 1, 1, 10, 0, tzinfo=datetime.UTC))
     db_session.add(ass)
     db_session.flush()
-    exe = ServiceExecution(service_assignment_id=ass.id, served_time=datetime.datetime(2026, 1, 1, 9, 30, tzinfo=datetime.timezone.utc))
+    exe = ServiceExecution(service_assignment_id=ass.id, served_time=datetime.datetime(2026, 1, 1, 9, 30, tzinfo=datetime.UTC))
     db_session.add(exe)
     
     # 2. Sequence violation (POB before Anchorage)
     anchor_def = db_session.execute(text("SELECT id FROM config.event_definition WHERE name='ANCHORAGE_ARRIVAL'")).scalar()
     pob_def = db_session.execute(text("SELECT id FROM config.event_definition WHERE name='PILOT_ON_BOARD_ARRIVAL'")).scalar()
     
-    anchor = EventOccurrence(vessel_call_id=vc_id, event_definition_id=anchor_def, utc_value=datetime.datetime(2026, 1, 1, 12, 0, tzinfo=datetime.timezone.utc), occurrence_index=1, movement_scope="ARRIVAL", capture_method="SYSTEM", is_quarantined=False)
-    pob = EventOccurrence(vessel_call_id=vc_id, event_definition_id=pob_def, utc_value=datetime.datetime(2026, 1, 1, 11, 0, tzinfo=datetime.timezone.utc), occurrence_index=1, movement_scope="ARRIVAL", capture_method="SYSTEM", is_quarantined=False)
+    anchor = EventOccurrence(vessel_call_id=vc_id, event_definition_id=anchor_def, utc_value=datetime.datetime(2026, 1, 1, 12, 0, tzinfo=datetime.UTC), occurrence_index=1, movement_scope="ARRIVAL", capture_method="SYSTEM", is_quarantined=False)
+    pob = EventOccurrence(vessel_call_id=vc_id, event_definition_id=pob_def, utc_value=datetime.datetime(2026, 1, 1, 11, 0, tzinfo=datetime.UTC), occurrence_index=1, movement_scope="ARRIVAL", capture_method="SYSTEM", is_quarantined=False)
     db_session.add_all([anchor, pob])
     
     db_session.commit()

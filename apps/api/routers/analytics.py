@@ -5,8 +5,9 @@ Every metric response provides complete traceability: formula version, source re
 filter context, exclusions, and data-quality status.
 """
 
-from typing import Any, Dict, List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from typing import Any
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -32,13 +33,13 @@ class CustomLeadTimeRequest(BaseModel):
     end_event: str = Field(..., description="Canonical end event name")
     occurrence_selection: str = Field("first", description="first | last | nth | all")
     occurrence_n: int = Field(1, description="Index when occurrence_selection is nth")
-    movement_scope: Optional[str] = Field(None, description="Optional movement scope (ARRIVAL, SAILING, SHIFTING)")
-    cohort_filters: Optional[Dict[str, Any]] = Field(None, description="Cohort filters (vessel_type, cargo_type, etc.)")
-    save_as_name: Optional[str] = Field(None, description="Optional catalogue name to save this custom definition")
-    description: Optional[str] = Field(None, description="Description if saving to catalogue")
+    movement_scope: str | None = Field(None, description="Optional movement scope (ARRIVAL, SAILING, SHIFTING)")
+    cohort_filters: dict[str, Any] | None = Field(None, description="Cohort filters (vessel_type, cargo_type, etc.)")
+    save_as_name: str | None = Field(None, description="Optional catalogue name to save this custom definition")
+    description: str | None = Field(None, description="Description if saving to catalogue")
 
 
-def _resolve_target_tenant(principal: UserPrincipal, explicit_tenant: Optional[str] = None) -> str:
+def _resolve_target_tenant(principal: UserPrincipal, explicit_tenant: str | None = None) -> str:
     if explicit_tenant:
         return explicit_tenant
     if principal.data_scope.tenant_id in ("*", "tenant-synthetic-01"):
@@ -48,8 +49,8 @@ def _resolve_target_tenant(principal: UserPrincipal, explicit_tenant: Optional[s
 
 @router.post("/compute")
 def compute_analytics(
-    vessel_call_id: Optional[str] = Query(None),
-    tenant_id: Optional[str] = Query(None),
+    vessel_call_id: str | None = Query(None),
+    tenant_id: str | None = Query(None),
     db: Session = Depends(get_db),
     principal: UserPrincipal = Depends(require("recalculate", "vessel_call")),
 ):
@@ -110,8 +111,8 @@ def get_metric_results(
     definition_id: str,
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
-    result_status: Optional[str] = Query(None, alias="status"),
-    tenant_id: Optional[str] = Query(None),
+    result_status: str | None = Query(None, alias="status"),
+    tenant_id: str | None = Query(None),
     db: Session = Depends(get_db),
     principal: UserPrincipal = Depends(require("view", "vessel_call")),
 ):
@@ -233,7 +234,7 @@ def get_metric_statistics(
 @router.post("/custom")
 def run_custom_lead_time(
     req: CustomLeadTimeRequest,
-    tenant_id: Optional[str] = Query(None),
+    tenant_id: str | None = Query(None),
     db: Session = Depends(get_db),
     principal: UserPrincipal = Depends(require("view", "vessel_call")),
 ):
@@ -260,7 +261,7 @@ def run_custom_lead_time(
 @router.get("/vessel/{vessel_call_id}")
 def get_vessel_call_lead_times(
     vessel_call_id: str,
-    tenant_id: Optional[str] = Query(None),
+    tenant_id: str | None = Query(None),
     db: Session = Depends(get_db),
     principal: UserPrincipal = Depends(require("view", "vessel_call")),
 ):
@@ -317,7 +318,7 @@ def get_vessel_call_lead_times(
 @router.get("/reconciliation")
 def get_reconciliation_scorecard(
     tolerance: float = Query(0.02, ge=0.001, le=1.0),
-    tenant_id: Optional[str] = Query(None),
+    tenant_id: str | None = Query(None),
     db: Session = Depends(get_db),
     principal: UserPrincipal = Depends(require("view", "vessel_call")),
 ):

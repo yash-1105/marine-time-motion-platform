@@ -1,18 +1,18 @@
-import json
 from datetime import datetime
-from typing import Any, Dict, List, Optional
-from sqlalchemy.orm import Session
-from sqlalchemy import select, update
+from typing import Any
 
-from apps.api.models.canonical import VesselCall, EventOccurrence, ServiceRequest, Delay
-from apps.api.models.identity import MatchCandidate, MatchEvidence, MergeDecision
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
 from apps.api.models.audit import AuditEvent
+from apps.api.models.canonical import Delay, EventOccurrence, ServiceRequest, VesselCall
+from apps.api.models.identity import MatchCandidate, MatchEvidence, MergeDecision
 from apps.api.services.identity.survivorship import SurvivorshipEngine
 
 
 class MergerService:
     @staticmethod
-    def _serialize_vessel_call(vc: VesselCall) -> Dict[str, Any]:
+    def _serialize_vessel_call(vc: VesselCall) -> dict[str, Any]:
         data = {}
         for col in vc.__table__.columns:
             val = getattr(vc, col.name, None)
@@ -25,7 +25,7 @@ class MergerService:
         return data
 
     @staticmethod
-    def _apply_serialized_fields(vc: VesselCall, data: Dict[str, Any]):
+    def _apply_serialized_fields(vc: VesselCall, data: dict[str, Any]):
         for col in vc.__table__.columns:
             if col.name in ["id", "created_at"]:
                 continue
@@ -39,7 +39,7 @@ class MergerService:
         candidate_id: str,
         actor: str = "system",
         manual: bool = False,
-        custom_survivorship: Optional[Dict[str, Any]] = None,
+        custom_survivorship: dict[str, Any] | None = None,
     ) -> MergeDecision:
         candidate = db.execute(
             select(MatchCandidate).where(MatchCandidate.id == candidate_id)
@@ -167,8 +167,8 @@ class MergerService:
         db: Session,
         decision_id: str,
         actor: str = "system",
-        notes: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        notes: str | None = None,
+    ) -> dict[str, Any]:
         decision = db.execute(
             select(MergeDecision).where(MergeDecision.id == decision_id)
         ).scalar_one_or_none()

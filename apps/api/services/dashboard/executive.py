@@ -11,19 +11,17 @@ Computes real, governed executive dashboard metrics across active vessel calls:
 - Historical synthetic dataset disclosure
 """
 
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
+
 import polars as pl
-from sqlalchemy import func, select, or_
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from apps.api.models.analytics import (
+    KPI,
     LeadTimeDefinition,
     LeadTimeResult,
-    KPI,
-    KPIResult,
-    BottleneckRecord,
-    OutlierRecord,
 )
 from apps.api.models.canonical import (
     CargoOperation,
@@ -33,9 +31,10 @@ from apps.api.models.canonical import (
 )
 from apps.api.models.config import EventDefinition
 from apps.api.models.quality import QualityIssue, QualityRule
+from apps.api.services.analytics.engine import AnalyticsEngine
 from apps.api.services.bottlenecks.engine import BottleneckEngine
-from apps.api.services.outliers.engine import OutlierEngine
 from apps.api.services.kpi.engine import KPIEngine
+from apps.api.services.outliers.engine import OutlierEngine
 
 
 class ExecutiveDashboardService:
@@ -45,14 +44,14 @@ class ExecutiveDashboardService:
 
     def get_executive_summary(
         self,
-        port_id: Optional[str] = None,
-        terminal_id: Optional[str] = None,
-        vessel_type: Optional[str] = None,
-        cargo_type: Optional[str] = None,
-        start_date: Optional[datetime] = None,
-        end_date: Optional[datetime] = None,
-        quality_status: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        port_id: str | None = None,
+        terminal_id: str | None = None,
+        vessel_type: str | None = None,
+        cargo_type: str | None = None,
+        start_date: datetime | None = None,
+        end_date: datetime | None = None,
+        quality_status: str | None = None,
+    ) -> dict[str, Any]:
         """Calculates governed executive metrics over the filtered population of active vessel calls."""
         # 1. Base Query for active, non-merged calls
         query = select(VesselCall).where(VesselCall.is_merged == False)
@@ -68,7 +67,7 @@ class ExecutiveDashboardService:
         if cargo_type and cargo_type != "*":
             query = query.where(VesselCall.cargo_type == cargo_type)
 
-        calls: List[VesselCall] = self.db.execute(query.order_by(VesselCall.vcn.asc())).scalars().all()
+        calls: list[VesselCall] = self.db.execute(query.order_by(VesselCall.vcn.asc())).scalars().all()
 
         # Date range filtering by ATA or created_at if provided
         if start_date or end_date:
@@ -145,7 +144,7 @@ class ExecutiveDashboardService:
         teu_total = 0.0
         mt_total = 0.0
         units_total = 0.0
-        cargo_breakdown: List[Dict[str, Any]] = []
+        cargo_breakdown: list[dict[str, Any]] = []
 
         if call_ids:
             cargo_rows = self.db.execute(
@@ -192,7 +191,7 @@ class ExecutiveDashboardService:
         }
 
         # 4. Lead Times & Durations (Time & Motion Analysis)
-        lead_time_metrics: Dict[str, Any] = {}
+        lead_time_metrics: dict[str, Any] = {}
         target_names = [
             "Turnaround",
             "Anchorage Wait",
@@ -205,13 +204,23 @@ class ExecutiveDashboardService:
         ]
 
         if call_ids:
+            # Lazy compute: if no LeadTimeResults exist for these calls, trigger analytics engine
+            existing_lt_count = self.db.execute(
+                select(func.count(LeadTimeResult.id)).where(
+                    LeadTimeResult.vessel_call_id.in_(call_ids[:5])  # sample check
+                )
+            ).scalar() or 0
+            if existing_lt_count == 0:
+                a_engine = AnalyticsEngine(self.db, tenant_id=self.tenant_id)
+                a_engine.compute_all_metrics()
+
             lt_rows = self.db.execute(
                 select(LeadTimeResult, LeadTimeDefinition.name, LeadTimeDefinition.is_execution_delay)
                 .join(LeadTimeDefinition, LeadTimeResult.definition_id == LeadTimeDefinition.id)
                 .where(LeadTimeResult.vessel_call_id.in_(call_ids))
             ).all()
 
-            metrics_by_name: Dict[str, List[LeadTimeResult]] = {name: [] for name in target_names}
+            metrics_by_name: dict[str, list[LeadTimeResult]] = {name: [] for name in target_names}
             for r, name, is_delay in lt_rows:
                 if name in metrics_by_name:
                     metrics_by_name[name].append(r)
@@ -288,7 +297,7 @@ class ExecutiveDashboardService:
                 }
 
         # 5. Delays & Bottlenecks Summary
-        delays_summary: Dict[str, Any] = {
+        delays_summary: dict[str, Any] = {
             "total_delays_count": 0,
             "total_delay_hours": 0.0,
             "confirmed_count": 0,
@@ -313,7 +322,7 @@ class ExecutiveDashboardService:
             inferred_delays = [d for d in delays if (d.cause_status or "").upper() == "INFERRED"]
 
             # Category breakdown (Pareto)
-            cat_map: Dict[str, Dict[str, Any]] = {}
+            cat_map: dict[str, dict[str, Any]] = {}
             for d in delays:
                 cat = d.canonical_category or d.source_category or "Unclassified"
                 if cat not in cat_map:
@@ -351,7 +360,7 @@ class ExecutiveDashboardService:
             }
 
         # 6. Governed KPI Highlights
-        kpi_highlights: List[Dict[str, Any]] = []
+        kpi_highlights: list[dict[str, Any]] = []
         kpi_engine = KPIEngine(self.db, tenant_id=self.tenant_id)
         calc_res = kpi_engine.calculate_all_kpis()
 
@@ -421,6 +430,6 @@ class ExecutiveDashboardService:
                 "cargo_type": cargo_type or "ALL",
                 "timezone": "Africa/Johannesburg",
                 "tolerance": "±0.02h against ExpectedOutputs oracle",
-                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "generated_at": datetime.now(UTC).isoformat(),
             },
         }

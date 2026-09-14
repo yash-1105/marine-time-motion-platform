@@ -1,6 +1,7 @@
+from dataclasses import dataclass
+
 import yaml
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+
 from apps.api.models.canonical import VesselCall
 from apps.api.services.identity.normalizer import VesselNameNormalizer
 
@@ -8,8 +9,8 @@ from apps.api.services.identity.normalizer import VesselNameNormalizer
 @dataclass
 class AttributeEvidence:
     attribute: str
-    value_1: Optional[str]
-    value_2: Optional[str]
+    value_1: str | None
+    value_2: str | None
     agreement: str  # AGREED | DISAGREED | PARTIAL | MISSING
     weight: float
     contribution: float
@@ -22,8 +23,8 @@ class MatchResult:
     match_type: str  # DETERMINISTIC | PROBABILISTIC
     status: str  # AUTO_MERGE_CANDIDATE | STEWARD_REVIEW | SEPARATE | BLOCKED_BY_CONFLICT
     conflict_detected: bool
-    conflict_reasons: List[str]
-    evidence_breakdown: List[AttributeEvidence]
+    conflict_reasons: list[str]
+    evidence_breakdown: list[AttributeEvidence]
     total_attributes_evaluated: int
     auto_merge_eligible: bool
 
@@ -33,7 +34,7 @@ class IdentityMatcher:
         self.auto_merge_threshold = 0.98
         self.steward_review_threshold = 0.85
         try:
-            with open(thresholds_path, "r") as f:
+            with open(thresholds_path) as f:
                 cfg = yaml.safe_load(f)
                 th = cfg.get("thresholds", {})
                 self.auto_merge_threshold = float(th.get("auto_merge", 0.98))
@@ -42,8 +43,8 @@ class IdentityMatcher:
             pass
 
     def evaluate_pair(self, v1: VesselCall, v2: VesselCall) -> MatchResult:
-        evidences: List[AttributeEvidence] = []
-        conflicts: List[str] = []
+        evidences: list[AttributeEvidence] = []
+        conflicts: list[str] = []
         conflict_detected = False
 
         # --- Hard Rule Check: Conflicting IMO or VCN ---
@@ -65,7 +66,7 @@ class IdentityMatcher:
         # --- Stage 1: Deterministic Matching ---
         # Decisive keys: VCN exact match, IMO exact match
         deterministic_match = False
-        deterministic_keys: List[str] = []
+        deterministic_keys: list[str] = []
 
         if v1_vcn and v2_vcn and v1_vcn == v2_vcn:
             deterministic_keys.append("VCN")

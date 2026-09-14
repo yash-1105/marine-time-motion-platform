@@ -2,7 +2,7 @@
 journey.journey_stage in sync so the DB carries a referenceable, versioned catalogue
 (spec §9: "configurable templates, not universal hard-coded rules")."""
 
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 import yaml
 from sqlalchemy import select
@@ -16,8 +16,8 @@ TEMPLATE_PATH = "config/journey_templates.yaml"
 REPEATABLE_EVENTS = {"SHIFT_PILOT_ON_BOARD", "SHIFT_ALL_FAST"}
 
 
-def load_raw_template(path: str = TEMPLATE_PATH) -> Dict[str, Any]:
-    with open(path, "r") as f:
+def load_raw_template(path: str = TEMPLATE_PATH) -> dict[str, Any]:
+    with open(path) as f:
         data = yaml.safe_load(f) or {}
     templates = data.get("templates", [])
     if not templates:
@@ -25,7 +25,7 @@ def load_raw_template(path: str = TEMPLATE_PATH) -> Dict[str, Any]:
     return templates[0]
 
 
-def ensure_template(db: Session, path: str = TEMPLATE_PATH) -> Tuple[JourneyTemplate, List[Dict[str, Any]]]:
+def ensure_template(db: Session, path: str = TEMPLATE_PATH) -> tuple[JourneyTemplate, list[dict[str, Any]]]:
     """Upserts the template + its stage catalogue into the DB, returns (template row, stage dicts)."""
     raw = load_raw_template(path)
     name = raw["name"]
@@ -46,7 +46,7 @@ def ensure_template(db: Session, path: str = TEMPLATE_PATH) -> Tuple[JourneyTemp
         for s in db.execute(select(JourneyStage).where(JourneyStage.template_id == template.id)).scalars().all()
     }
 
-    stages: List[Dict[str, Any]] = []
+    stages: list[dict[str, Any]] = []
     for sdef in stage_defs:
         stage_name = sdef["name"]
         row = existing_stages.get(stage_name)

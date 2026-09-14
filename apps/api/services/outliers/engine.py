@@ -11,14 +11,15 @@ Provides transparent exclusion/inclusion toggling for downstream KPI and statist
 """
 import math
 import uuid
-from typing import Any, Dict, List, Optional
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from typing import Any
+
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
-from apps.api.models.analytics import OutlierRecord, LeadTimeResult, LeadTimeDefinition
-from apps.api.models.canonical import CargoOperation, Delay, EventOccurrence, VesselCall
+from apps.api.models.analytics import LeadTimeDefinition, LeadTimeResult, OutlierRecord
 from apps.api.models.audit import AuditEvent
+from apps.api.models.canonical import CargoOperation, Delay, VesselCall
 
 
 class OutlierEngine:
@@ -26,9 +27,9 @@ class OutlierEngine:
         self.db = db
         self.tenant_id = tenant_id
 
-    def detect_all_outliers(self, persist: bool = True) -> List[Dict[str, Any]]:
+    def detect_all_outliers(self, persist: bool = True) -> list[dict[str, Any]]:
         """Run all outlier detection heuristics across canonical data."""
-        outliers: List[Dict[str, Any]] = []
+        outliers: list[dict[str, Any]] = []
 
         # 1. Turnaround above P90 (OPERATIONAL_OUTLIER)
         turnaround_rows = self.db.execute(
@@ -214,7 +215,7 @@ class OutlierEngine:
                     exclusion_rationale=rat,
                     severity=o["severity"],
                     evidence=o["evidence"],
-                    detected_at=datetime.now(timezone.utc),
+                    detected_at=datetime.now(UTC),
                 )
                 self.db.add(rec)
             self.db.commit()
@@ -227,7 +228,7 @@ class OutlierEngine:
         is_excluded: bool,
         rationale: str,
         actor: str = "data_steward"
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Transparently include or exclude an identified outlier from downstream
         KPI aggregates and statistics.
@@ -271,11 +272,11 @@ class OutlierEngine:
 
     def list_outliers(
         self,
-        outlier_type: Optional[str] = None,
-        severity: Optional[str] = None,
-        is_excluded: Optional[bool] = None,
-        vcn: Optional[str] = None,
-    ) -> List[Dict[str, Any]]:
+        outlier_type: str | None = None,
+        severity: str | None = None,
+        is_excluded: bool | None = None,
+        vcn: str | None = None,
+    ) -> list[dict[str, Any]]:
         """List detected outliers with drill-down to vessel call."""
         query = select(OutlierRecord, VesselCall.vessel_name).join(
             VesselCall, OutlierRecord.vessel_call_id == VesselCall.id

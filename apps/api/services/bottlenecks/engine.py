@@ -14,14 +14,13 @@ A long-but-stable stage (e.g. Berth Stay with low CV and zero breaches) must
 rank LOWER than a shorter-but-highly-variable stage with high tail risk and frequent breaches.
 """
 import math
-import uuid
-from typing import Any, Dict, List, Optional
-from datetime import datetime, timezone
-from sqlalchemy import func, select
+from typing import Any
+
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from apps.api.models.analytics import BottleneckRecord, LeadTimeResult, LeadTimeDefinition
-from apps.api.models.canonical import Delay, ServiceAssignment, ServiceExecution, ServiceRequest, VesselCall
+from apps.api.models.analytics import BottleneckRecord, LeadTimeDefinition, LeadTimeResult
+from apps.api.models.canonical import Delay, ServiceAssignment, ServiceExecution, ServiceRequest
 
 
 class BottleneckEngine:
@@ -31,9 +30,9 @@ class BottleneckEngine:
 
     def calculate_bottlenecks(
         self,
-        weights: Optional[Dict[str, float]] = None,
+        weights: dict[str, float] | None = None,
         persist: bool = True
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Calculate and rank operational bottlenecks across both process stages
         and operational resources.
@@ -50,7 +49,7 @@ class BottleneckEngine:
         total_w = sum(w.values())
         norm_w = {k: v / total_w for k, v in w.items()}
 
-        candidates: List[Dict[str, Any]] = []
+        candidates: list[dict[str, Any]] = []
 
         # 1. Process Stages from LeadTimeResult
         stage_names = [
@@ -238,12 +237,12 @@ class BottleneckEngine:
 
     def _compute_metrics_and_scores(
         self,
-        values: List[float],
+        values: list[float],
         target_threshold: float,
         biz_crit: float,
         mean_turnaround: float,
         is_delay: bool
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Compute statistics and normalized 0-100 scores for each component."""
         n = len(values)
         sorted_vals = sorted(values)

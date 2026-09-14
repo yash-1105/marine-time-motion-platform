@@ -1,5 +1,4 @@
-from sqlalchemy import Boolean, Column, Float, ForeignKey, Integer, JSON, String, Text, DateTime
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy import JSON, Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Text
 
 from .base import BaseModel
 

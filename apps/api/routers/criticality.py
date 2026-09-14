@@ -1,12 +1,11 @@
 """REST API endpoints for operational criticality evaluation (spec §10.8, Phase 09)."""
-from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from apps.api.auth.principal import UserPrincipal
 from apps.api.core.database import get_db
 from apps.api.routers.auth import require
-from apps.api.auth.principal import UserPrincipal
 from apps.api.services.criticality.engine import CriticalityEngine
 
 router = APIRouter(prefix="/criticality", tags=["criticality"])
@@ -22,7 +21,7 @@ class EvaluateCriticalityRequest(BaseModel):
     duration_hours: float = Field(ge=0.0)
     cv: float = Field(ge=0.0)
     tail_risk_ratio: float = Field(ge=0.0)
-    weights: Optional[Dict[str, float]] = None
+    weights: dict[str, float] | None = None
 
 
 @router.get("", summary="Get operational criticality evaluation across all stages")

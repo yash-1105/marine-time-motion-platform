@@ -1,4 +1,5 @@
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
+
 from apps.api.models.canonical import VesselCall
 from apps.api.services.identity.normalizer import VesselNameNormalizer
 
@@ -34,7 +35,7 @@ class SurvivorshipEngine:
     ]
 
     @classmethod
-    def determine_survivor_record(cls, v1: VesselCall, v2: VesselCall) -> Tuple[VesselCall, VesselCall]:
+    def determine_survivor_record(cls, v1: VesselCall, v2: VesselCall) -> tuple[VesselCall, VesselCall]:
         """
         Determines which record serves as the master survivor and which is merged into it.
         Prefers:
@@ -71,7 +72,7 @@ class SurvivorshipEngine:
         return v2, v1
 
     @classmethod
-    def resolve_field(cls, field_name: str, rule_type: str, val1: Any, val2: Any, v1_id: str, v2_id: str) -> Dict[str, Any]:
+    def resolve_field(cls, field_name: str, rule_type: str, val1: Any, val2: Any, v1_id: str, v2_id: str) -> dict[str, Any]:
         """
         Resolves a single field between two values based on survivorship rules.
         """
@@ -162,7 +163,7 @@ class SurvivorshipEngine:
         }
 
     @classmethod
-    def generate_preview(cls, v1: VesselCall, v2: VesselCall) -> Dict[str, Any]:
+    def generate_preview(cls, v1: VesselCall, v2: VesselCall) -> dict[str, Any]:
         """
         Generates a side-by-side comparison view and consolidated preview for commit.
         """

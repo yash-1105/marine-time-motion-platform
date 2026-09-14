@@ -7,8 +7,8 @@ using source priority, verification status and confidence, and records the decis
 evidence. It never deletes a conflicting observation.
 """
 
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 import yaml
 from sqlalchemy import select
@@ -24,9 +24,9 @@ from .template_loader import REPEATABLE_EVENTS
 THRESHOLDS_PATH = "config/thresholds.yaml"
 
 
-def _load_selection_config() -> Dict[str, Any]:
+def _load_selection_config() -> dict[str, Any]:
     try:
-        with open(THRESHOLDS_PATH, "r") as f:
+        with open(THRESHOLDS_PATH) as f:
             data = yaml.safe_load(f) or {}
         return data.get("thresholds", {}).get("canonical_occurrence_selection", {})
     except Exception:
@@ -37,8 +37,8 @@ class CanonicalOccurrenceSelector:
     def __init__(self, db: Session):
         self.db = db
         cfg = _load_selection_config()
-        self.verification_priority: List[str] = cfg.get("verification_priority", ["Verified", "Conflicting"])
-        self.source_priority: List[str] = cfg.get("source_priority", [])
+        self.verification_priority: list[str] = cfg.get("verification_priority", ["Verified", "Conflicting"])
+        self.source_priority: list[str] = cfg.get("source_priority", [])
         self.rule_version = "1.0"
 
     def _rank(self, occ: EventOccurrence) -> tuple:
@@ -55,10 +55,10 @@ class CanonicalOccurrenceSelector:
             else len(self.source_priority)
         )
         # Stable tiebreak: earlier ingested observation wins deterministically.
-        created_rank = occ.created_at or datetime.min.replace(tzinfo=timezone.utc)
+        created_rank = occ.created_at or datetime.min.replace(tzinfo=UTC)
         return (verification_rank, confidence_rank, source_rank, created_rank)
 
-    def _find_related_quality_issue(self, vessel_call_id, occurrence_ids: List[str]) -> Optional[str]:
+    def _find_related_quality_issue(self, vessel_call_id, occurrence_ids: list[str]) -> str | None:
         refs = {f"EventOccurrence:{oid}" for oid in occurrence_ids}
         issues = self.db.execute(
             select(QualityIssue, QualityRule)
@@ -70,7 +70,7 @@ class CanonicalOccurrenceSelector:
                 return str(issue.id)
         return None
 
-    def resolve_vessel_call(self, vc: VesselCall) -> List[CanonicalObservation]:
+    def resolve_vessel_call(self, vc: VesselCall) -> list[CanonicalObservation]:
         """
         Groups this vessel call's event occurrences by event_definition_id. For any
         non-repeatable event with more than one live observation, resolves canonical selection.
@@ -85,7 +85,7 @@ class CanonicalOccurrenceSelector:
             )
         ).scalars().all()
 
-        by_definition: Dict[Any, List[EventOccurrence]] = {}
+        by_definition: dict[Any, list[EventOccurrence]] = {}
         for occ in occurrences:
             by_definition.setdefault(occ.event_definition_id, []).append(occ)
 
@@ -148,14 +148,14 @@ class CanonicalOccurrenceSelector:
             existing.selection_reasoning = reasoning
             existing.quality_issue_id = quality_issue_id
             existing.decided_by = "system:canonical_selector"
-            existing.decided_at = datetime.now(timezone.utc)
+            existing.decided_at = datetime.now(UTC)
             existing.rule_version = self.rule_version
             self.db.flush()
             results.append(existing)
 
         return results
 
-    def _explain(self, selected: EventOccurrence, all_occs: List[EventOccurrence]) -> str:
+    def _explain(self, selected: EventOccurrence, all_occs: list[EventOccurrence]) -> str:
         others = [o for o in all_occs if o.id != selected.id]
         if not others:
             return "Only observation available."
@@ -169,7 +169,7 @@ class CanonicalOccurrenceSelector:
             return f"Selected because confidence {selected.confidence} exceeds {other.confidence}."
         return f"Selected because source '{selected.source_system}' has higher configured priority."
 
-    def get_canonical_occurrence_id(self, vessel_call_id, event_definition_id) -> Optional[Any]:
+    def get_canonical_occurrence_id(self, vessel_call_id, event_definition_id) -> Any | None:
         """Returns the governing EventOccurrence id for a logical event slot, if a
         canonical-selection decision was recorded for it."""
         row = self.db.execute(

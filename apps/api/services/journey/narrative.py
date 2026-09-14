@@ -12,8 +12,8 @@ key is absent, unset, or the call fails for any reason, a deterministic template
 produces the narrative directly from the same fact sheet, so the feature always works end to end.
 """
 
-from datetime import datetime, timezone
-from typing import Any, Dict, List
+from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -23,7 +23,7 @@ from apps.api.models.canonical import VesselCall
 from apps.api.models.journey import JourneyInstance, JourneyNarrative, StageOccurrence
 
 
-def build_fact_sheet(db: Session, instance: JourneyInstance, vc: VesselCall) -> Dict[str, Any]:
+def build_fact_sheet(db: Session, instance: JourneyInstance, vc: VesselCall) -> dict[str, Any]:
     stages = db.execute(
         select(StageOccurrence)
         .where(StageOccurrence.journey_instance_id == instance.id)
@@ -60,7 +60,7 @@ def build_fact_sheet(db: Session, instance: JourneyInstance, vc: VesselCall) -> 
     }
 
 
-def _deterministic_narrative(facts: Dict[str, Any]) -> str:
+def _deterministic_narrative(facts: dict[str, Any]) -> str:
     sentences = [
         f"Vessel call {facts['vcn']} ({facts['vessel_name']}) reconstructed with status {facts['status']}."
     ]
@@ -99,7 +99,7 @@ def _deterministic_narrative(facts: Dict[str, Any]) -> str:
     return " ".join(sentences)
 
 
-def _try_gemini_narrative(facts: Dict[str, Any]) -> str | None:
+def _try_gemini_narrative(facts: dict[str, Any]) -> str | None:
     if not getattr(settings, "gemini_api_key", ""):
         return None
     try:
@@ -150,7 +150,7 @@ class JourneyNarrativeService:
             model_name=model_name,
             is_ai_generated=True,
             inference_status="AI_GENERATED",
-            generated_at=datetime.now(timezone.utc),
+            generated_at=datetime.now(UTC),
         )
         db.add(narrative)
         db.commit()

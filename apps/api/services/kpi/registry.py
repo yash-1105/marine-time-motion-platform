@@ -7,15 +7,16 @@ Preserves the spec's KPI numbering (KPI-01 to KPI-55) and prevents double-counti
 designating primary and alias pairs (KPI-11/KPI-53, KPI-14/KPI-51).
 """
 
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from apps.api.models.analytics import KPI, KPIFormulaVersion
 
 # Governed catalogue of all 55 KPIs from spec §11
-KPI_REGISTRY_DEFINITIONS: List[Dict[str, Any]] = [
+KPI_REGISTRY_DEFINITIONS: list[dict[str, Any]] = [
     # ── Pre-arrival and anchorage ─────────────────────────────────────────────
     {
         "kpi_number": 1,
@@ -1265,7 +1266,7 @@ KPI_REGISTRY_DEFINITIONS: List[Dict[str, Any]] = [
 ]
 
 
-def ensure_kpi_registry(db: Session) -> Dict[str, KPI]:
+def ensure_kpi_registry(db: Session) -> dict[str, KPI]:
     """Ensures all 55 KPIs from spec §11 exist in analytics.kpi with correct metadata,
 
     formula versions, and primary/alias links.
@@ -1274,7 +1275,7 @@ def ensure_kpi_registry(db: Session) -> Dict[str, KPI]:
     # Also check by name
     existing_by_name = {k.name: k for k in db.execute(select(KPI)).scalars().all()}
 
-    kpi_map: Dict[str, KPI] = {}
+    kpi_map: dict[str, KPI] = {}
 
     for item in KPI_REGISTRY_DEFINITIONS:
         code = item["code"]
@@ -1307,7 +1308,7 @@ def ensure_kpi_registry(db: Session) -> Dict[str, KPI]:
                 is_primary=item.get("is_primary", True),
                 availability_status=item.get("availability_status", "COMPUTED"),
                 required_source_systems=item.get("required_source_systems", []),
-                effective_from=datetime(2026, 1, 1, tzinfo=timezone.utc),
+                effective_from=datetime(2026, 1, 1, tzinfo=UTC),
             )
             db.add(kpi)
             db.flush()

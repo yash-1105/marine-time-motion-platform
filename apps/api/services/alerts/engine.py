@@ -7,14 +7,15 @@ Manages:
 - Audit logging for all actions and acknowledgements
 """
 import uuid
-from typing import Any, Dict, List, Optional
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from typing import Any
+
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
 from apps.api.models.analytics import ActionItem, AlertRule, BottleneckRecord, OperationalAlert, OutlierRecord
-from apps.api.models.canonical import Delay, VesselCall
 from apps.api.models.audit import AuditEvent
+from apps.api.models.canonical import Delay, VesselCall
 
 DEFAULT_ALERT_RULES = [
     {
@@ -91,7 +92,7 @@ class AlertEngine:
                 self.db.add(rule)
         self.db.commit()
 
-    def evaluate_rules(self) -> List[Dict[str, Any]]:
+    def evaluate_rules(self) -> list[dict[str, Any]]:
         """
         Evaluate operational data against active alert rules.
         Creates alerts with deduplication so existing open alerts are not duplicated.
@@ -281,14 +282,14 @@ class AlertEngine:
     def _create_or_get_alert(
         self,
         rule: AlertRule,
-        vessel_call_id: Optional[uuid.UUID],
-        vcn: Optional[str],
+        vessel_call_id: uuid.UUID | None,
+        vcn: str | None,
         title: str,
         description: str,
         linked_entity_type: str,
         linked_entity_id: str,
-        evidence: Optional[Dict[str, Any]],
-    ) -> Optional[OperationalAlert]:
+        evidence: dict[str, Any] | None,
+    ) -> OperationalAlert | None:
         """Deduplicate active alerts: don't create if an unresolved one exists for same entity."""
         existing = self.db.execute(
             select(OperationalAlert).where(
@@ -320,12 +321,12 @@ class AlertEngine:
 
     def list_alerts(
         self,
-        status: Optional[str] = None,
-        severity: Optional[str] = None,
-        rule_code: Optional[str] = None,
-        vcn: Optional[str] = None,
+        status: str | None = None,
+        severity: str | None = None,
+        rule_code: str | None = None,
+        vcn: str | None = None,
         limit: int = 100,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """List operational alerts with associated actions."""
         query = select(OperationalAlert)
         if status:
@@ -368,14 +369,14 @@ class AlertEngine:
             })
         return results
 
-    def acknowledge_alert(self, alert_id: uuid.UUID, actor: str = "operator") -> Dict[str, Any]:
+    def acknowledge_alert(self, alert_id: uuid.UUID, actor: str = "operator") -> dict[str, Any]:
         """Acknowledge an operational alert."""
         alert = self.db.execute(select(OperationalAlert).where(OperationalAlert.id == alert_id)).scalar_one_or_none()
         if not alert:
             raise ValueError(f"Alert {alert_id} not found")
 
         alert.status = "ACKNOWLEDGED"
-        alert.acknowledged_at = datetime.now(timezone.utc)
+        alert.acknowledged_at = datetime.now(UTC)
         alert.acknowledged_by = actor
 
         audit = AuditEvent(
@@ -404,14 +405,14 @@ class AlertEngine:
         alert_id: uuid.UUID,
         resolution_notes: str,
         actor: str = "operator"
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Resolve an operational alert with explanation notes."""
         alert = self.db.execute(select(OperationalAlert).where(OperationalAlert.id == alert_id)).scalar_one_or_none()
         if not alert:
             raise ValueError(f"Alert {alert_id} not found")
 
         alert.status = "RESOLVED"
-        alert.resolved_at = datetime.now(timezone.utc)
+        alert.resolved_at = datetime.now(UTC)
         alert.resolved_by = actor
         alert.resolution_notes = resolution_notes
 
@@ -441,13 +442,13 @@ class AlertEngine:
         self,
         title: str,
         description: str,
-        assigned_to: Optional[str] = None,
-        due_date: Optional[datetime] = None,
+        assigned_to: str | None = None,
+        due_date: datetime | None = None,
         priority: str = "MEDIUM",
-        alert_id: Optional[uuid.UUID] = None,
-        vessel_call_id: Optional[uuid.UUID] = None,
+        alert_id: uuid.UUID | None = None,
+        vessel_call_id: uuid.UUID | None = None,
         created_by: str = "operator",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Create an actionable remediation task."""
         action = ActionItem(
             alert_id=alert_id,
@@ -491,10 +492,10 @@ class AlertEngine:
     def update_action_item(
         self,
         action_id: uuid.UUID,
-        status: Optional[str] = None,
-        comment: Optional[str] = None,
+        status: str | None = None,
+        comment: str | None = None,
         actor: str = "operator"
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Update action item status or add comment."""
         action = self.db.execute(select(ActionItem).where(ActionItem.id == action_id)).scalar_one_or_none()
         if not action:
@@ -509,7 +510,7 @@ class AlertEngine:
             comments.append({
                 "author": actor,
                 "text": comment,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
             })
             action.comments = comments
 
@@ -534,7 +535,7 @@ class AlertEngine:
             "comments": action.comments,
         }
 
-    def list_action_items(self, status: Optional[str] = None) -> List[Dict[str, Any]]:
+    def list_action_items(self, status: str | None = None) -> list[dict[str, Any]]:
         """List all action items."""
         query = select(ActionItem)
         if status:

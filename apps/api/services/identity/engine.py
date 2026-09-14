@@ -1,14 +1,14 @@
-import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any
+
+from sqlalchemy import select
 from sqlalchemy.orm import Session
-from sqlalchemy import select, and_, or_
 
 from apps.api.models.canonical import VesselCall
 from apps.api.models.identity import MatchCandidate, MatchEvidence, MergeDecision
-from apps.api.models.quality import QualityRule, QualityIssue
+from apps.api.models.quality import QualityIssue, QualityRule
 from apps.api.services.identity.matcher import IdentityMatcher
-from apps.api.services.identity.normalizer import VesselNameNormalizer
 from apps.api.services.identity.merger import MergerService
+from apps.api.services.identity.normalizer import VesselNameNormalizer
 
 
 class IdentityEngine:
@@ -17,7 +17,7 @@ class IdentityEngine:
         self.tenant_id = tenant_id
         self.matcher = IdentityMatcher()
 
-    def generate_candidates(self) -> List[MatchCandidate]:
+    def generate_candidates(self) -> list[MatchCandidate]:
         """
         Scans unmerged vessel calls, compares candidate pairs using deterministic & probabilistic rules,
         and saves MatchCandidate & MatchEvidence rows with explainable breakdown.
@@ -143,7 +143,7 @@ class IdentityEngine:
             )
             self.db.add(issue)
 
-    def auto_merge_candidates(self) -> List[MergeDecision]:
+    def auto_merge_candidates(self) -> list[MergeDecision]:
         """
         Auto-merges all candidates meeting the >= 0.98 threshold without key conflicts.
         """

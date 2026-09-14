@@ -17,7 +17,6 @@ Categories:
 - External/Uncontrollable
 - Other
 """
-from typing import Optional
 
 CANONICAL_DELAY_CATEGORIES = [
     "Pilot",
@@ -38,7 +37,7 @@ CANONICAL_DELAY_CATEGORIES = [
 ]
 
 
-def map_to_canonical_category(source_category: Optional[str], reason: Optional[str]) -> str:
+def map_to_canonical_category(source_category: str | None, reason: str | None) -> str:
     """
     Map source delay categories and reason descriptions onto the canonical 15 categories.
     Preserves visibility of source values while providing governed grouping.

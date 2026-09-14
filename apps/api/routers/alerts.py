@@ -1,14 +1,14 @@
 """REST API endpoints for operational alerts and remediation actions (spec §15, Phase 09)."""
 import uuid
-from typing import Any, Dict, List, Optional
 from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from apps.api.auth.principal import UserPrincipal
 from apps.api.core.database import get_db
 from apps.api.routers.auth import require
-from apps.api.auth.principal import UserPrincipal
 from apps.api.services.alerts.engine import AlertEngine
 
 router = APIRouter(prefix="/alerts", tags=["alerts"])
@@ -31,24 +31,24 @@ class ResolveAlertRequest(BaseModel):
 class CreateActionItemRequest(BaseModel):
     title: str = Field(min_length=3)
     description: str
-    assigned_to: Optional[str] = None
-    due_date: Optional[datetime] = None
+    assigned_to: str | None = None
+    due_date: datetime | None = None
     priority: str = Field(default="MEDIUM", pattern="^(LOW|MEDIUM|HIGH|URGENT)$")
-    alert_id: Optional[uuid.UUID] = None
-    vessel_call_id: Optional[uuid.UUID] = None
+    alert_id: uuid.UUID | None = None
+    vessel_call_id: uuid.UUID | None = None
 
 
 class UpdateActionItemRequest(BaseModel):
-    status: Optional[str] = Field(None, pattern="^(OPEN|IN_PROGRESS|COMPLETED|CANCELLED)$")
-    comment: Optional[str] = None
+    status: str | None = Field(None, pattern="^(OPEN|IN_PROGRESS|COMPLETED|CANCELLED)$")
+    comment: str | None = None
 
 
 @router.get("", summary="List operational alerts")
 def list_alerts(
-    status: Optional[str] = Query(None, description="NEW, ACKNOWLEDGED, RESOLVED"),
-    severity: Optional[str] = Query(None, description="LOW, MEDIUM, HIGH, CRITICAL"),
-    rule_code: Optional[str] = Query(None),
-    vcn: Optional[str] = Query(None),
+    status: str | None = Query(None, description="NEW, ACKNOWLEDGED, RESOLVED"),
+    severity: str | None = Query(None, description="LOW, MEDIUM, HIGH, CRITICAL"),
+    rule_code: str | None = Query(None),
+    vcn: str | None = Query(None),
     limit: int = Query(100, ge=1, le=500),
     db: Session = Depends(get_db),
     principal: UserPrincipal = Depends(require("view", "operations")),
@@ -99,7 +99,7 @@ def resolve_alert(
 
 @router.get("/actions", summary="List remediation action items")
 def list_action_items(
-    status: Optional[str] = Query(None, description="OPEN, IN_PROGRESS, COMPLETED"),
+    status: str | None = Query(None, description="OPEN, IN_PROGRESS, COMPLETED"),
     db: Session = Depends(get_db),
     principal: UserPrincipal = Depends(require("view", "operations")),
 ):

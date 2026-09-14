@@ -5,8 +5,9 @@ Allows authorised users to select any valid start and end event, handles repeate
 results, and optionally saves the definition to the catalogue.
 """
 
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
+
 import polars as pl
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -29,14 +30,14 @@ class CustomLeadTimeBuilder:
         end_event: str,
         occurrence_selection: str = "first",  # first | last | nth | all
         occurrence_n: int = 1,
-        movement_scope: Optional[str] = None,
-        cohort_filters: Optional[Dict[str, Any]] = None,
-        vessel_call_ids: Optional[List[str]] = None,
+        movement_scope: str | None = None,
+        cohort_filters: dict[str, Any] | None = None,
+        vessel_call_ids: list[str] | None = None,
         exclude_quarantined: bool = True,
-        save_as_name: Optional[str] = None,
-        description: Optional[str] = None,
-        created_by_user: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        save_as_name: str | None = None,
+        description: str | None = None,
+        created_by_user: str | None = None,
+    ) -> dict[str, Any]:
         """Calculates lead-time results between any two valid canonical events for a cohort of vessel calls."""
         # 1. Resolve event definitions
         start_def = self.db.execute(
@@ -78,8 +79,8 @@ class CustomLeadTimeBuilder:
         vessel_calls = self.db.execute(vc_stmt).scalars().all()
 
         # 3. Calculate per-call results
-        per_call_results: List[Dict[str, Any]] = []
-        durations: List[float] = []
+        per_call_results: list[dict[str, Any]] = []
+        durations: list[float] = []
 
         for vc in vessel_calls:
             # Query occurrences
@@ -143,8 +144,8 @@ class CustomLeadTimeBuilder:
                         })
             else:
                 # Single occurrence selection per call
-                s_occ: Optional[EventOccurrence] = None
-                e_occ: Optional[EventOccurrence] = None
+                s_occ: EventOccurrence | None = None
+                e_occ: EventOccurrence | None = None
 
                 if occurrence_selection == "first":
                     s_occ = start_occs[0] if start_occs else None
@@ -186,7 +187,7 @@ class CustomLeadTimeBuilder:
                     })
 
         # 4. Statistical aggregation via Polars
-        aggregate: Dict[str, Any] = {
+        aggregate: dict[str, Any] = {
             "observation_count": len(durations),
             "missing_count": len(per_call_results) - len(durations),
             "percentile_method": "linear_interpolation",
@@ -230,8 +231,8 @@ class CustomLeadTimeBuilder:
             })
 
         # 5. Outliers and Distribution
-        outliers: List[Dict[str, Any]] = []
-        distribution: List[Dict[str, Any]] = []
+        outliers: list[dict[str, Any]] = []
+        distribution: list[dict[str, Any]] = []
         p90 = aggregate.get("p90_hours")
 
         if durations:
@@ -300,7 +301,7 @@ class CustomLeadTimeBuilder:
             "occurrence_selection": occurrence_selection,
             "formula_version": "1.0",
             "saved_definition_id": saved_def_id,
-            "calculated_at": datetime.now(timezone.utc).isoformat(),
+            "calculated_at": datetime.now(UTC).isoformat(),
             "aggregate": aggregate,
             "distribution": distribution,
             "outliers": outliers,

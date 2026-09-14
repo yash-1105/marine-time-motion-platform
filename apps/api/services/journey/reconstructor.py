@@ -7,8 +7,8 @@ stage durations and an active/wait/hold/delay/unclassified decomposition that su
 without double-counting, name deviations, model handovers, and persist a versioned history.
 """
 
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -32,14 +32,14 @@ TIME_CATEGORIES = ["ACTIVE_SERVICE", "PASSIVE_WAIT", "HOLD", "DELAY", "UNCLASSIF
 MAIN_PATH_MAX_SEQUENCE = 99
 
 
-def _hours(start: Optional[datetime], end: Optional[datetime]) -> Optional[float]:
+def _hours(start: datetime | None, end: datetime | None) -> float | None:
     if start is None or end is None:
         return None
     return round((end - start).total_seconds() / 3600.0, 6)
 
 
 class JourneyReconstructionEngine:
-    def __init__(self, db: Session, tenant_id: Optional[str] = None):
+    def __init__(self, db: Session, tenant_id: str | None = None):
         self.db = db
         self.tenant_id = tenant_id
         self.template, self.stages = ensure_template(db)
@@ -53,7 +53,7 @@ class JourneyReconstructionEngine:
     # Public API
     # ------------------------------------------------------------------
 
-    def reconstruct_all(self, triggered_by: str = "SYSTEM") -> Dict[str, Any]:
+    def reconstruct_all(self, triggered_by: str = "SYSTEM") -> dict[str, Any]:
         query = select(VesselCall).where(VesselCall.is_merged == False)  # noqa: E712
         if self.tenant_id:
             query = query.where(VesselCall.tenant_id == self.tenant_id)
@@ -122,7 +122,7 @@ class JourneyReconstructionEngine:
         branch_stages = [s for s in self.stages if s["sequence_index"] > MAIN_PATH_MAX_SEQUENCE]
         shift_stage_defs = [s for s in self.stages if s["is_repeatable"]]
 
-        stage_occurrences: List[StageOccurrence] = []
+        stage_occurrences: list[StageOccurrence] = []
         primary_intervals = []  # (stage_row, category, start, end, hours) for main-path decomposition
 
         for sdef in main_stages:
@@ -164,7 +164,7 @@ class JourneyReconstructionEngine:
         instance.time_decomposition = decomposition
         instance.deviation_report = deviations
         instance.status = "RECONSTRUCTED" if available > 0 else "FAILED"
-        instance.computed_at = datetime.now(timezone.utc)
+        instance.computed_at = datetime.now(UTC)
         self.db.flush()
 
         # 8. Handovers between consecutive main-path stages.
@@ -198,19 +198,19 @@ class JourneyReconstructionEngine:
             )
         ).scalars().all()
 
-        by_def: Dict[Any, List[EventOccurrence]] = {}
+        by_def: dict[Any, list[EventOccurrence]] = {}
         for occ in occurrences:
             by_def.setdefault(occ.event_definition_id, []).append(occ)
 
-        instants: Dict[str, Optional[EventOccurrence]] = {}
-        repeatable: Dict[str, List[EventOccurrence]] = {}
+        instants: dict[str, EventOccurrence | None] = {}
+        repeatable: dict[str, list[EventOccurrence]] = {}
 
         for def_id, occs in by_def.items():
             name = self.event_def_by_id.get(def_id)
             if not name:
                 continue
             if name in REPEATABLE_EVENTS:
-                repeatable[name] = sorted(occs, key=lambda o: o.utc_value or datetime.min.replace(tzinfo=timezone.utc))
+                repeatable[name] = sorted(occs, key=lambda o: o.utc_value or datetime.min.replace(tzinfo=UTC))
                 continue
             if len(occs) == 1:
                 instants[name] = occs[0]
@@ -225,7 +225,7 @@ class JourneyReconstructionEngine:
     # Stage construction
     # ------------------------------------------------------------------
 
-    def _build_stage_occurrence(self, instance: JourneyInstance, sdef: Dict[str, Any], instants: Dict[str, Optional[EventOccurrence]], sequence_index: int):
+    def _build_stage_occurrence(self, instance: JourneyInstance, sdef: dict[str, Any], instants: dict[str, EventOccurrence | None], sequence_index: int):
         start_occ = instants.get(sdef["start_event"])
         end_occ = instants.get(sdef["end_event"])
 
@@ -268,8 +268,8 @@ class JourneyReconstructionEngine:
         interval = (row, sdef["time_category"], start_occ.utc_value, end_occ.utc_value, row.duration_hours)
         return row, interval
 
-    def _build_shift_occurrences(self, instance: JourneyInstance, shift_stage_defs: List[Dict[str, Any]], repeatable: Dict[str, List[EventOccurrence]]):
-        rows: List[StageOccurrence] = []
+    def _build_shift_occurrences(self, instance: JourneyInstance, shift_stage_defs: list[dict[str, Any]], repeatable: dict[str, list[EventOccurrence]]):
+        rows: list[StageOccurrence] = []
         if not shift_stage_defs:
             return rows
         sdef = shift_stage_defs[0]  # single "Optional Shifting" stage definition
@@ -308,8 +308,8 @@ class JourneyReconstructionEngine:
     # Decomposition, deviations, handovers, history
     # ------------------------------------------------------------------
 
-    def _compute_decomposition(self, primary_intervals, shift_rows: List[StageOccurrence]) -> Dict[str, Any]:
-        buckets = {cat: 0.0 for cat in TIME_CATEGORIES}
+    def _compute_decomposition(self, primary_intervals, shift_rows: list[StageOccurrence]) -> dict[str, Any]:
+        buckets = dict.fromkeys(TIME_CATEGORIES, 0.0)
         available_any = False
 
         for row, category, start, end, hours in primary_intervals:
@@ -345,7 +345,7 @@ class JourneyReconstructionEngine:
         }
 
     @staticmethod
-    def _find_overlapping_interval(primary_intervals, start: Optional[datetime], end: Optional[datetime]):
+    def _find_overlapping_interval(primary_intervals, start: datetime | None, end: datetime | None):
         if start is None or end is None:
             return None
         for interval in primary_intervals:
@@ -357,7 +357,7 @@ class JourneyReconstructionEngine:
         return None
 
     @staticmethod
-    def _build_deviation_report(stage_occurrences: List[StageOccurrence]) -> List[Dict[str, Any]]:
+    def _build_deviation_report(stage_occurrences: list[StageOccurrence]) -> list[dict[str, Any]]:
         deviations = []
         for row in stage_occurrences:
             if row.deviation_type:
@@ -370,7 +370,7 @@ class JourneyReconstructionEngine:
                 )
         return deviations
 
-    def _build_handovers(self, instance: JourneyInstance, ordered_main_rows: List[StageOccurrence]):
+    def _build_handovers(self, instance: JourneyInstance, ordered_main_rows: list[StageOccurrence]):
         ordered_main_rows = sorted(ordered_main_rows, key=lambda r: r.sequence_index)
         stage_by_name = {s["name"]: s for s in self.stages}
 
@@ -396,7 +396,7 @@ class JourneyReconstructionEngine:
         self.db.flush()
 
     @staticmethod
-    def _snapshot(instance: JourneyInstance, stage_occurrences: List[StageOccurrence]) -> Dict[str, Any]:
+    def _snapshot(instance: JourneyInstance, stage_occurrences: list[StageOccurrence]) -> dict[str, Any]:
         return {
             "run_version": instance.reconstruction_version,
             "status": instance.status,

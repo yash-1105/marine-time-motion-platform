@@ -6,21 +6,21 @@ from fastapi.responses import JSONResponse
 
 from apps.api.auth.dependencies import require
 from apps.api.core.config import settings
+from apps.api.routers.alerts import router as alerts_router
+from apps.api.routers.analytics import router as analytics_router
 from apps.api.routers.audit import router as audit_router
 from apps.api.routers.auth import router as auth_router
+from apps.api.routers.bottlenecks import router as bottlenecks_router
+from apps.api.routers.criticality import router as criticality_router
+from apps.api.routers.dashboard import router as dashboard_router
+from apps.api.routers.delays import router as delays_router
 from apps.api.routers.identity import router as identity_router
 from apps.api.routers.ingestion import router as ingestion_router
 from apps.api.routers.journey import router as journey_router
-from apps.api.routers.quality import router as quality_router
-from apps.api.routers.operations import router as operations_router
-from apps.api.routers.analytics import router as analytics_router
 from apps.api.routers.kpi import router as kpi_router
-from apps.api.routers.delays import router as delays_router
-from apps.api.routers.bottlenecks import router as bottlenecks_router
+from apps.api.routers.operations import router as operations_router
 from apps.api.routers.outliers import router as outliers_router
-from apps.api.routers.criticality import router as criticality_router
-from apps.api.routers.alerts import router as alerts_router
-from apps.api.routers.dashboard import router as dashboard_router
+from apps.api.routers.quality import router as quality_router
 
 app = FastAPI(
     title="Marine Time & Motion Platform",

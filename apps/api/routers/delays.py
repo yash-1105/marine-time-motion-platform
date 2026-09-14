@@ -1,15 +1,15 @@
 """REST API endpoints for delay analysis and cause allocation (spec §10.4, Phase 09)."""
 import uuid
-from typing import Any, Dict, List, Optional
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from apps.api.auth.principal import UserPrincipal
 from apps.api.core.database import get_db
 from apps.api.routers.auth import require
-from apps.api.auth.principal import UserPrincipal
-from apps.api.services.delays.service import DelayService
 from apps.api.services.delays.inference import DelayInferenceEngine
+from apps.api.services.delays.service import DelayService
 
 router = APIRouter(prefix="/delays", tags=["delays"])
 
@@ -21,16 +21,16 @@ def _tenant(p: UserPrincipal) -> str:
 
 
 class CauseAllocationItem(BaseModel):
-    canonical_category: Optional[str] = None
+    canonical_category: str | None = None
     reason: str
     duration_hours: float
     is_primary: bool = False
     cause_status: str = "CONFIRMED"
-    confidence: Optional[float] = 1.0
+    confidence: float | None = 1.0
 
 
 class AllocateCausesRequest(BaseModel):
-    allocations: List[CauseAllocationItem]
+    allocations: list[CauseAllocationItem]
     rationale: str = Field(default="Analyst root cause breakdown")
 
 
@@ -38,18 +38,18 @@ class ReviewDelayReasonRequest(BaseModel):
     canonical_category: str
     reason: str
     decision: str = Field(default="APPROVED", pattern="^(APPROVED|REJECTED|UNDER_REVIEW)$")
-    notes: Optional[str] = None
+    notes: str | None = None
 
 
 @router.get("", summary="List delays with filters, search, and pagination")
 def list_delays(
-    stage: Optional[str] = Query(None, description="Movement stage filter (Arrival, Sailing, Shifting)"),
-    category: Optional[str] = Query(None, description="Canonical category filter"),
-    cause_status: Optional[str] = Query(None, description="Confirmed vs Inferred"),
-    resolution_status: Optional[str] = Query(None, description="Open, Closed, Under Review"),
-    search: Optional[str] = Query(None, description="Search across VCN, vessel, reason"),
-    has_mismatch: Optional[bool] = Query(None, description="Filter reconciliation mismatches"),
-    requires_review: Optional[bool] = Query(None, description="Filter delays requiring reason review (DQ-007)"),
+    stage: str | None = Query(None, description="Movement stage filter (Arrival, Sailing, Shifting)"),
+    category: str | None = Query(None, description="Canonical category filter"),
+    cause_status: str | None = Query(None, description="Confirmed vs Inferred"),
+    resolution_status: str | None = Query(None, description="Open, Closed, Under Review"),
+    search: str | None = Query(None, description="Search across VCN, vessel, reason"),
+    has_mismatch: bool | None = Query(None, description="Filter reconciliation mismatches"),
+    requires_review: bool | None = Query(None, description="Filter delays requiring reason review (DQ-007)"),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
     sort_by: str = Query("total_duration_hours"),

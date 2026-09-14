@@ -12,11 +12,11 @@ Key Principles (AGENTS.md & spec §10):
 - Tolerant comparison: round(abs(actual - expected), 6) <= tolerance (default 0.02h)
 """
 
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from datetime import UTC, datetime
+from typing import Any
 
 import polars as pl
-from sqlalchemy import func, select, and_
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from apps.api.models.analytics import (
@@ -34,10 +34,11 @@ from apps.api.models.canonical import (
 from apps.api.models.config import EventDefinition
 from apps.api.models.journey import CanonicalObservation
 from apps.api.models.testkit import ExpectedOutput
+
 from .catalogue import ensure_catalogue
 
 
-def within_tolerance(actual: Optional[float], expected: Optional[float], tolerance: float = 0.02) -> bool:
+def within_tolerance(actual: float | None, expected: float | None, tolerance: float = 0.02) -> bool:
     """Reconciliation comparison helper (spec §21A.2, AGENTS.md §6).
 
     Uses round(abs(actual - expected), 6) <= tolerance to avoid floating-point boundary traps.
@@ -59,13 +60,13 @@ class AnalyticsEngine:
     # Metric Computation
     # ──────────────────────────────────────────────────────────────────────────
 
-    def compute_all_metrics(self, vessel_call_ids: Optional[List[str]] = None) -> Dict[str, Any]:
+    def compute_all_metrics(self, vessel_call_ids: list[str] | None = None) -> dict[str, Any]:
         """Ensures catalogue is seeded and computes all COMPUTABLE metrics for active vessel calls.
 
         Returns a summary dict of execution results.
         """
         catalogue = ensure_catalogue(self.db)
-        summary: Dict[str, Any] = {"computed": 0, "available": 0, "unavailable": 0, "metrics": {}}
+        summary: dict[str, Any] = {"computed": 0, "available": 0, "unavailable": 0, "metrics": {}}
 
         # Fetch active, non-merged vessel calls for this tenant (or all if wildcard)
         vc_stmt = select(VesselCall).where(
@@ -98,8 +99,8 @@ class AnalyticsEngine:
     def _compute_single_definition(
         self,
         defn: LeadTimeDefinition,
-        vessel_calls: List[VesselCall],
-    ) -> List[LeadTimeResult]:
+        vessel_calls: list[VesselCall],
+    ) -> list[LeadTimeResult]:
         """Computes results for one LeadTimeDefinition across the given vessel calls."""
         # Clean existing results for this definition and these vessel calls
         vc_ids = [vc.id for vc in vessel_calls]
@@ -116,7 +117,7 @@ class AnalyticsEngine:
         else:
             existing_results = {}
 
-        results: List[LeadTimeResult] = []
+        results: list[LeadTimeResult] = []
 
         if defn.availability_status == "NO_SOURCE_DATA":
             # Clearly registered as having no source data in the fixture (spec §10.2)
@@ -135,7 +136,7 @@ class AnalyticsEngine:
                 row.filter_context = {"tenant_id": self.tenant_id, "exclude_quarantined": self.exclude_quarantined}
                 row.exclusions_applied = []
                 row.dq_status = "NO_SOURCE_DATA"
-                row.calculated_at = datetime.now(timezone.utc)
+                row.calculated_at = datetime.now(UTC)
                 self.db.add(row)
                 results.append(row)
             return results
@@ -157,7 +158,7 @@ class AnalyticsEngine:
         self,
         defn: LeadTimeDefinition,
         vc: VesselCall,
-        existing: Optional[LeadTimeResult],
+        existing: LeadTimeResult | None,
     ) -> LeadTimeResult:
         """Computes event-to-event lead time using canonical event occurrences and governed resolution."""
         row = existing or LeadTimeResult(
@@ -169,7 +170,7 @@ class AnalyticsEngine:
         row.formula_version = defn.formula_version
         row.filter_context = {"tenant_id": self.tenant_id, "exclude_quarantined": self.exclude_quarantined}
         row.exclusions_applied = ["quarantined"] if self.exclude_quarantined else []
-        row.calculated_at = datetime.now(timezone.utc)
+        row.calculated_at = datetime.now(UTC)
 
         # Per AGENTS.md §6: Turnaround definition is VesselCalls.ATD - VesselCalls.ATA
         if defn.name == "Turnaround":
@@ -238,7 +239,7 @@ class AnalyticsEngine:
         vessel_call_id: Any,
         event_name: str,
         occurrence_selection: str = "first",
-    ) -> Optional[EventOccurrence]:
+    ) -> EventOccurrence | None:
         """Resolves the canonical event occurrence for a vessel call and event name.
 
         Prioritizes governed selection from journey.canonical_observation if a conflict was resolved.
@@ -287,7 +288,7 @@ class AnalyticsEngine:
         self,
         defn: LeadTimeDefinition,
         vc: VesselCall,
-        existing: Optional[LeadTimeResult],
+        existing: LeadTimeResult | None,
     ) -> LeadTimeResult:
         """Computes Arrival or Sailing Execution Delay from canonical service records.
 
@@ -307,7 +308,7 @@ class AnalyticsEngine:
             "service_type": "Pilotage Service",
         }
         row.exclusions_applied = []
-        row.calculated_at = datetime.now(timezone.utc)
+        row.calculated_at = datetime.now(UTC)
 
         # Query pilotage services for this vessel call
         services_q = self.db.execute(
@@ -322,7 +323,7 @@ class AnalyticsEngine:
         ).all()
 
         target_movement = defn.execution_delay_movement or "Arrival"
-        selected_match: Optional[Tuple[ServiceRequest, ServiceAssignment, ServiceExecution]] = None
+        selected_match: tuple[ServiceRequest, ServiceAssignment, ServiceExecution] | None = None
 
         # Filter by movement_type if populated
         for sr, sa, se in services_q:
@@ -387,7 +388,7 @@ class AnalyticsEngine:
         self,
         definition_id: Any,
         cohort_key: str = "all",
-        cohort_filters: Optional[Dict[str, Any]] = None,
+        cohort_filters: dict[str, Any] | None = None,
     ) -> StatisticalAggregate:
         """Computes comprehensive statistical aggregates using Polars.
 
@@ -429,7 +430,7 @@ class AnalyticsEngine:
         agg.percentile_method = "linear_interpolation"
         agg.formula_version = defn.formula_version
         agg.quarantine_excluded = self.exclude_quarantined
-        agg.calculated_at = datetime.now(timezone.utc)
+        agg.calculated_at = datetime.now(UTC)
 
         if not available_rows:
             agg.mean_hours = None
@@ -517,7 +518,7 @@ class AnalyticsEngine:
         self.db.add(agg)
         return agg
 
-    def compute_all_statistics(self) -> List[StatisticalAggregate]:
+    def compute_all_statistics(self) -> list[StatisticalAggregate]:
         """Computes statistics for all lead-time definitions across the 'all' cohort."""
         definitions = self.db.execute(select(LeadTimeDefinition)).scalars().all()
         aggs = []
@@ -531,7 +532,7 @@ class AnalyticsEngine:
     # Gold-Standard Reconciliation Helper (spec §21A.2, AGENTS.md §6)
     # ──────────────────────────────────────────────────────────────────────────
 
-    def reconcile_against_expected_outputs(self, tolerance: float = 0.02) -> Dict[str, Any]:
+    def reconcile_against_expected_outputs(self, tolerance: float = 0.02) -> dict[str, Any]:
         """Compares calculated metrics against testkit.expected_output for all 8 reconciliation targets.
 
         Tolerance: ±0.02 hours (spec §21A.2).
@@ -557,7 +558,7 @@ class AnalyticsEngine:
         # Pre-fetch definitions
         catalogue = ensure_catalogue(self.db)
 
-        report: Dict[str, Any] = {
+        report: dict[str, Any] = {
             "tolerance_hours": tolerance,
             "overall_status": "PASS",
             "metrics_reconciled": {},

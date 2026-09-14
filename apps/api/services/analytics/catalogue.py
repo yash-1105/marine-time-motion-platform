@@ -7,14 +7,15 @@ lacks are explicitly registered with status NO_SOURCE_DATA and their required ev
 per AGENTS.md §6 and spec §10.2.
 """
 
-from typing import Any, Dict, List
+from typing import Any
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from apps.api.models.analytics import LeadTimeDefinition
 
 # 8 reconciliation targets + additional computable + NO_SOURCE_DATA definitions
-CATALOGUE_SEEDS: List[Dict[str, Any]] = [
+CATALOGUE_SEEDS: list[dict[str, Any]] = [
     # --- 8 Reconciliation Targets (COMPUTABLE) ---
     {
         "name": "Turnaround",
@@ -303,7 +304,7 @@ CATALOGUE_SEEDS: List[Dict[str, Any]] = [
 ]
 
 
-def ensure_catalogue(db: Session) -> Dict[str, LeadTimeDefinition]:
+def ensure_catalogue(db: Session) -> dict[str, LeadTimeDefinition]:
     """Upserts the governed catalogue of lead-time definitions into analytics.lead_time_definition.
 
     Returns a mapping of definition_name -> LeadTimeDefinition model instance.

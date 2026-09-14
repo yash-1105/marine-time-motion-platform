@@ -1,9 +1,8 @@
 from datetime import datetime
-from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
-from sqlalchemy import select, desc
+from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
 from apps.api.auth.dependencies import require
@@ -14,7 +13,6 @@ from apps.api.models.journey import (
     CanonicalObservation,
     Handover,
     JourneyInstance,
-    JourneyNarrative,
     ObservationCorrection,
     ReconstructionHistory,
     StageOccurrence,
@@ -30,13 +28,13 @@ class CorrectionRequest(BaseModel):
     event_definition_id: str
     new_utc_value: datetime
     reason: str
-    prior_event_occurrence_id: Optional[str] = None
+    prior_event_occurrence_id: str | None = None
     approval_state: str = "APPROVED"
 
 
 @router.post("/reconstruct")
 def run_reconstruction(
-    vessel_call_id: Optional[str] = Query(None),
+    vessel_call_id: str | None = Query(None),
     db: Session = Depends(get_db),
     principal: UserPrincipal = Depends(require("recalculate", "vessel_call")),
 ):
@@ -305,7 +303,7 @@ def get_reconstruction_history(
 
 @router.get("/coverage/summary")
 def get_coverage_summary(
-    tenant_id: Optional[str] = Query(None),
+    tenant_id: str | None = Query(None),
     db: Session = Depends(get_db),
     principal: UserPrincipal = Depends(require("view", "vessel_call")),
 ):

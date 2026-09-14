@@ -8,14 +8,14 @@ Manages:
 - Missing reason review (DQ-007)
 """
 import uuid
-from typing import Any, Dict, List, Optional
-from datetime import datetime, timezone
-from sqlalchemy import desc, func, or_, select, text
+from typing import Any
+
+from sqlalchemy import desc, func, or_, select
 from sqlalchemy.orm import Session
 
-from apps.api.models.canonical import Delay, DelayAllocation, VesselCall
 from apps.api.models.audit import AuditEvent
-from apps.api.services.delays.mapping import map_to_canonical_category, CANONICAL_DELAY_CATEGORIES
+from apps.api.models.canonical import Delay, DelayAllocation, VesselCall
+from apps.api.services.delays.mapping import CANONICAL_DELAY_CATEGORIES, map_to_canonical_category
 
 
 class DelayService:
@@ -25,18 +25,18 @@ class DelayService:
 
     def list_delays(
         self,
-        movement_stage: Optional[str] = None,
-        canonical_category: Optional[str] = None,
-        cause_status: Optional[str] = None,
-        resolution_status: Optional[str] = None,
-        search: Optional[str] = None,
-        has_mismatch: Optional[bool] = None,
-        requires_review: Optional[bool] = None,
+        movement_stage: str | None = None,
+        canonical_category: str | None = None,
+        cause_status: str | None = None,
+        resolution_status: str | None = None,
+        search: str | None = None,
+        has_mismatch: bool | None = None,
+        requires_review: bool | None = None,
         skip: int = 0,
         limit: int = 50,
         sort_by: str = "delay_hours",
         sort_order: str = "desc"
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """List delays with filtering, pagination, and multi-field search."""
         query = select(Delay, VesselCall.vcn, VesselCall.vessel_name).join(
             VesselCall, Delay.vessel_call_id == VesselCall.id
@@ -123,7 +123,7 @@ class DelayService:
             "items": items,
         }
 
-    def get_delay_detail(self, delay_id: uuid.UUID) -> Optional[Dict[str, Any]]:
+    def get_delay_detail(self, delay_id: uuid.UUID) -> dict[str, Any] | None:
         """Get complete detail of a delay record with all cause allocations and reconciliation."""
         row = self.db.execute(
             select(Delay, VesselCall.vcn, VesselCall.vessel_name)
@@ -186,7 +186,7 @@ class DelayService:
             ],
         }
 
-    def get_delays_summary(self) -> Dict[str, Any]:
+    def get_delays_summary(self) -> dict[str, Any]:
         """
         Produce Pareto distribution of delay causes, stage breakdown,
         confirmed vs inferred counts, and total unallocated time.
@@ -264,10 +264,10 @@ class DelayService:
     def allocate_causes(
         self,
         delay_id: uuid.UUID,
-        allocations_data: List[Dict[str, Any]],
+        allocations_data: list[dict[str, Any]],
         actor: str = "system",
         rationale: str = "Manual delay cause allocation",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Configure multiple causes for a delay with durations and primary/secondary designations.
         Allocations must sum to the delay duration or the remainder is explicitly unallocated.
@@ -353,8 +353,8 @@ class DelayService:
         reason: str,
         actor: str = "lead_analyst",
         decision: str = "APPROVED",
-        notes: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        notes: str | None = None,
+    ) -> dict[str, Any]:
         """
         Review and resolve a missing reason or inferred delay (e.g. DQ-007 review).
         """

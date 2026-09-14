@@ -5,21 +5,21 @@ Supports all 55 governed KPIs, scorecards, Green/Amber/Red status banding, trend
 primary/alias management to prevent double counting, and audited recalculation.
 """
 
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import datetime
+from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import select, desc
+from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
 from apps.api.auth.dependencies import require
 from apps.api.auth.principal import UserPrincipal
 from apps.api.core.database import get_db
-from apps.api.models.analytics import KPI, KPIFormulaVersion, KPIResult, KPIBenchmark
-from apps.api.services.kpi.engine import KPIEngine
+from apps.api.models.analytics import KPI, KPIFormulaVersion, KPIResult
 from apps.api.services.kpi.benchmarks import KPIBenchmarkService
+from apps.api.services.kpi.engine import KPIEngine
 from apps.api.services.kpi.registry import ensure_kpi_registry
 
 router = APIRouter(prefix="/kpis", tags=["KPI Engine & Scorecard"])
@@ -30,30 +30,30 @@ router = APIRouter(prefix="/kpis", tags=["KPI Engine & Scorecard"])
 # ──────────────────────────────────────────────────────────────────────────────
 
 class KPICalculateRequest(BaseModel):
-    cohort_filters: Optional[Dict[str, Any]] = Field(None, description="Filters such as vessel_type, terminal_code, unit")
-    period_start: Optional[datetime] = Field(None, description="Start date for reporting period")
-    period_end: Optional[datetime] = Field(None, description="End date for reporting period")
+    cohort_filters: dict[str, Any] | None = Field(None, description="Filters such as vessel_type, terminal_code, unit")
+    period_start: datetime | None = Field(None, description="Start date for reporting period")
+    period_end: datetime | None = Field(None, description="End date for reporting period")
     grain: str = Field("ALL", description="ALL | DAILY | WEEKLY | MONTHLY | QUARTERLY | ANNUAL")
 
 
 class KPIRecalculateRequest(BaseModel):
     reason: str = Field(..., description="Mandatory audit justification for recalculation")
-    cohort_filters: Optional[Dict[str, Any]] = Field(None, description="Filters applied to recalculation cohort")
+    cohort_filters: dict[str, Any] | None = Field(None, description="Filters applied to recalculation cohort")
 
 
 class KPIBenchmarkCreateRequest(BaseModel):
     peer_port: str = Field(..., description="Name of peer port (e.g. Port of Rotterdam)")
     benchmark_value: float = Field(..., description="Numerical benchmark value")
-    source: Optional[str] = Field(None, description="Source citation (leave empty if peer data absent)")
-    period: Optional[str] = Field(None, description="Period of benchmark (leave empty if peer data absent)")
-    notes: Optional[str] = Field(None, description="Contextual notes on methodology")
+    source: str | None = Field(None, description="Source citation (leave empty if peer data absent)")
+    period: str | None = Field(None, description="Period of benchmark (leave empty if peer data absent)")
+    notes: str | None = Field(None, description="Contextual notes on methodology")
 
 
 class PrimarySwapRequest(BaseModel):
     make_primary: bool = Field(True, description="Whether to designate this KPI as primary")
 
 
-def _resolve_tenant(principal: UserPrincipal, explicit_tenant: Optional[str] = None) -> str:
+def _resolve_tenant(principal: UserPrincipal, explicit_tenant: str | None = None) -> str:
     if explicit_tenant:
         return explicit_tenant
     if principal.data_scope.tenant_id in ("*", "tenant-synthetic-01"):
@@ -67,9 +67,9 @@ def _resolve_tenant(principal: UserPrincipal, explicit_tenant: Optional[str] = N
 
 @router.get("")
 def list_kpis(
-    category: Optional[str] = Query(None, description="Filter by KPI category"),
-    status: Optional[str] = Query(None, description="COMPUTED | NO_SOURCE_DATA"),
-    is_primary: Optional[bool] = Query(None, description="Filter by primary vs alias"),
+    category: str | None = Query(None, description="Filter by KPI category"),
+    status: str | None = Query(None, description="COMPUTED | NO_SOURCE_DATA"),
+    is_primary: bool | None = Query(None, description="Filter by primary vs alias"),
     db: Session = Depends(get_db),
     principal: UserPrincipal = Depends(require("view", "kpi")),
 ):
@@ -113,7 +113,7 @@ def list_kpis(
 
 @router.get("/scorecard")
 def get_scorecard(
-    tenant_id: Optional[str] = Query(None),
+    tenant_id: str | None = Query(None),
     include_aliases: bool = Query(False, description="Whether to include duplicate alias concepts"),
     db: Session = Depends(get_db),
     principal: UserPrincipal = Depends(require("view", "kpi")),
@@ -130,7 +130,7 @@ def get_scorecard(
     kpi_objs = db.execute(select(KPI).order_by(KPI.kpi_number.asc())).scalars().all()
     kpi_by_code = {k.code: k for k in kpi_objs}
 
-    categories: Dict[str, List[Dict[str, Any]]] = {}
+    categories: dict[str, list[dict[str, Any]]] = {}
     for code, item in calc_res["results"].items():
         kpi = kpi_by_code.get(code)
         if not kpi:
@@ -176,7 +176,7 @@ def get_scorecard(
 @router.post("/calculate")
 def calculate_kpis(
     body: KPICalculateRequest,
-    tenant_id: Optional[str] = Query(None),
+    tenant_id: str | None = Query(None),
     db: Session = Depends(get_db),
     principal: UserPrincipal = Depends(require("recalculate", "kpi")),
 ):
@@ -196,7 +196,7 @@ def calculate_kpis(
 def recalculate_kpi_endpoint(
     id_or_code: str,
     body: KPIRecalculateRequest,
-    tenant_id: Optional[str] = Query(None),
+    tenant_id: str | None = Query(None),
     db: Session = Depends(get_db),
     principal: UserPrincipal = Depends(require("recalculate", "kpi")),
 ):
@@ -397,7 +397,7 @@ def get_kpi_trends(
     id_or_code: str,
     grain: str = Query("MONTHLY", description="DAILY | WEEKLY | MONTHLY | QUARTERLY | ANNUAL"),
     periods: int = Query(6, ge=2, le=24),
-    tenant_id: Optional[str] = Query(None),
+    tenant_id: str | None = Query(None),
     db: Session = Depends(get_db),
     principal: UserPrincipal = Depends(require("view", "kpi")),
 ):

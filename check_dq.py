@@ -1,4 +1,0 @@
-import polars as pl
-wb = pl.read_excel("fixtures/Synthetic_Marine_Time_Motion_Test_Data.xlsx", sheet_id=0)
-dq = wb["DQ_Cases"]
-print(dq.filter(pl.col("VCN") == "SYNVCN2600018"))

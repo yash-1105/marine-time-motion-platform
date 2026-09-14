@@ -1,8 +1,9 @@
-from typing import Any, Dict, List, Optional
+from typing import Any
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
+from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
-from sqlalchemy import select, desc
 
 from apps.api.auth.dependencies import require
 from apps.api.auth.principal import UserPrincipal
@@ -18,8 +19,8 @@ router = APIRouter(prefix="/identity", tags=["Identity Resolution"])
 
 class AttributeEvidenceSchema(BaseModel):
     attribute: str
-    record_1_value: Optional[str] = None
-    record_2_value: Optional[str] = None
+    record_1_value: str | None = None
+    record_2_value: str | None = None
     agreement: str
     weight: float
     contribution: float
@@ -30,27 +31,27 @@ class MatchCandidateSchema(BaseModel):
     id: str
     source_record_1_id: str
     source_record_2_id: str
-    vessel_name_1: Optional[str] = None
-    vessel_name_2: Optional[str] = None
-    vcn_1: Optional[str] = None
-    vcn_2: Optional[str] = None
+    vessel_name_1: str | None = None
+    vessel_name_2: str | None = None
+    vcn_1: str | None = None
+    vcn_2: str | None = None
     match_score: float
     status: str
-    match_type: Optional[str] = None
+    match_type: str | None = None
     conflict_detected: bool
-    conflict_reasons: Optional[List[str]] = None
-    evidences: Optional[List[AttributeEvidenceSchema]] = None
+    conflict_reasons: list[str] | None = None
+    evidences: list[AttributeEvidenceSchema] | None = None
 
 
 class MergeRequest(BaseModel):
     candidate_id: str
     manual_override: bool = False
-    custom_survivorship: Optional[Dict[str, Any]] = None
-    notes: Optional[str] = None
+    custom_survivorship: dict[str, Any] | None = None
+    notes: str | None = None
 
 
 class UnmergeRequest(BaseModel):
-    notes: Optional[str] = None
+    notes: str | None = None
 
 
 @router.post("/resolve")
@@ -86,9 +87,9 @@ def run_identity_resolution(
 
 @router.get("/candidates")
 def list_candidates(
-    status_filter: Optional[str] = Query(None, alias="status"),
-    conflict_only: Optional[bool] = Query(None),
-    min_score: Optional[float] = Query(None),
+    status_filter: str | None = Query(None, alias="status"),
+    conflict_only: bool | None = Query(None),
+    min_score: float | None = Query(None),
     page: int = Query(1, ge=1),
     limit: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
@@ -292,7 +293,7 @@ def list_merge_decisions(
 
 @router.get("/population")
 def get_population_summary(
-    tenant_id: Optional[str] = Query(None),
+    tenant_id: str | None = Query(None),
     db: Session = Depends(get_db),
     principal: UserPrincipal = Depends(require("view", "vessel_call")),
 ):

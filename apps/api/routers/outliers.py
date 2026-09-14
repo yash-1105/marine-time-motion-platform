@@ -1,13 +1,13 @@
 """REST API endpoints for outlier detection and transparent inclusion/exclusion (spec §10.6, Phase 09)."""
 import uuid
-from typing import Any, Dict, List, Optional
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from apps.api.auth.principal import UserPrincipal
 from apps.api.core.database import get_db
 from apps.api.routers.auth import require
-from apps.api.auth.principal import UserPrincipal
 from apps.api.services.outliers.engine import OutlierEngine
 
 router = APIRouter(prefix="/outliers", tags=["outliers"])
@@ -26,10 +26,10 @@ class ToggleExclusionRequest(BaseModel):
 
 @router.get("", summary="List detected operational and data-quality outliers")
 def list_outliers(
-    outlier_type: Optional[str] = Query(None, description="OPERATIONAL_OUTLIER, DATA_QUALITY_OUTLIER, etc."),
-    severity: Optional[str] = Query(None, description="MEDIUM, HIGH, CRITICAL"),
-    is_excluded: Optional[bool] = Query(None, description="Filter by KPI exclusion status"),
-    vcn: Optional[str] = Query(None, description="Filter by VCN"),
+    outlier_type: str | None = Query(None, description="OPERATIONAL_OUTLIER, DATA_QUALITY_OUTLIER, etc."),
+    severity: str | None = Query(None, description="MEDIUM, HIGH, CRITICAL"),
+    is_excluded: bool | None = Query(None, description="Filter by KPI exclusion status"),
+    vcn: str | None = Query(None, description="Filter by VCN"),
     db: Session = Depends(get_db),
     principal: UserPrincipal = Depends(require("view", "analytics")),
 ):

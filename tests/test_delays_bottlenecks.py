@@ -1,21 +1,19 @@
 """Tests for Phase 09: Delay analysis, bottlenecks, outliers, criticality, and alerts."""
-import uuid
 import pytest
-from datetime import datetime, timezone
-from sqlalchemy import select
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
-from apps.api.main import app
 from apps.api.core.database import SessionLocal
+from apps.api.main import app
+from apps.api.models.analytics import ActionItem, OperationalAlert, OutlierRecord
 from apps.api.models.canonical import Delay, DelayAllocation, VesselCall
-from apps.api.models.analytics import BottleneckRecord, OutlierRecord, OperationalAlert, ActionItem
-from apps.api.services.delays.mapping import map_to_canonical_category, CANONICAL_DELAY_CATEGORIES
-from apps.api.services.delays.service import DelayService
-from apps.api.services.delays.inference import DelayInferenceEngine
-from apps.api.services.bottlenecks.engine import BottleneckEngine
-from apps.api.services.outliers.engine import OutlierEngine
-from apps.api.services.criticality.engine import CriticalityEngine
 from apps.api.services.alerts.engine import AlertEngine
+from apps.api.services.bottlenecks.engine import BottleneckEngine
+from apps.api.services.criticality.engine import CriticalityEngine
+from apps.api.services.delays.inference import DelayInferenceEngine
+from apps.api.services.delays.mapping import CANONICAL_DELAY_CATEGORIES, map_to_canonical_category
+from apps.api.services.delays.service import DelayService
+from apps.api.services.outliers.engine import OutlierEngine
 
 
 @pytest.fixture

@@ -289,11 +289,11 @@ class IngestionPipeline:
                 
 
         batch_staging = self.db.execute(select(StagingRecord).where(StagingRecord.ingestion_batch_id == batch.batch_id)).scalars().all()
-        from apps.api.models.canonical import ServiceRequest, ServiceAssignment, ServiceExecution, Delay
+        from apps.api.models.canonical import ServiceAssignment, ServiceExecution, ServiceRequest
         
         def dt_parse(dt_str):
-            from dateutil import parser
             import pytz
+            from dateutil import parser
             if not dt_str: return None
             try:
                 dt = parser.parse(dt_str)

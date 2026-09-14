@@ -7,14 +7,13 @@ row, marks the prior canonical value superseded (not deleted), records the decis
 canonical-observation override, and triggers recalculation of that vessel call's journey.
 """
 
-from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from apps.api.models.canonical import EventOccurrence, VesselCall
-from apps.api.models.journey import CanonicalObservation, JourneyInstance, ObservationCorrection
+from apps.api.models.journey import CanonicalObservation, ObservationCorrection
 from apps.api.services.audit import log_audit_event
 
 from .reconstructor import JourneyReconstructionEngine
@@ -29,14 +28,14 @@ class JourneyCorrectionService:
         new_utc_value: datetime,
         reason: str,
         actor: str,
-        prior_event_occurrence_id: Optional[str] = None,
+        prior_event_occurrence_id: str | None = None,
         approval_state: str = "APPROVED",
     ) -> ObservationCorrection:
         vc = db.execute(select(VesselCall).where(VesselCall.id == vessel_call_id)).scalar_one_or_none()
         if not vc:
             raise ValueError(f"VesselCall {vessel_call_id} not found")
 
-        prior: Optional[EventOccurrence] = None
+        prior: EventOccurrence | None = None
         if prior_event_occurrence_id:
             prior = db.execute(
                 select(EventOccurrence).where(EventOccurrence.id == prior_event_occurrence_id)
@@ -66,7 +65,7 @@ class JourneyCorrectionService:
                     "reason": reason,
                     "actor": actor,
                     "prior_event_occurrence_id": str(prior.id) if prior else None,
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "timestamp": datetime.now(UTC).isoformat(),
                 }
             ],
             inference_status=None,
@@ -89,7 +88,7 @@ class JourneyCorrectionService:
             actor=actor,
             approval_state=approval_state,
             approved_by=actor if approval_state == "APPROVED" else None,
-            approved_at=datetime.now(timezone.utc) if approval_state == "APPROVED" else None,
+            approved_at=datetime.now(UTC) if approval_state == "APPROVED" else None,
             triggers_recalculation=True,
         )
         db.add(correction)
@@ -118,7 +117,7 @@ class JourneyCorrectionService:
         if approval_state == "APPROVED" and correction.triggers_recalculation:
             engine = JourneyReconstructionEngine(db, tenant_id=vc.tenant_id)
             engine.reconstruct_vessel_call(vc, triggered_by="CORRECTION")
-            correction.recalculated_at = datetime.now(timezone.utc)
+            correction.recalculated_at = datetime.now(UTC)
 
         db.commit()
         db.refresh(correction)
@@ -130,7 +129,7 @@ class JourneyCorrectionService:
         vessel_call_id: str,
         event_definition_id: str,
         new_occ_id: str,
-        prior_occ_id: Optional[str],
+        prior_occ_id: str | None,
         correction: ObservationCorrection,
         actor: str,
         reason: str,
@@ -165,5 +164,5 @@ class JourneyCorrectionService:
             "actor": actor,
         }
         existing.decided_by = actor
-        existing.decided_at = datetime.now(timezone.utc)
+        existing.decided_at = datetime.now(UTC)
         db.flush()

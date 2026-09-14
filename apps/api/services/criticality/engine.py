@@ -15,7 +15,8 @@ HARD RULE: Always display the three component scores alongside the overall score
 No black-box score anywhere in the API response or UI.
 """
 import math
-from typing import Any, Dict, List, Optional
+from typing import Any
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -32,8 +33,8 @@ class CriticalityEngine:
         duration_hours: float,
         cv: float,
         tail_risk_ratio: float,
-        weights: Optional[Dict[str, float]] = None,
-    ) -> Dict[str, Any]:
+        weights: dict[str, float] | None = None,
+    ) -> dict[str, Any]:
         """
         Compute the 3 component scores (1.0 to 5.0), overall score, and band.
         Exposes all component scores transparently.
@@ -109,10 +110,10 @@ class CriticalityEngine:
             },
         }
 
-    def evaluate_all_stages(self) -> List[Dict[str, Any]]:
+    def evaluate_all_stages(self) -> list[dict[str, Any]]:
         """Evaluate operational criticality for all governed lead times."""
         definitions = self.db.execute(select(LeadTimeDefinition)).scalars().all()
-        evaluations: List[Dict[str, Any]] = []
+        evaluations: list[dict[str, Any]] = []
 
         for defn in definitions:
             results = self.db.execute(

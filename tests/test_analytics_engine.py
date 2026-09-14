@@ -13,6 +13,8 @@ Verifies:
 10. REST API endpoints function and enforce authorization
 """
 
+from datetime import UTC
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select
@@ -352,23 +354,24 @@ def test_all_9_duration_semantics_concepts():
 
     and carry explicit null handling (never fabricated zero).
     """
-    from datetime import datetime, timezone
+    from datetime import datetime
+
     from apps.api.services.analytics.duration_semantics import (
+        compute_delay_frequency,
+        compute_early_delivery,
+        compute_execution_delay,
         compute_lead_time,
         compute_planning_lead_time,
         compute_scheduling_gap,
-        compute_execution_delay,
+        compute_service_time,
         compute_target_variance,
         compute_waiting_time,
-        compute_service_time,
-        compute_delay_frequency,
-        compute_early_delivery,
     )
 
-    t0 = datetime(2026, 3, 1, 10, 0, tzinfo=timezone.utc)
-    t1 = datetime(2026, 3, 1, 12, 0, tzinfo=timezone.utc)
-    t2 = datetime(2026, 3, 1, 14, 0, tzinfo=timezone.utc)
-    t3 = datetime(2026, 3, 1, 13, 45, tzinfo=timezone.utc)  # 15 mins early
+    t0 = datetime(2026, 3, 1, 10, 0, tzinfo=UTC)
+    t1 = datetime(2026, 3, 1, 12, 0, tzinfo=UTC)
+    t2 = datetime(2026, 3, 1, 14, 0, tzinfo=UTC)
+    t3 = datetime(2026, 3, 1, 13, 45, tzinfo=UTC)  # 15 mins early
 
     # 1. Lead Time: end - start
     lt = compute_lead_time(t0, t2)
@@ -437,7 +440,9 @@ def test_all_9_duration_semantics_concepts():
 def test_daylight_saving_boundary_duration():
     """Verifies that UTC timestamp envelope arithmetic preserves exact physical durations across DST changes."""
     from datetime import datetime
+
     import pytz
+
     from apps.api.services.analytics.duration_semantics import compute_lead_time
 
     # London spring forward DST transition: 2026-03-29 from 01:00 to 02:00

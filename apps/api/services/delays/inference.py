@@ -12,21 +12,20 @@ Rules:
    declines to overwrite it.
 """
 import uuid
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from apps.api.models.audit import AuditEvent
 from apps.api.models.canonical import (
     Delay,
     DelayAllocation,
     ServiceAssignment,
     ServiceExecution,
     ServiceRequest,
-    VesselCall,
 )
-from apps.api.models.audit import AuditEvent
-from apps.api.services.delays.mapping import map_to_canonical_category
 
 
 class DelayInferenceEngine:
@@ -39,7 +38,7 @@ class DelayInferenceEngine:
         delay_id: uuid.UUID,
         actor: str = "ai_inference_engine",
         force_reevaluate: bool = False
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Infer probable cause for a delay from available operational evidence.
         Strictly preserves confirmed causes.
@@ -70,8 +69,8 @@ class DelayInferenceEngine:
             .where(ServiceRequest.vessel_call_id == delay.vessel_call_id)
         ).all()
 
-        supporting_factors: List[str] = []
-        opposing_factors: List[str] = []
+        supporting_factors: list[str] = []
+        opposing_factors: list[str] = []
 
         # Stage context
         stage = (delay.movement_stage or "").lower()
@@ -148,7 +147,7 @@ class DelayInferenceEngine:
             "confidence": confidence,
             "supporting_factors": supporting_factors,
             "opposing_factors": opposing_factors,
-            "inferred_at": datetime.now(timezone.utc).isoformat(),
+            "inferred_at": datetime.now(UTC).isoformat(),
             "inferred_by": actor,
             "rule": "RULE_HEURISTIC_SERVICE_EXECUTION_EVIDENCE",
         }

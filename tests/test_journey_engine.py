@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy import create_engine, select, text
@@ -10,12 +10,11 @@ from apps.api.models.config import EventDefinition
 from apps.api.models.journey import (
     CanonicalObservation,
     JourneyInstance,
-    ObservationCorrection,
     ReconstructionHistory,
     StageOccurrence,
 )
-from apps.api.services.ingestion.synthetic import load_synthetic_dataset
 from apps.api.services.identity.engine import IdentityEngine
+from apps.api.services.ingestion.synthetic import load_synthetic_dataset
 from apps.api.services.journey.corrections import JourneyCorrectionService
 from apps.api.services.journey.narrative import JourneyNarrativeService
 from apps.api.services.journey.reconstructor import JourneyReconstructionEngine
@@ -147,7 +146,7 @@ def test_missing_ata_produces_unavailable_stage_not_zero_duration(db_session):
             event_definition_id=nomination_def.id,
             occurrence_index=1,
             movement_scope="ARRIVAL",
-            utc_value=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            utc_value=datetime(2026, 1, 1, tzinfo=UTC),
             source_system="TOS",
         )
     )
@@ -257,7 +256,7 @@ def test_correction_creates_new_observation_and_triggers_recalculation(db_sessio
         db=db_session,
         vessel_call_id=str(vc.id),
         event_definition_id=str(ata_def.id),
-        new_utc_value=datetime(2026, 3, 28, 15, 22, tzinfo=timezone.utc),
+        new_utc_value=datetime(2026, 3, 28, 15, 22, tzinfo=UTC),
         reason="Steward confirms AIS timestamp is authoritative",
         actor="steward@port.gov",
         prior_event_occurrence_id=str(prior_id),
@@ -272,7 +271,7 @@ def test_correction_creates_new_observation_and_triggers_recalculation(db_sessio
     new_occ = db_session.execute(
         select(EventOccurrence).where(EventOccurrence.id == correction.new_event_occurrence_id)
     ).scalar_one()
-    assert new_occ.utc_value == datetime(2026, 3, 28, 15, 22, tzinfo=timezone.utc)
+    assert new_occ.utc_value == datetime(2026, 3, 28, 15, 22, tzinfo=UTC)
     assert new_occ.capture_method == "STEWARD_CORRECTION"
 
     assert correction.approval_state == "APPROVED"
@@ -311,7 +310,7 @@ def test_narrative_is_grounded_and_does_not_invent_missing_stage(db_session):
             event_definition_id=nomination_def.id,
             occurrence_index=1,
             movement_scope="ARRIVAL",
-            utc_value=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            utc_value=datetime(2026, 1, 1, tzinfo=UTC),
             source_system="TOS",
         )
     )

@@ -1,12 +1,11 @@
 """REST API endpoints for operational bottleneck scoring (spec §10.5, Phase 09)."""
-from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from apps.api.auth.principal import UserPrincipal
 from apps.api.core.database import get_db
 from apps.api.routers.auth import require
-from apps.api.auth.principal import UserPrincipal
 from apps.api.services.bottlenecks.engine import BottleneckEngine
 
 router = APIRouter(prefix="/bottlenecks", tags=["bottlenecks"])
@@ -19,7 +18,7 @@ def _tenant(p: UserPrincipal) -> str:
 
 
 class RecalculateBottlenecksRequest(BaseModel):
-    weights: Optional[Dict[str, float]] = None
+    weights: dict[str, float] | None = None
 
 
 @router.get("", summary="Get ranked operational bottlenecks with component scores")
@@ -33,7 +32,7 @@ def get_bottlenecks(
 
 @router.post("/recalculate", summary="Recalculate and persist bottleneck rankings")
 def recalculate_bottlenecks(
-    payload: Optional[RecalculateBottlenecksRequest] = None,
+    payload: RecalculateBottlenecksRequest | None = None,
     db: Session = Depends(get_db),
     principal: UserPrincipal = Depends(require("manage", "analytics")),
 ):

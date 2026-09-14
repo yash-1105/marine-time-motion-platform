@@ -14,19 +14,19 @@ Tests:
 11. REST API endpoints with RBAC enforcement.
 """
 
-from datetime import datetime, timezone, timedelta
 import uuid
+from datetime import UTC, datetime, timedelta
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 
 from apps.api.main import app, settings
-from apps.api.models.analytics import KPI, KPIBenchmark, KPIFormulaVersion, KPIResult
+from apps.api.models.analytics import KPIFormulaVersion
 from apps.api.models.audit import AuditEvent
 from apps.api.models.canonical import (
     CargoOperation,
-    Delay,
     EventOccurrence,
     ServiceAssignment,
     ServiceExecution,
@@ -36,7 +36,7 @@ from apps.api.models.canonical import (
 from apps.api.models.config import EventDefinition
 from apps.api.services.kpi.benchmarks import KPIBenchmarkService
 from apps.api.services.kpi.engine import KPIEngine
-from apps.api.services.kpi.registry import ensure_kpi_registry, KPI_REGISTRY_DEFINITIONS
+from apps.api.services.kpi.registry import ensure_kpi_registry
 
 
 @pytest.fixture(scope="function")
@@ -146,7 +146,7 @@ def hand_verified_fixture(db_session):
     ed_last_untied = get_or_create_ed("LAST_LINE_UNTIED_SAILING")
     ed_bw_out = get_or_create_ed("BREAKWATER_OUT")
 
-    base_time = datetime(2026, 6, 1, 8, 0, tzinfo=timezone.utc)
+    base_time = datetime(2026, 6, 1, 8, 0, tzinfo=UTC)
 
     # Call 1: Container vessel
     # Anchorage Wait: 2.0 hours (08:00 -> 10:00)

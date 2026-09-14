@@ -48,12 +48,13 @@ def list_vessel_calls(
     db: Session = Depends(get_db),
 ):
     """Lists vessel calls with comprehensive operational durations, quality status, and traceability."""
+    from sqlalchemy import select
+
     from apps.api.models.analytics import LeadTimeDefinition, LeadTimeResult
     from apps.api.models.canonical import Delay, EventOccurrence
     from apps.api.models.config import EventDefinition
-    from apps.api.models.journey import JourneyInstance, StageOccurrence
+    from apps.api.models.journey import JourneyInstance
     from apps.api.models.quality import QualityIssue, QualityRule
-    from sqlalchemy import select
 
     repo = VesselCallRepository(db)
     calls = repo.list(

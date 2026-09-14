@@ -1,11 +1,18 @@
-from sqlalchemy.orm import Session
-from sqlalchemy import select
-import json
-from datetime import datetime
 
-from apps.api.models.canonical import VesselCall, EventOccurrence, ServiceRequest, ServiceAssignment, ServiceExecution, Delay
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from apps.api.models.canonical import (
+    Delay,
+    EventOccurrence,
+    ServiceAssignment,
+    ServiceExecution,
+    ServiceRequest,
+    VesselCall,
+)
 from apps.api.models.config import EventDefinition
-from apps.api.models.quality import QualityRule, QualityIssue
+from apps.api.models.quality import QualityIssue, QualityRule
+
 
 class DataQualityEngine:
 
@@ -19,7 +26,7 @@ class DataQualityEngine:
         # Load journey templates for DAG chronology
         import yaml
         try:
-            with open("config/journey_templates.yaml", "r") as yf:
+            with open("config/journey_templates.yaml") as yf:
                 self.journey_templates = yaml.safe_load(yf)
         except Exception:
             self.journey_templates = {}
@@ -85,7 +92,6 @@ class DataQualityEngine:
         
         if eta_staging and ata_staging:
             from dateutil import parser
-            import pytz
             try:
                 eta_dt = parser.parse(eta_staging)
                 ata_dt = parser.parse(ata_staging)

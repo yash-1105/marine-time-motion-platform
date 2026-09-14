@@ -13,14 +13,14 @@ Key Principles (AGENTS.md & spec §11):
 - Green/Amber/Red threshold evaluation against KPI targets.
 """
 
-from datetime import datetime, timezone, timedelta
-from typing import Any, Dict, List, Optional, Set, Tuple
 import math
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
-from sqlalchemy import select, and_, func, desc
+from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
-from apps.api.models.analytics import KPI, KPIFormulaVersion, KPIResult, KPIBenchmark
+from apps.api.models.analytics import KPI, KPIResult
 from apps.api.models.audit import AuditEvent
 from apps.api.models.canonical import (
     CargoOperation,
@@ -33,7 +33,7 @@ from apps.api.models.canonical import (
 )
 from apps.api.models.config import EventDefinition
 from apps.api.models.journey import CanonicalObservation
-from apps.api.services.kpi.registry import ensure_kpi_registry, KPI_REGISTRY_DEFINITIONS
+from apps.api.services.kpi.registry import KPI_REGISTRY_DEFINITIONS, ensure_kpi_registry
 
 
 class KPIEngine:
@@ -43,9 +43,9 @@ class KPIEngine:
         self.db = db
         self.tenant_id = tenant_id
         self.exclude_quarantined = exclude_quarantined
-        self._event_def_cache: Optional[Dict[str, Any]] = None
+        self._event_def_cache: dict[str, Any] | None = None
 
-    def ensure_registry(self) -> Dict[str, KPI]:
+    def ensure_registry(self) -> dict[str, KPI]:
         """Ensures all 55 KPIs and initial formula versions exist in analytics.kpi."""
         return ensure_kpi_registry(self.db)
 
@@ -53,13 +53,13 @@ class KPIEngine:
     # Caches and Event Resolution
     # ──────────────────────────────────────────────────────────────────────────
 
-    def _get_event_defs(self) -> Dict[str, Any]:
+    def _get_event_defs(self) -> dict[str, Any]:
         if self._event_def_cache is None:
             defs = self.db.execute(select(EventDefinition)).scalars().all()
             self._event_def_cache = {d.name: d.id for d in defs}
         return self._event_def_cache
 
-    def _get_canonical_observation_lookup(self, vessel_call_ids: List[Any]) -> Dict[Tuple[Any, Any], Any]:
+    def _get_canonical_observation_lookup(self, vessel_call_ids: list[Any]) -> dict[tuple[Any, Any], Any]:
         """Pre-fetches canonical observation winners for vessel calls."""
         if not vessel_call_ids:
             return {}
@@ -74,10 +74,10 @@ class KPIEngine:
 
     def get_eligible_vessel_calls(
         self,
-        cohort_filters: Optional[Dict[str, Any]] = None,
-        period_start: Optional[datetime] = None,
-        period_end: Optional[datetime] = None,
-    ) -> List[VesselCall]:
+        cohort_filters: dict[str, Any] | None = None,
+        period_start: datetime | None = None,
+        period_end: datetime | None = None,
+    ) -> list[VesselCall]:
         """Fetches active, non-merged vessel calls for the population matching filters."""
         stmt = select(VesselCall).where(VesselCall.is_merged == False)
 
@@ -125,10 +125,10 @@ class KPIEngine:
 
     @staticmethod
     def evaluate_band(
-        value: Optional[float],
-        target: Optional[float],
-        target_direction: Optional[str],
-        thresholds: Optional[Dict[str, Any]],
+        value: float | None,
+        target: float | None,
+        target_direction: str | None,
+        thresholds: dict[str, Any] | None,
     ) -> str:
         """Evaluates KPI band against target and thresholds."""
         if value is None:
@@ -161,9 +161,9 @@ class KPIEngine:
     def calculate_kpi(
         self,
         kpi_code: str,
-        cohort_filters: Optional[Dict[str, Any]] = None,
-        period_start: Optional[datetime] = None,
-        period_end: Optional[datetime] = None,
+        cohort_filters: dict[str, Any] | None = None,
+        period_start: datetime | None = None,
+        period_end: datetime | None = None,
         grain: str = "ALL",
         is_recalculation: bool = False,
     ) -> KPIResult:
@@ -194,7 +194,7 @@ class KPIEngine:
                 ),
                 formula_version="1.0",
                 data_quality_summary={"required_source_systems": kpi.required_source_systems or []},
-                calculated_at=datetime.now(timezone.utc),
+                calculated_at=datetime.now(UTC),
                 is_recalculation=is_recalculation,
             )
             self.db.add(result)
@@ -233,7 +233,7 @@ class KPIEngine:
                         "primary_result_id": str(primary_res.id),
                         "notice": "This metric is an alias for administrative reporting; primary logic executed.",
                     },
-                    calculated_at=datetime.now(timezone.utc),
+                    calculated_at=datetime.now(UTC),
                     is_recalculation=is_recalculation,
                 )
                 self.db.add(result)
@@ -273,7 +273,7 @@ class KPIEngine:
             unavailable_reason=reason,
             formula_version="1.0",
             data_quality_summary=dq_summary,
-            calculated_at=datetime.now(timezone.utc),
+            calculated_at=datetime.now(UTC),
             is_recalculation=is_recalculation,
         )
         self.db.add(result)
@@ -282,14 +282,14 @@ class KPIEngine:
 
     def calculate_all_kpis(
         self,
-        cohort_filters: Optional[Dict[str, Any]] = None,
-        period_start: Optional[datetime] = None,
-        period_end: Optional[datetime] = None,
+        cohort_filters: dict[str, Any] | None = None,
+        period_start: datetime | None = None,
+        period_end: datetime | None = None,
         grain: str = "ALL",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Calculates all 55 KPIs in the registry and returns a scorecard summary."""
         kpi_map = self.ensure_registry()
-        results: Dict[str, Any] = {}
+        results: dict[str, Any] = {}
         computed_count = 0
         no_src_count = 0
         unavail_count = 0
@@ -349,10 +349,10 @@ class KPIEngine:
         self,
         kpi_code: str,
         actor_id: str = "system",
-        actor_email: Optional[str] = None,
-        actor_role: Optional[str] = None,
-        reason: Optional[str] = None,
-        cohort_filters: Optional[Dict[str, Any]] = None,
+        actor_email: str | None = None,
+        actor_role: str | None = None,
+        reason: str | None = None,
+        cohort_filters: dict[str, Any] | None = None,
     ) -> KPIResult:
         """Explicit, permissioned, audited operation that produces a new KPI result."""
         # Find previous result if any
@@ -413,7 +413,7 @@ class KPIEngine:
         kpi_code: str,
         grain: str = "MONTHLY",
         periods: int = 6,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Calculates trend points, rolling average, and direction classification."""
         kpi = self.db.execute(select(KPI).where(KPI.code == kpi_code)).scalar_one_or_none()
         if not kpi:
@@ -448,7 +448,7 @@ class KPIEngine:
 
         # If few historical results stored, slice available calls by month
         if len(points) < 2:
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             # Sample past 3 monthly slices
             points = []
             for i in range(periods - 1, -1, -1):
@@ -512,7 +512,7 @@ class KPIEngine:
     # Data Loading Helper
     # ──────────────────────────────────────────────────────────────────────────
 
-    def _load_canonical_data(self, vc_ids: List[Any]) -> Tuple[Dict, Dict, Dict, Dict]:
+    def _load_canonical_data(self, vc_ids: list[Any]) -> tuple[dict, dict, dict, dict]:
         """Loads events, service executions, cargo ops, and delays indexed by vessel_call_id."""
         if not vc_ids:
             return {}, {}, {}, {}
@@ -531,7 +531,7 @@ class KPIEngine:
             ev_stmt = ev_stmt.where(EventOccurrence.is_quarantined == False)
 
         events = self.db.execute(ev_stmt.order_by(EventOccurrence.utc_value.asc())).scalars().all()
-        events_by_vc: Dict[Any, Dict[str, EventOccurrence]] = {}
+        events_by_vc: dict[Any, dict[str, EventOccurrence]] = {}
         for ev in events:
             ev_name = id_to_event_name.get(ev.event_definition_id)
             if not ev_name:
@@ -552,7 +552,7 @@ class KPIEngine:
             .join(ServiceRequest, ServiceAssignment.service_request_id == ServiceRequest.id)
             .where(ServiceRequest.vessel_call_id.in_(vc_ids))
         )
-        services_by_vc: Dict[Any, List[Dict[str, Any]]] = {}
+        services_by_vc: dict[Any, list[dict[str, Any]]] = {}
         for exe, ass, req in self.db.execute(se_stmt).all():
             vc_id = req.vessel_call_id
             if vc_id not in services_by_vc:
@@ -567,7 +567,7 @@ class KPIEngine:
 
         # 3. Cargo Operations
         cg_stmt = select(CargoOperation).where(CargoOperation.vessel_call_id.in_(vc_ids))
-        cargo_by_vc: Dict[Any, List[CargoOperation]] = {}
+        cargo_by_vc: dict[Any, list[CargoOperation]] = {}
         for cg in self.db.execute(cg_stmt).scalars().all():
             if cg.vessel_call_id not in cargo_by_vc:
                 cargo_by_vc[cg.vessel_call_id] = []
@@ -575,7 +575,7 @@ class KPIEngine:
 
         # 4. Delays
         dl_stmt = select(Delay).where(Delay.vessel_call_id.in_(vc_ids))
-        delays_by_vc: Dict[Any, List[Delay]] = {}
+        delays_by_vc: dict[Any, list[Delay]] = {}
         for dl in self.db.execute(dl_stmt).scalars().all():
             if dl.vessel_call_id not in delays_by_vc:
                 delays_by_vc[dl.vessel_call_id] = []
@@ -590,13 +590,13 @@ class KPIEngine:
     def _compute_kpi_value(
         self,
         kpi: KPI,
-        vessel_calls: List[VesselCall],
-        events_by_vc: Dict[Any, Dict[str, EventOccurrence]],
-        services_by_vc: Dict[Any, List[Dict[str, Any]]],
-        cargo_by_vc: Dict[Any, List[CargoOperation]],
-        delays_by_vc: Dict[Any, List[Delay]],
-        cohort_filters: Optional[Dict[str, Any]],
-    ) -> Tuple[Optional[float], Optional[float], Optional[float], str, str, Optional[str], Dict[str, Any]]:
+        vessel_calls: list[VesselCall],
+        events_by_vc: dict[Any, dict[str, EventOccurrence]],
+        services_by_vc: dict[Any, list[dict[str, Any]]],
+        cargo_by_vc: dict[Any, list[CargoOperation]],
+        delays_by_vc: dict[Any, list[Delay]],
+        cohort_filters: dict[str, Any] | None,
+    ) -> tuple[float | None, float | None, float | None, str, str, str | None, dict[str, Any]]:
         """Dispatches to the formula method for the KPI code."""
         code = kpi.code
 
@@ -611,8 +611,8 @@ class KPIEngine:
 
         # ── KPI-02: Average Vessel Call Size (Spec: strictly segmented by unit) ──
         elif code == "KPI-02":
-            unit_sums: Dict[str, float] = {}
-            unit_calls: Dict[str, int] = {}
+            unit_sums: dict[str, float] = {}
+            unit_calls: dict[str, int] = {}
             for vc in vessel_calls:
                 ops = cargo_by_vc.get(vc.id, [])
                 for op in ops:
@@ -1275,7 +1275,7 @@ class KPIEngine:
         return None, None, None, "UNAVAILABLE", "GRAY", f"Formula logic for {code} not mapped.", {}
 
     @staticmethod
-    def _get_time(events: Dict[str, EventOccurrence], candidate_names: List[str]) -> Optional[datetime]:
+    def _get_time(events: dict[str, EventOccurrence], candidate_names: list[str]) -> datetime | None:
         """Returns the utc_value of the first matching event name from candidate names."""
         for name in candidate_names:
             if name in events and events[name].utc_value:

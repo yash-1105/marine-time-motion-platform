@@ -16,24 +16,24 @@ Conflating any two of them is explicitly prevented.
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 @dataclass
 class SemanticDurationResult:
     concept: str
     status: str  # "AVAILABLE" | "UNAVAILABLE"
-    value_hours: Optional[float]
+    value_hours: float | None
     unit: str = "hours"
     formula_version: str = "1.0"
-    unavailable_reason: Optional[str] = None
+    unavailable_reason: str | None = None
     is_early_delivery: bool = False
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 def compute_lead_time(
-    start_actual: Optional[datetime],
-    end_actual: Optional[datetime],
+    start_actual: datetime | None,
+    end_actual: datetime | None,
     formula_version: str = "1.0",
 ) -> SemanticDurationResult:
     """Lead Time = end actual − start actual (elapsed duration between two observed events)."""
@@ -57,8 +57,8 @@ def compute_lead_time(
 
 
 def compute_planning_lead_time(
-    submission_time: Optional[datetime],
-    requested_service_time: Optional[datetime],
+    submission_time: datetime | None,
+    requested_service_time: datetime | None,
     formula_version: str = "1.0",
 ) -> SemanticDurationResult:
     """Planning Lead Time = requested service time − request submission time."""
@@ -82,8 +82,8 @@ def compute_planning_lead_time(
 
 
 def compute_scheduling_gap(
-    requested_service_time: Optional[datetime],
-    scheduled_time: Optional[datetime],
+    requested_service_time: datetime | None,
+    scheduled_time: datetime | None,
     formula_version: str = "1.0",
 ) -> SemanticDurationResult:
     """Scheduling Gap = scheduled time − requested time (lag in port resource allocation)."""
@@ -107,8 +107,8 @@ def compute_scheduling_gap(
 
 
 def compute_execution_delay(
-    scheduled_time: Optional[datetime],
-    served_time: Optional[datetime],
+    scheduled_time: datetime | None,
+    served_time: datetime | None,
     formula_version: str = "1.0",
 ) -> SemanticDurationResult:
     """Execution Delay = actual service time − scheduled time.
@@ -137,8 +137,8 @@ def compute_execution_delay(
 
 
 def compute_target_variance(
-    actual_value: Optional[float],
-    target_value: Optional[float],
+    actual_value: float | None,
+    target_value: float | None,
     formula_version: str = "1.0",
 ) -> SemanticDurationResult:
     """Target Variance = actual − target."""
@@ -162,7 +162,7 @@ def compute_target_variance(
 
 
 def compute_waiting_time(
-    stages: List[Dict[str, Any]],
+    stages: list[dict[str, Any]],
     formula_version: str = "1.0",
 ) -> SemanticDurationResult:
     """Waiting Time = sum of durations for stages categorized as PASSIVE_WAIT or HOLD."""
@@ -194,7 +194,7 @@ def compute_waiting_time(
 
 
 def compute_service_time(
-    stages: List[Dict[str, Any]],
+    stages: list[dict[str, Any]],
     formula_version: str = "1.0",
 ) -> SemanticDurationResult:
     """Service Time = sum of durations for stages categorized as ACTIVE_SERVICE."""
@@ -252,7 +252,7 @@ def compute_delay_frequency(
 
 
 def compute_early_delivery(
-    execution_delay: Optional[float],
+    execution_delay: float | None,
     formula_version: str = "1.0",
 ) -> SemanticDurationResult:
     """Early Delivery = negative execution delay (preserves negative sign as early service)."""

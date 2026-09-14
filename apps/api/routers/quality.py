@@ -1,12 +1,13 @@
+
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-from sqlalchemy import select, func
-from apps.api.core.database import get_db
-from apps.api.models.quality import QualityIssue, QualityRule
-from apps.api.models.canonical import VesselCall
-from apps.api.services.quality.engine import DataQualityEngine
 from pydantic import BaseModel
-from typing import List, Dict
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
+
+from apps.api.core.database import get_db
+from apps.api.models.canonical import VesselCall
+from apps.api.models.quality import QualityIssue, QualityRule
+from apps.api.services.quality.engine import DataQualityEngine
 
 router = APIRouter(prefix="/quality", tags=["Quality"])
 
@@ -82,7 +83,7 @@ def get_quality_summary(db: Session = Depends(get_db)):
     }
 
 
-@router.get("/issues", response_model=List[QualityIssueSchema])
+@router.get("/issues", response_model=list[QualityIssueSchema])
 def list_issues(
     severity: str | None = None,
     issue_status: str | None = None,
