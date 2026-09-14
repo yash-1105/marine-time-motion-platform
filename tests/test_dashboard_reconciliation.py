@@ -31,6 +31,18 @@ def auth_headers():
     return {"Authorization": f"Bearer {token}"}
 
 
+@pytest.fixture(scope="module", autouse=True)
+def ensure_analytics_computed(auth_headers):
+    """Ensure LeadTimeResult table is populated before dashboard tests run.
+
+    The dashboard endpoint includes lazy compute, but this explicitly triggers it
+    so the test is not sensitive to which module ran before it in the full pytest suite.
+    """
+    resp = client.post("/api/v1/analytics/compute", headers=auth_headers, json={})
+    # 200 = computed, 404 = tenant not found (fresh DB with no data at all)
+    assert resp.status_code in (200, 404), f"Analytics compute failed: {resp.text}"
+
+
 @pytest.fixture(scope="module")
 def db_session():
     engine = create_engine(settings.database_url)
