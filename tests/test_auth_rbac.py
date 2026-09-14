@@ -212,6 +212,43 @@ def test_audit_logging_and_sensitive_export(db_session):
     assert audit_record.details.get("filter_set") == filter_data
     assert "row_count" in audit_record.details
 
+    # Test view_sensitive: insert sensitive call and fetch it
+    import uuid
+
+    sens_vcn = f"VCN-SENS-{uuid.uuid4().hex[:6]}"
+    sens_call = VesselCall(
+        vessel_name="Sensitive Vessel",
+        vcn=sens_vcn,
+        cargo_type="IMDG",
+        tenant_id="tenant-synthetic-01",
+        port_id="ZADUR",
+        terminal_id="DCT",
+    )
+    db_session.add(sens_call)
+    db_session.commit()
+
+    get_resp = client.get(f"/api/v1/operations/vessel-calls/{sens_call.id}", headers=headers)
+    assert get_resp.status_code == 200
+
+    view_audit = db_session.query(AuditEvent).filter_by(action="view_sensitive", resource_id=str(sens_call.id)).first()
+    assert view_audit is not None
+    assert view_audit.details.get("is_sensitive") is True
+
+    # Test synthetic dataset load audit
+    admin_login = client.post("/api/v1/auth/dev/login", json={"role_or_email": "Platform Administrator"})
+    admin_headers = {"Authorization": f"Bearer {admin_login.json()['access_token']}"}
+
+    load_resp = client.post("/api/v1/operations/synthetic-data/load", headers=admin_headers)
+    assert load_resp.status_code == 200
+
+    load_audit = (
+        db_session.query(AuditEvent)
+        .filter_by(action="synthetic_data_load")
+        .order_by(AuditEvent.created_at.desc())
+        .first()
+    )
+    assert load_audit is not None
+
 
 def test_session_lifecycle_and_revocation():
     """Requirement: Session handling with access token, revocation on logout, and timeout enforcement."""

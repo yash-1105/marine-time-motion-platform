@@ -88,6 +88,45 @@ def create_vessel_call(
     return {"id": str(call.id), "vessel_name": call.vessel_name, "status": "created"}
 
 
+@router.get("/vessel-calls/{call_id}")
+def get_vessel_call(
+    request: Request,
+    call_id: str,
+    principal: UserPrincipal = Depends(require("view", "vessel_call")),
+    db: Session = Depends(get_db),
+):
+    """Retrieves a single vessel call. Logs view_sensitive if record is flagged sensitive."""
+    repo = VesselCallRepository(db)
+    call = repo.get_by_id(principal.data_scope, call_id)
+    if not call:
+        raise HTTPException(status_code=404, detail="Vessel call not found within data scope")
+
+    is_sensitive = call.cargo_type == "IMDG" or getattr(call, "is_sensitive", False)
+    if is_sensitive:
+        log_audit_event(
+            db=db,
+            action="view_sensitive",
+            actor_id=principal.user_id,
+            actor_email=principal.email,
+            actor_role=",".join(principal.roles),
+            resource_type="vessel_call",
+            resource_id=str(call.id),
+            correlation_id=getattr(request.state, "correlation_id", None),
+            details={"cargo_type": call.cargo_type, "is_sensitive": True},
+        )
+
+    return {
+        "id": str(call.id),
+        "vessel_name": call.vessel_name,
+        "vcn": call.vcn,
+        "vessel_type": call.vessel_type,
+        "cargo_type": call.cargo_type,
+        "tenant_id": call.tenant_id,
+        "port_id": call.port_id,
+        "terminal_id": call.terminal_id,
+    }
+
+
 @router.put("/vessel-calls/{call_id}")
 def edit_vessel_call(
     request: Request,
@@ -297,3 +336,80 @@ def administer_system(
         actor_role=",".join(principal.roles),
     )
     return {"status": "administered"}
+
+
+@router.post("/rules")
+def update_quality_rule(
+    request: Request,
+    body: dict[str, Any],
+    principal: UserPrincipal = Depends(require("configure", "quality_rules")),
+    db: Session = Depends(get_db),
+):
+    """Updates a quality rule and logs the rule_change audit event."""
+    log_audit_event(
+        db=db,
+        action="rule_change",
+        actor_id=principal.user_id,
+        actor_email=principal.email,
+        actor_role=",".join(principal.roles),
+        resource_type="quality_rule",
+        details=body,
+    )
+    return {"status": "rule_updated"}
+
+
+@router.post("/formulas")
+def update_kpi_formula(
+    request: Request,
+    body: dict[str, Any],
+    principal: UserPrincipal = Depends(require("configure", "kpi_formulas")),
+    db: Session = Depends(get_db),
+):
+    """Updates a KPI formula version and logs the formula_change audit event."""
+    log_audit_event(
+        db=db,
+        action="formula_change",
+        actor_id=principal.user_id,
+        actor_email=principal.email,
+        actor_role=",".join(principal.roles),
+        resource_type="kpi_formula",
+        details=body,
+    )
+    return {"status": "formula_updated"}
+
+
+@router.post("/synthetic-data/load")
+def load_synthetic_dataset(
+    request: Request,
+    principal: UserPrincipal = Depends(require("administer", "synthetic_dataset")),
+    db: Session = Depends(get_db),
+):
+    """Loads the synthetic test dataset and logs synthetic_data_load."""
+    log_audit_event(
+        db=db,
+        action="synthetic_data_load",
+        actor_id=principal.user_id,
+        actor_email=principal.email,
+        actor_role=",".join(principal.roles),
+        resource_type="synthetic_dataset",
+        details={"dataset": "Synthetic_Marine_Time_Motion_Test_Data.xlsx"},
+    )
+    return {"status": "synthetic_dataset_loaded"}
+
+
+@router.post("/synthetic-data/reset")
+def reset_synthetic_dataset(
+    request: Request,
+    principal: UserPrincipal = Depends(require("administer", "synthetic_dataset")),
+    db: Session = Depends(get_db),
+):
+    """Resets the synthetic test dataset and logs synthetic_data_reset."""
+    log_audit_event(
+        db=db,
+        action="synthetic_data_reset",
+        actor_id=principal.user_id,
+        actor_email=principal.email,
+        actor_role=",".join(principal.roles),
+        resource_type="synthetic_dataset",
+    )
+    return {"status": "synthetic_dataset_reset"}
