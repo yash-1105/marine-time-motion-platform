@@ -23,7 +23,7 @@ def test_early_service_vs_sequence_violation(db_session):
     engine = DataQualityEngine(db_session)
     
     vc_id = str(uuid.uuid4())
-    vc = VesselCall(id=vc_id, tenant_id="synthetic-tenant", vessel_name="Test", vcn="TEST-VCN", vessel_type="Container")
+    vc = VesselCall(id=vc_id, tenant_id="test-tenant", vessel_name="Test", vcn="TEST-VCN", vessel_type="Container")
     db_session.add(vc)
     db_session.commit()
     
@@ -54,3 +54,12 @@ def test_early_service_vs_sequence_violation(db_session):
     rule_ids = [db_session.execute(text(f"SELECT rule_id FROM quality.quality_rule WHERE id='{i}'")).scalar() for i in issues]
     assert "DQ-006" in rule_ids
     assert "DQ-007" not in rule_ids
+
+    # Teardown
+    db_session.execute(text(f"DELETE FROM quality.quality_issue WHERE vessel_call_id='{vc_id}'"))
+    db_session.execute(text(f"DELETE FROM canonical.event_occurrence WHERE vessel_call_id='{vc_id}'"))
+    db_session.execute(text(f"DELETE FROM canonical.service_execution WHERE service_assignment_id='{ass.id}'"))
+    db_session.execute(text(f"DELETE FROM canonical.service_assignment WHERE id='{ass.id}'"))
+    db_session.execute(text(f"DELETE FROM canonical.service_request WHERE id='{req.id}'"))
+    db_session.execute(text(f"DELETE FROM canonical.vessel_call WHERE id='{vc_id}'"))
+    db_session.commit()

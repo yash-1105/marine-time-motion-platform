@@ -1,4 +1,14 @@
 # Thresholds
 thresholds:
   auto_merge: 0.98
+  steward_review: 0.85
   outlier_sigma: 3
+  survivorship:
+    strategy: "completeness_and_recency"
+    source_priority:
+      - "AIS"
+      - "PORT_AUTHORITY"
+      - "TERMINAL"
+      - "AGENT"
+      - "MANUAL"
+      - "SYNTHETIC"

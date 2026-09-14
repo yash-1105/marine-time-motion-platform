@@ -5,7 +5,7 @@
 | REQ-001 | 1. PRODUCT MISSION | Ingests fragmented data from port and terminal systems, files, APIs, databases, ... | ingestion | test_req_001 | NOT_STARTED |
 | REQ-002 | 1. PRODUCT MISSION | Standardises vessel, cargo, berth, resource, incident, and event records into a ... | Core | test_req_002 | NOT_STARTED |
 | REQ-003 | 1. PRODUCT MISSION | validates completeness, timestamp accuracy, chronology, operational logic, dupli... | Core | test_req_003 | NOT_STARTED |
-| REQ-004 | 1. PRODUCT MISSION | Resolves identities and consolidates source records into one governed vessel-cal... | Core | test_req_004 | NOT_STARTED |
+| REQ-004 | 1. PRODUCT MISSION | Resolves identities and consolidates source records into one governed vessel-cal... | identity | test_identity_engine | IMPLEMENTED |
 | REQ-005 | 1. PRODUCT MISSION | Reconstructs each vessel's end-to-end journey from pre-arrival through regulator... | journey | test_req_005 | NOT_STARTED |
 | REQ-006 | 1. PRODUCT MISSION | Separates elapsed lead time, waiting time, service time, planning gaps, schedule... | Core | test_req_006 | NOT_STARTED |
 | REQ-007 | 1. PRODUCT MISSION | Calculates marine, berth, terminal, cargo, yard, gate, rail, departure, coordina... | kpi | test_req_007 | BACKLOG |
@@ -98,7 +98,7 @@
 | REQ-094 | 20. ACCEPTANCE CRITERIA | At least one file-based and one API/database ingestion path work end to end.... | ingestion | test_req_094 | NOT_STARTED |
 | REQ-095 | 20. ACCEPTANCE CRITERIA | Source fields can be mapped and reused through versioned templates.... | Core | test_req_095 | NOT_STARTED |
 | REQ-096 | 20. ACCEPTANCE CRITERIA | Raw evidence is immutable and every canonical value is traceable.... | Core | test_req_096 | NOT_STARTED |
-| REQ-097 | 20. ACCEPTANCE CRITERIA | Duplicate vessel-call candidates are explainable and merge/unmerge is auditable.... | identity | test_req_097 | NOT_STARTED |
+| REQ-097 | 20. ACCEPTANCE CRITERIA | Duplicate vessel-call candidates are explainable and merge/unmerge is auditable.... | identity | test_identity_engine | IMPLEMENTED |
 | REQ-098 | 20. ACCEPTANCE CRITERIA | Required chronology and logical rules flag seeded violations correctly without t... | Core | test_req_098 | NOT_STARTED |
 | REQ-099 | 20. ACCEPTANCE CRITERIA | A vessel call can be reconstructed across pre-arrival, arrival, berth/cargo, shi... | Core | test_req_099 | NOT_STARTED |
 | REQ-100 | 20. ACCEPTANCE CRITERIA | Custom lead time between any two eligible events works per call and aggregated c... | Core | test_req_100 | NOT_STARTED |
@@ -118,10 +118,10 @@
 | REQ-114 | 21A.1 Dataset files and expected package handling | Import using the same ingestion, mapping, validation, lineage, journey reconstru... | kpi | test_req_114 | NOT_STARTED |
 | REQ-115 | 21A.1 Dataset files and expected package handling | Be idempotent. Re-importing the same workbook must not unintentionally multiply ... | Core | test_req_115 | NOT_STARTED |
 | REQ-116 | 21A.1 Dataset files and expected package handling | Allow complete removal/reset of the synthetic dataset without affecting other da... | Core | test_req_116 | NOT_STARTED |
-| REQ-117 | 21A.1 Dataset files and expected package handling | Display an import summary with accepted, rejected, quarantined, duplicate, merge... | identity | test_req_117 | NOT_STARTED |
+| REQ-117 | 21A.1 Dataset files and expected package handling | Display an import summary with accepted, rejected, quarantined, duplicate, merge... | identity | test_identity_engine | IMPLEMENTED |
 | REQ-118 | 21A.1 Dataset files and expected package handling | Preserve workbook name, worksheet name, row number, ingestion batch, checksum, a... | ingestion | test_req_118 | NOT_STARTED |
-| REQ-119 | DQ_Cases | `DQ-001`: exact duplicate vessel-call record. Expect duplicate detection and pre... | Core | test_req_119 | NOT_STARTED |
-| REQ-120 | DQ_Cases | `DQ-002`: probable duplicate identity with punctuation variation and the same VC... | identity | test_req_120 | NOT_STARTED |
+| REQ-119 | DQ_Cases | `DQ-001`: exact duplicate vessel-call record. Expect duplicate detection and pre... | identity | test_fixture_consolidation_reconciles_to_72 | IMPLEMENTED |
+| REQ-120 | DQ_Cases | `DQ-002`: probable duplicate identity with punctuation variation and the same VC... | identity | test_fixture_consolidation_reconciles_to_72 | IMPLEMENTED |
 | REQ-121 | DQ_Cases | `DQ-003`: missing ATA. Expect a missing-mandatory-timestamp issue and dependent ... | Core | test_req_121 | NOT_STARTED |
 | REQ-122 | DQ_Cases | `DQ-004`: ETA after ATA. Expect an `ETA before ATA` chronology violation.... | Core | test_req_122 | NOT_STARTED |
 | REQ-123 | DQ_Cases | `DQ-005`: pilot request exists but pilot scheduled event is absent. Expect a mis... | Core | test_req_123 | NOT_STARTED |

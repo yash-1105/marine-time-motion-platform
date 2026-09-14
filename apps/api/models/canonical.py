@@ -48,6 +48,10 @@ class VesselCall(BaseModel):
     port_id = Column(String, nullable=True)
     terminal_id = Column(String, nullable=True)
 
+    # Identity resolution and merge tracking
+    is_merged = Column(Boolean, default=False, nullable=False, index=True)
+    merged_into_id = Column(ForeignKey("canonical.vessel_call.id", ondelete="SET NULL"), nullable=True)
+
 
 class EventOccurrence(BaseModel):
     __tablename__ = "event_occurrence"

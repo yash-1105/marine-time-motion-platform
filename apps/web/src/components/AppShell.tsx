@@ -35,6 +35,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Resources', path: '/resources', requiredAction: 'view' },
   { label: 'Data Quality', path: '/data-quality', requiredAction: 'approve' },
   { label: 'Data Ingestion', path: '/ingestion', requiredAction: 'create' },
+  { label: 'Identity & Merge', path: '/identity', requiredAction: 'merge' },
   { label: 'Reports', path: '/reports', requiredAction: 'publish' },
   { label: 'Copilot', path: '/copilot', requiredAction: 'view' },
   { label: 'Alerts and Actions', path: '/alerts', requiredAction: 'view' },

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import select, func
-from apps.api.dependencies import get_db
+from apps.api.core.database import get_db
 from apps.api.models.quality import QualityIssue, QualityRule
 from apps.api.models.canonical import VesselCall
 from apps.api.services.quality.engine import DataQualityEngine
