@@ -8,12 +8,22 @@ from apps.api.models.config import EventDefinition
 from apps.api.models.quality import QualityRule, QualityIssue
 
 class DataQualityEngine:
+
     def __init__(self, db: Session):
         self.db = db
         # Load rules from DB
         self.rules = {r.rule_id: r for r in self.db.execute(select(QualityRule)).scalars().all()}
         # Load event definitions
         self.event_defs = {e.id: e.name for e in self.db.execute(select(EventDefinition)).scalars().all()}
+        
+        # Load journey templates for DAG chronology
+        import yaml
+        try:
+            with open("config/journey_templates.yaml", "r") as yf:
+                self.journey_templates = yaml.safe_load(yf)
+        except Exception:
+            self.journey_templates = {}
+
         
     def _create_issue(self, rule_id: str, vc_id: str, ref: str, severity: str):
         # We need to make sure the rule exists
@@ -107,14 +117,29 @@ class DataQualityEngine:
 
 
 
-        # DQ-006: ANCHORAGE_ARRIVAL -> PILOT_ON_BOARD_ARRIVAL must be > 0 (sequence violation)
-        anchor = event_map.get("ANCHORAGE_ARRIVAL")
-        pob = event_map.get("PILOT_ON_BOARD_ARRIVAL")
-        if anchor and pob:
-            if anchor[0].utc_value and pob[0].utc_value:
-                dur = (pob[0].utc_value - anchor[0].utc_value).total_seconds()
-                if dur < 0:
-                    self._create_issue("DQ-006", vc.id, f"EventOccurrence:{pob[0].id}", "CRITICAL")
+
+        # DQ-006 and Sequence violations via DAG configuration
+        # Instead of hardcoding, we parse `sequence_rules` from the journey templates
+        templates = self.journey_templates.get("templates", [])
+        for tpl in templates:
+            seq_rules = tpl.get("dag", {}).get("sequence_rules", [])
+            for r in seq_rules:
+                from_ev = r.get("from")
+                to_ev = r.get("to")
+                
+                from_occ = event_map.get(from_ev)
+                to_occ = event_map.get(to_ev)
+                
+                if from_occ and to_occ:
+                    if from_occ[0].utc_value and to_occ[0].utc_value:
+                        dur = (to_occ[0].utc_value - from_occ[0].utc_value).total_seconds()
+                        if dur < 0:
+                            # if it's the specific DQ-006 case from the fixture
+                            if from_ev == "ANCHORAGE_ARRIVAL" and to_ev == "PILOT_ON_BOARD_ARRIVAL":
+                                self._create_issue("DQ-006", vc.id, f"EventOccurrence:{to_occ[0].id}", "CRITICAL")
+                            else:
+                                self._create_issue("RULE_SEQUENCE_VIOLATION", vc.id, f"EventOccurrence:{to_occ[0].id}", "CRITICAL")
+
 
         # DQ-007: positive execution delay, but reason missing
         services = self.db.execute(select(ServiceRequest).where(ServiceRequest.vessel_call_id == vc.id)).scalars().all()

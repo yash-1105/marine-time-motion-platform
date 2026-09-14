@@ -4,7 +4,21 @@ templates:
     dag:
       start: "Pre-arrival"
       nodes:
-        - "Pre-arrival"
-        - "Pilotage"
-        - "Towage"
-        - "Berthing"
+        - name: "Pre-arrival"
+          events: ["NOMINATION_SUBMITTED"]
+          next: ["Pilotage"]
+        - name: "Pilotage"
+          events: ["PILOT_REQUEST_ARRIVAL", "PILOT_SCHEDULED_ARRIVAL", "PILOT_ON_BOARD_ARRIVAL", "PILOT_DISEMBARK_ARRIVAL"]
+          next: ["Towage", "Berthing"]
+        - name: "Towage"
+          events: ["TUG_SERVICE_START_ARRIVAL"]
+          next: ["Berthing"]
+        - name: "Berthing"
+          events: ["FIRST_LINE_TIED_ARRIVAL", "LAST_LINE_TIED_ARRIVAL", "ALL_FAST_ARRIVAL"]
+          next: []
+      sequence_rules:
+        # these must happen in order
+        - from: "ANCHORAGE_ARRIVAL"
+          to: "PILOT_ON_BOARD_ARRIVAL"
+        - from: "PILOT_ON_BOARD_ARRIVAL"
+          to: "PILOT_DISEMBARK_ARRIVAL"
