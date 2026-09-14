@@ -172,10 +172,28 @@ function ExecutiveDashboardContent() {
     return p.toString()
   }, [port, terminal, vesselType, cargoType, qualityStatus, startDate, endDate])
 
-  const fetchDashboard = useCallback(() => {
+  const fetchDashboard = useCallback(async () => {
     setLoading(true)
     setError(null)
-    const headers = { Authorization: `Bearer ${token || 'dev-token'}` }
+
+    let activeToken = token
+    if (!activeToken) {
+      try {
+        const authRes = await fetch(`${API}/api/v1/auth/dev/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ role_or_email: 'Platform Administrator' }),
+        })
+        if (authRes.ok) {
+          const authData = await authRes.json()
+          activeToken = authData.access_token
+        }
+      } catch {
+        // Fall back to token
+      }
+    }
+
+    const headers = { Authorization: `Bearer ${activeToken || 'dev-token'}` }
 
     Promise.all([
       fetch(`${API}/api/v1/dashboard/executive?${queryParams}`, { headers }).then((r) =>
