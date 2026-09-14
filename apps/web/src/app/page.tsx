@@ -220,11 +220,11 @@ function ExecutiveDashboardContent() {
 
   if (loading && !data) {
     return (
-      <div className="flex-1 flex items-center justify-center bg-slate-900 text-slate-400">
+      <div className="flex-1 flex items-center justify-center bg-[var(--color-bg)]">
         <div className="flex flex-col items-center gap-3">
-          <span className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin"></span>
-          <span className="text-xs font-mono uppercase tracking-widest text-slate-400">
-            Calculating Governed Executive Metrics…
+          <span className="w-7 h-7 border-2 border-[var(--color-accent)] border-t-transparent rounded-full animate-spin"></span>
+          <span className="text-sm text-[var(--color-text-secondary)]">
+            Calculating executive metrics…
           </span>
         </div>
       </div>
@@ -233,17 +233,17 @@ function ExecutiveDashboardContent() {
 
   if (error || !data) {
     return (
-      <div className="flex-1 p-8 bg-slate-900 text-slate-200">
-        <div className="bg-rose-950/40 border border-rose-800 rounded p-6 max-w-xl mx-auto">
-          <h2 className="text-sm font-bold text-rose-300 uppercase tracking-wider mb-2">
-            Failed to Load Executive Dashboard
+      <div className="flex-1 p-8 bg-[var(--color-bg)]">
+        <div className="bg-[var(--color-critical-bg)] border border-[var(--color-critical-border)] rounded-lg p-6 max-w-xl mx-auto">
+          <h2 className="text-sm font-semibold text-[var(--color-critical)] mb-2">
+            Failed to load the executive dashboard
           </h2>
-          <p className="text-xs font-mono text-rose-400 mb-4">{error || 'Unknown error occurred'}</p>
+          <p className="text-sm text-[var(--color-text-secondary)] mb-4">{error || 'Unknown error occurred'}</p>
           <button
             onClick={fetchDashboard}
-            className="px-4 py-1.5 bg-rose-700 hover:bg-rose-600 text-white rounded text-xs font-semibold"
+            className="px-4 py-1.5 bg-[var(--color-critical)] hover:opacity-90 text-white rounded-md text-sm font-medium cursor-pointer"
           >
-            Retry Connection
+            Retry
           </button>
         </div>
       </div>
@@ -251,45 +251,39 @@ function ExecutiveDashboardContent() {
   }
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-slate-900 text-slate-100 overflow-y-auto">
-      {/* 1. Operational Title & Disclosure Header */}
-      <div className="bg-slate-950 border-b border-slate-800 px-6 py-4 flex flex-wrap items-center justify-between gap-4 flex-shrink-0">
+    <div className="flex-1 flex flex-col h-full bg-[var(--color-bg)] overflow-y-auto">
+      {/* Page header */}
+      <div className="bg-[var(--color-surface)] border-b border-[var(--color-border)] px-6 py-5 flex flex-wrap items-start justify-between gap-4 flex-shrink-0">
         <div>
-          <div className="flex items-center gap-2.5">
-            <h1 className="text-base font-bold text-white tracking-wide">Executive Port Operations Dashboard</h1>
-            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-950/60 text-amber-300 border border-amber-800/80">
-              SYNTHETIC / HISTORICAL BENCHMARK
-            </span>
-            <span className="px-2 py-0.5 rounded text-[10px] font-mono text-slate-400 bg-slate-900 border border-slate-800">
-              Transnet Durban Container Terminal (DCT)
-            </span>
-          </div>
-          <p className="text-xs text-slate-400 mt-1">
-            Governed Time & Motion telemetry, multi-dimensional bottleneck scoring, segmented throughput, and 3-way golden reconciliation.
+          <h1 className="text-xl font-semibold text-[var(--color-text-primary)] tracking-tight">Executive Dashboard</h1>
+          <p className="text-sm text-[var(--color-text-secondary)] mt-1 max-w-2xl">
+            Time &amp; motion performance, delays, bottlenecks, and KPI health for Transnet Durban Container Terminal (DCT).
+          </p>
+          <p className="text-xs text-[var(--color-text-tertiary)] mt-1.5">
+            Dataset: Synthetic historical benchmark
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
           {recon && (
             <button
               onClick={() => setShowReconModal(true)}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded text-xs font-mono font-semibold border transition-colors ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border cursor-pointer transition-colors ${
                 recon.all_combinations_reconciled
-                  ? 'bg-emerald-950/40 border-emerald-700/80 text-emerald-400 hover:bg-emerald-900/60'
-                  : 'bg-rose-950/40 border-rose-700/80 text-rose-400 hover:bg-rose-900/60'
+                  ? 'bg-[var(--color-good-bg)] border-[var(--color-good-border)] text-[var(--color-good)] hover:opacity-90'
+                  : 'bg-[var(--color-critical-bg)] border-[var(--color-critical-border)] text-[var(--color-critical)] hover:opacity-90'
               }`}
             >
-              <span>{recon.all_combinations_reconciled ? '✓' : '⚠'}</span>
-              <span>3-Way Reconciled ({recon.total_combinations_tested} / {recon.total_combinations_tested})</span>
+              <span aria-hidden="true">{recon.all_combinations_reconciled ? '✓' : '⚠'}</span>
+              <span>Reconciliation: {recon.total_combinations_tested}/{recon.total_combinations_tested} matched</span>
             </button>
           )}
 
           <button
             onClick={fetchDashboard}
-            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded text-xs font-semibold border border-slate-700 flex items-center gap-1.5"
+            className="px-3 py-1.5 bg-[var(--color-surface)] hover:bg-[var(--color-surface-muted)] text-[var(--color-text-secondary)] rounded-md text-xs font-medium border border-[var(--color-border)] cursor-pointer"
           >
-            <span>↻</span>
-            <span>Refresh</span>
+            Refresh
           </button>
         </div>
       </div>
@@ -299,76 +293,75 @@ function ExecutiveDashboardContent() {
         {/* 2. Top Metric Cards (Calls & Cleanliness) */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           {/* Total Calls */}
-          <div className="bg-slate-950 border border-slate-800 rounded p-4 flex flex-col justify-between">
-            <div className="flex items-center justify-between text-slate-400 text-xs font-medium">
+          <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg p-4 flex flex-col justify-between">
+            <div className="flex items-center justify-between text-[var(--color-text-secondary)] text-xs font-medium">
               <span>Active Vessel Calls</span>
-              <span className="text-[10px] text-slate-500 font-mono">Non-Merged</span>
+              <span className="text-[11px] text-[var(--color-text-tertiary)]">Non-merged</span>
             </div>
             <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-2xl font-bold font-mono text-white">{data.summary.total_vessel_calls}</span>
-              <span className="text-xs text-slate-500">of 74 total calls</span>
+              <span className="text-3xl font-semibold text-[var(--color-text-primary)]">{data.summary.total_vessel_calls}</span>
             </div>
-            <div className="mt-3 pt-3 border-t border-slate-800/80 flex items-center justify-between text-[11px]">
-              <span className="text-slate-400">{data.summary.total_merged_calls} duplicates merged</span>
-              <Link href="/vessel-calls" className="text-emerald-400 hover:underline font-semibold">
+            <div className="mt-3 pt-3 border-t border-[var(--color-border)] flex items-center justify-between text-xs">
+              <span className="text-[var(--color-text-secondary)]">{data.summary.total_merged_calls} duplicates merged</span>
+              <Link href="/vessel-calls" className="text-[var(--color-accent)] hover:underline font-medium">
                 View list →
               </Link>
             </div>
           </div>
 
           {/* Clean Quality */}
-          <div className="bg-slate-950 border border-slate-800 rounded p-4 flex flex-col justify-between">
-            <div className="flex items-center justify-between text-slate-400 text-xs font-medium">
+          <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg p-4 flex flex-col justify-between">
+            <div className="flex items-center justify-between text-[var(--color-text-secondary)] text-xs font-medium">
               <span>Clean Calls</span>
-              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-950 text-emerald-400 border border-emerald-800">
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-[var(--color-good-bg)] text-[var(--color-good)] border border-[var(--color-good-border)]">
                 CLEAN
               </span>
             </div>
             <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-2xl font-bold font-mono text-emerald-400">{data.summary.clean_calls_count}</span>
-              <span className="text-xs text-slate-500 font-mono">({data.summary.cleanliness_pct}%)</span>
+              <span className="text-3xl font-semibold text-[var(--color-text-primary)]">{data.summary.clean_calls_count}</span>
+              <span className="text-xs text-[var(--color-text-tertiary)]">({data.summary.cleanliness_pct}%)</span>
             </div>
-            <div className="mt-3 pt-3 border-t border-slate-800/80 text-[11px] text-slate-400">
+            <div className="mt-3 pt-3 border-t border-[var(--color-border)] text-xs text-[var(--color-text-secondary)]">
               Zero open quality exceptions
             </div>
           </div>
 
           {/* Flagged Quality */}
-          <div className="bg-slate-950 border border-slate-800 rounded p-4 flex flex-col justify-between">
-            <div className="flex items-center justify-between text-slate-400 text-xs font-medium">
+          <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg p-4 flex flex-col justify-between">
+            <div className="flex items-center justify-between text-[var(--color-text-secondary)] text-xs font-medium">
               <span>Flagged Calls</span>
-              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-950 text-amber-400 border border-amber-800">
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-[var(--color-warning-bg)] text-[var(--color-warning)] border border-[var(--color-warning-border)]">
                 FLAGGED
               </span>
             </div>
             <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-2xl font-bold font-mono text-amber-400">{data.summary.flagged_calls_count}</span>
-              <span className="text-xs text-slate-500 font-mono">
+              <span className="text-3xl font-semibold text-[var(--color-text-primary)]">{data.summary.flagged_calls_count}</span>
+              <span className="text-xs text-[var(--color-text-tertiary)]">
                 ({roundPct(data.summary.flagged_calls_count, data.summary.total_vessel_calls)}%)
               </span>
             </div>
-            <div className="mt-3 pt-3 border-t border-slate-800/80 text-[11px] text-slate-400">
+            <div className="mt-3 pt-3 border-t border-[var(--color-border)] text-xs text-[var(--color-text-secondary)]">
               Non-critical review notices
             </div>
           </div>
 
           {/* Quarantined Quality */}
-          <div className="bg-slate-950 border border-slate-800 rounded p-4 flex flex-col justify-between">
-            <div className="flex items-center justify-between text-slate-400 text-xs font-medium">
+          <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg p-4 flex flex-col justify-between">
+            <div className="flex items-center justify-between text-[var(--color-text-secondary)] text-xs font-medium">
               <span>Quarantined Calls</span>
-              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-950 text-rose-400 border border-rose-800">
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-[var(--color-critical-bg)] text-[var(--color-critical)] border border-[var(--color-critical-border)]">
                 QUARANTINED
               </span>
             </div>
             <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-2xl font-bold font-mono text-rose-400">{data.summary.quarantined_calls_count}</span>
-              <span className="text-xs text-slate-500 font-mono">
+              <span className="text-3xl font-semibold text-[var(--color-text-primary)]">{data.summary.quarantined_calls_count}</span>
+              <span className="text-xs text-[var(--color-text-tertiary)]">
                 ({roundPct(data.summary.quarantined_calls_count, data.summary.total_vessel_calls)}%)
               </span>
             </div>
-            <div className="mt-3 pt-3 border-t border-slate-800/80 flex items-center justify-between text-[11px]">
-              <span className="text-rose-400 font-medium">Excluded from KPIs</span>
-              <Link href="/data-quality" className="text-rose-400 hover:underline font-semibold">
+            <div className="mt-3 pt-3 border-t border-[var(--color-border)] flex items-center justify-between text-xs">
+              <span className="text-[var(--color-critical)] font-medium">Excluded from KPIs</span>
+              <Link href="/data-quality" className="text-[var(--color-accent)] hover:underline font-medium">
                 Inspect issues →
               </Link>
             </div>
@@ -376,81 +369,75 @@ function ExecutiveDashboardContent() {
         </div>
 
         {/* 3. Strict Throughput Segmentation (Spec §12.1 - NEVER SUM TEU, MT, UNITS) */}
-        <div className="bg-slate-950 border border-slate-800 rounded p-5">
-          <div className="flex flex-wrap items-center justify-between border-b border-slate-800 pb-3 mb-4 gap-2">
+        <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg p-5">
+          <div className="flex flex-wrap items-center justify-between border-b border-[var(--color-border)] pb-3 mb-4 gap-2">
             <div>
-              <h2 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                <span>Operational Cargo Throughput</span>
-                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-sky-950 text-sky-400 border border-sky-800">
-                  Strictly Segmented Units
-                </span>
+              <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">
+                Operational Cargo Throughput
               </h2>
-              <p className="text-[11px] text-slate-400 mt-0.5">
-                Fixture records disparate maritime cargo classes. Unqualified aggregation across units is mathematically invalid.
+              <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
+                Reported per cargo class — TEU, metric tons and units are never summed into a single figure.
               </p>
             </div>
-            <span className="text-[10px] font-mono text-amber-400 bg-amber-950/40 border border-amber-800/60 px-2 py-1 rounded">
-              Rule: TEU + MT + Units sum is prohibited
-            </span>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {/* TEU */}
-            <div className="bg-slate-900 border border-slate-800 rounded p-4">
+            <div className="bg-[var(--color-surface-muted)] border border-[var(--color-border)] rounded-lg p-4">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-slate-300">Containerized Volume</span>
-                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold font-mono bg-sky-900/60 text-sky-300 border border-sky-700">
+                <span className="text-xs font-medium text-[var(--color-text-secondary)]">Containerized Volume</span>
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-[var(--color-accent-soft)] text-[var(--color-accent)] border border-[var(--color-accent-soft-border)]">
                   TEU
                 </span>
               </div>
-              <div className="mt-2 text-2xl font-bold font-mono text-white">
-                {fmtNum(data.throughput.teu, 0)} <span className="text-xs font-normal text-slate-400">TEU</span>
+              <div className="mt-2 text-2xl font-semibold text-[var(--color-text-primary)]">
+                {fmtNum(data.throughput.teu, 0)} <span className="text-xs font-normal text-[var(--color-text-tertiary)]">TEU</span>
               </div>
-              <p className="text-[11px] text-slate-400 mt-1">Fully cellular containership volume</p>
+              <p className="text-xs text-[var(--color-text-tertiary)] mt-1">Fully cellular containership volume</p>
             </div>
 
             {/* MT */}
-            <div className="bg-slate-900 border border-slate-800 rounded p-4">
+            <div className="bg-[var(--color-surface-muted)] border border-[var(--color-border)] rounded-lg p-4">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-slate-300">Bulk & Liquid Tonnage</span>
-                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold font-mono bg-emerald-900/60 text-emerald-300 border border-emerald-700">
+                <span className="text-xs font-medium text-[var(--color-text-secondary)]">Bulk & Liquid Tonnage</span>
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-[var(--color-good-bg)] text-[var(--color-good)] border border-[var(--color-good-border)]">
                   MT
                 </span>
               </div>
-              <div className="mt-2 text-2xl font-bold font-mono text-white">
-                {fmtNum(data.throughput.mt, 0)} <span className="text-xs font-normal text-slate-400">Metric Tons</span>
+              <div className="mt-2 text-2xl font-semibold text-[var(--color-text-primary)]">
+                {fmtNum(data.throughput.mt, 0)} <span className="text-xs font-normal text-[var(--color-text-tertiary)]">Metric Tons</span>
               </div>
-              <p className="text-[11px] text-slate-400 mt-1">Dry bulk, liquid tanker, and break bulk commodities</p>
+              <p className="text-xs text-[var(--color-text-tertiary)] mt-1">Dry bulk, liquid tanker, and break bulk commodities</p>
             </div>
 
             {/* Units */}
-            <div className="bg-slate-900 border border-slate-800 rounded p-4">
+            <div className="bg-[var(--color-surface-muted)] border border-[var(--color-border)] rounded-lg p-4">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-slate-300">Vehicles & Passengers</span>
-                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold font-mono bg-purple-900/60 text-purple-300 border border-purple-700">
+                <span className="text-xs font-medium text-[var(--color-text-secondary)]">Vehicles & Passengers</span>
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-[var(--color-inferred-bg)] text-[var(--color-inferred)] border border-[var(--color-inferred-border)]">
                   Units
                 </span>
               </div>
-              <div className="mt-2 text-2xl font-bold font-mono text-white">
-                {fmtNum(data.throughput.units, 0)} <span className="text-xs font-normal text-slate-400">Units</span>
+              <div className="mt-2 text-2xl font-semibold text-[var(--color-text-primary)]">
+                {fmtNum(data.throughput.units, 0)} <span className="text-xs font-normal text-[var(--color-text-tertiary)]">Units</span>
               </div>
-              <p className="text-[11px] text-slate-400 mt-1">Ro-Ro vehicle moves and passenger passenger counts</p>
+              <p className="text-xs text-[var(--color-text-tertiary)] mt-1">Ro-Ro vehicle moves and passenger counts</p>
             </div>
           </div>
         </div>
 
         {/* 4. Time & Motion Lead Times (8 Governed Target Durations) */}
-        <div className="bg-slate-950 border border-slate-800 rounded p-5">
-          <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+        <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg p-5">
+          <div className="flex items-center justify-between border-b border-[var(--color-border)] pb-3 mb-4">
             <div>
-              <h2 className="text-xs font-bold text-white uppercase tracking-wider">
-                Time & Motion Lead Times (8 Governed Stages)
+              <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">
+                Time &amp; Motion Lead Times
               </h2>
-              <p className="text-[11px] text-slate-400 mt-0.5">
-                Reconciled against fixture oracles within ±0.02h tolerance. Linear interpolation applied for P90 tail risk.
+              <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
+                8 governed stage durations, reconciled within ±0.02h tolerance
               </p>
             </div>
-            <Link href="/time-and-motion" className="text-xs text-emerald-400 hover:underline font-semibold">
+            <Link href="/time-and-motion" className="text-xs text-[var(--color-accent)] hover:underline font-medium">
               Open Lead-Time Explorer →
             </Link>
           </div>
@@ -470,30 +457,30 @@ function ExecutiveDashboardContent() {
               const isDelay = st.key.includes('Execution Delay')
 
               return (
-                <div key={st.id} className="bg-slate-900 border border-slate-800 rounded p-3 flex flex-col justify-between">
+                <div key={st.id} className="bg-[var(--color-surface-muted)] border border-[var(--color-border)] rounded-lg p-3 flex flex-col justify-between">
                   <div>
-                    <div className="text-[11px] font-semibold text-slate-300 truncate" title={st.label}>
+                    <div className="text-xs font-medium text-[var(--color-text-secondary)] truncate" title={st.label}>
                       {st.label}
                     </div>
                     <div className="mt-2 flex items-baseline justify-between">
-                      <span className="text-lg font-mono font-bold text-white">
+                      <span className="text-lg font-semibold text-[var(--color-text-primary)]">
                         {m?.mean_hours != null ? `${m.mean_hours.toFixed(2)}h` : '—'}
                       </span>
-                      <span className="text-[10px] text-slate-400 font-mono">
+                      <span className="text-[11px] text-[var(--color-text-tertiary)]">
                         {m?.observation_count || 0} calls
                       </span>
                     </div>
                   </div>
 
-                  <div className="mt-3 pt-2 border-t border-slate-800/80 text-[10px] font-mono text-slate-400 flex items-center justify-between">
+                  <div className="mt-3 pt-2 border-t border-[var(--color-border)] text-[11px] text-[var(--color-text-tertiary)] flex items-center justify-between">
                     <span>Med: {m?.median_hours != null ? `${m.median_hours.toFixed(1)}h` : '—'}</span>
                     <span>P90: {m?.p90_hours != null ? `${m.p90_hours.toFixed(1)}h` : '—'}</span>
                   </div>
 
                   {isDelay && m && (
-                    <div className="mt-1 text-[10px] font-mono flex items-center justify-between text-sky-400">
-                      <span>Early (&lt;0h): {m.early_service_count}</span>
-                      <span className="text-amber-400">Delayed: {m.delayed_count}</span>
+                    <div className="mt-1 text-[11px] flex items-center justify-between">
+                      <span className="text-[var(--color-accent)]">Early: {m.early_service_count}</span>
+                      <span className="text-[var(--color-warning)]">Delayed: {m.delayed_count}</span>
                     </div>
                   )}
                 </div>
@@ -505,21 +492,21 @@ function ExecutiveDashboardContent() {
         {/* 5. Delays, Bottlenecks & Critical Outliers */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Delays & Pareto */}
-          <div className="bg-slate-950 border border-slate-800 rounded p-5 flex flex-col">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+          <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg p-5 flex flex-col">
+            <div className="flex items-center justify-between border-b border-[var(--color-border)] pb-3 mb-4">
               <div>
-                <h2 className="text-xs font-bold text-white uppercase tracking-wider">
-                  Delays & Root Causes Pareto
+                <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">
+                  Delays &amp; Root Causes
                 </h2>
-                <span className="text-[11px] text-slate-400">
+                <span className="text-xs text-[var(--color-text-secondary)]">
                   {data.delays_summary.total_delays_count} delays · {data.delays_summary.total_delay_hours}h total impact
                 </span>
               </div>
-              <div className="flex gap-2">
-                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-800">
+              <div className="flex gap-1.5">
+                <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-[var(--color-good-bg)] text-[var(--color-good)] border border-[var(--color-good-border)]">
                   Confirmed: {data.delays_summary.confirmed_count}
                 </span>
-                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-950 text-purple-300 border border-purple-800">
+                <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-[var(--color-inferred-bg)] text-[var(--color-inferred)] border border-[var(--color-inferred-border)]">
                   Inferred: {data.delays_summary.inferred_count}
                 </span>
               </div>
@@ -529,14 +516,14 @@ function ExecutiveDashboardContent() {
               {data.delays_summary.top_categories.map((cat, i) => (
                 <div key={i} className="text-xs">
                   <div className="flex items-center justify-between mb-1">
-                    <span className="font-semibold text-slate-300">{cat.category}</span>
-                    <span className="font-mono text-slate-400">
+                    <span className="font-medium text-[var(--color-text-secondary)]">{cat.category}</span>
+                    <span className="text-[var(--color-text-tertiary)]">
                       {cat.duration_hours.toFixed(1)}h ({cat.percentage}%)
                     </span>
                   </div>
-                  <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                  <div className="w-full bg-[var(--color-surface-muted)] rounded-full h-1.5 overflow-hidden">
                     <div
-                      className="bg-emerald-500 h-full rounded-full"
+                      className="bg-[var(--color-accent)] h-full rounded-full"
                       style={{ width: `${Math.min(100, cat.percentage)}%` }}
                     ></div>
                   </div>
@@ -544,46 +531,43 @@ function ExecutiveDashboardContent() {
               ))}
             </div>
 
-            <div className="mt-4 pt-3 border-t border-slate-800 text-right">
-              <Link href="/delays" className="text-xs text-emerald-400 hover:underline font-semibold">
+            <div className="mt-4 pt-3 border-t border-[var(--color-border)] text-right">
+              <Link href="/delays" className="text-xs text-[var(--color-accent)] hover:underline font-medium">
                 Explore delay analysis & reason mapping →
               </Link>
             </div>
           </div>
 
           {/* Multi-Dimensional Bottlenecks */}
-          <div className="bg-slate-950 border border-slate-800 rounded p-5 flex flex-col">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+          <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg p-5 flex flex-col">
+            <div className="flex items-center justify-between border-b border-[var(--color-border)] pb-3 mb-4">
               <div>
-                <h2 className="text-xs font-bold text-white uppercase tracking-wider">
-                  Multi-Dimensional Operational Bottlenecks
+                <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">
+                  Operational Bottlenecks
                 </h2>
-                <span className="text-[11px] text-slate-400">
-                  Ranked by combined duration, variance, tail risk, and frequency
+                <span className="text-xs text-[var(--color-text-secondary)]">
+                  Ranked by duration, variance, tail risk, and frequency
                 </span>
               </div>
-              <span className="text-[10px] font-mono text-slate-500">
-                Non-duration-dominant
-              </span>
             </div>
 
-            <div className="space-y-3 flex-1">
+            <div className="space-y-2.5 flex-1">
               {data.delays_summary.top_bottlenecks.map((b, i) => (
-                <div key={i} className="bg-slate-900 border border-slate-800 rounded p-3 text-xs">
+                <div key={i} className="bg-[var(--color-surface-muted)] border border-[var(--color-border)] rounded-lg p-3 text-xs">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <span className="w-5 h-5 rounded-full bg-slate-800 text-slate-300 flex items-center justify-center font-bold text-[11px]">
+                      <span className="w-5 h-5 rounded-full bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-secondary)] flex items-center justify-center font-semibold text-[11px]">
                         {b.rank || i + 1}
                       </span>
-                      <span className="font-semibold text-white">{b.stage_or_resource}</span>
+                      <span className="font-medium text-[var(--color-text-primary)]">{b.stage_or_resource}</span>
                     </div>
-                    <span className="font-mono font-bold text-emerald-400">
+                    <span className="font-semibold text-[var(--color-accent)]">
                       Score: {b.overall_bottleneck_score}
                     </span>
                   </div>
 
                   {/* Component scores breakdown */}
-                  <div className="grid grid-cols-4 gap-2 mt-2 pt-2 border-t border-slate-800/80 text-[10px] font-mono text-slate-400">
+                  <div className="grid grid-cols-4 gap-2 mt-2 pt-2 border-t border-[var(--color-border)] text-[11px] text-[var(--color-text-tertiary)]">
                     <div>Dur: {b.duration_score?.toFixed(0)}</div>
                     <div>Var: {b.variability_score?.toFixed(0)}</div>
                     <div>Tail: {b.tail_risk_score?.toFixed(0)}</div>
@@ -596,18 +580,18 @@ function ExecutiveDashboardContent() {
         </div>
 
         {/* 6. Governed KPI Spotlight & NO_SOURCE_DATA Disclosure */}
-        <div className="bg-slate-950 border border-slate-800 rounded p-5">
-          <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+        <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg p-5">
+          <div className="flex items-center justify-between border-b border-[var(--color-border)] pb-3 mb-4">
             <div>
-              <h2 className="text-xs font-bold text-white uppercase tracking-wider">
-                Governed KPI Performance Spotlight
+              <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">
+                KPI Performance
               </h2>
-              <p className="text-[11px] text-slate-400 mt-0.5">
-                Target performance, variance, and Green/Amber/Red banding from the governed KPI registry (spec §11).
+              <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
+                Target, variance, and status from the governed KPI registry
               </p>
             </div>
-            <Link href="/kpis" className="text-xs text-emerald-400 hover:underline font-semibold">
-              View all 55 Governed KPIs →
+            <Link href="/kpis" className="text-xs text-[var(--color-accent)] hover:underline font-medium">
+              View all 55 KPIs →
             </Link>
           </div>
 
@@ -618,34 +602,34 @@ function ExecutiveDashboardContent() {
               const isRed = kpi.band === 'RED'
 
               return (
-                <div key={kpi.code} className="bg-slate-900 border border-slate-800 rounded p-3 flex flex-col justify-between">
+                <div key={kpi.code} className="bg-[var(--color-surface-muted)] border border-[var(--color-border)] rounded-lg p-3 flex flex-col justify-between">
                   <div>
                     <div className="flex items-center justify-between mb-1">
-                      <span className="font-mono text-[10px] font-bold text-slate-400">{kpi.code}</span>
+                      <span className="text-[11px] font-medium text-[var(--color-text-tertiary)]">{kpi.code}</span>
                       <span
-                        className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                        className={`px-1.5 py-0.5 rounded text-[10px] font-semibold border ${
                           isGreen
-                            ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
+                            ? 'bg-[var(--color-good-bg)] text-[var(--color-good)] border-[var(--color-good-border)]'
                             : isAmber
-                            ? 'bg-amber-950 text-amber-400 border border-amber-800'
+                            ? 'bg-[var(--color-warning-bg)] text-[var(--color-warning)] border-[var(--color-warning-border)]'
                             : isRed
-                            ? 'bg-rose-950 text-rose-400 border border-rose-800'
-                            : 'bg-slate-800 text-slate-400'
+                            ? 'bg-[var(--color-critical-bg)] text-[var(--color-critical)] border-[var(--color-critical-border)]'
+                            : 'bg-[var(--color-neutral-bg)] text-[var(--color-neutral)] border-[var(--color-neutral-border)]'
                         }`}
                       >
                         {kpi.band}
                       </span>
                     </div>
-                    <div className="text-xs font-semibold text-slate-200 line-clamp-1" title={kpi.name}>
+                    <div className="text-xs font-medium text-[var(--color-text-primary)] line-clamp-1" title={kpi.name}>
                       {kpi.name}
                     </div>
-                    <div className="mt-2 text-lg font-mono font-bold text-white">
+                    <div className="mt-2 text-lg font-semibold text-[var(--color-text-primary)]">
                       {kpi.value != null ? kpi.value.toFixed(2) : '—'}{' '}
-                      <span className="text-xs font-normal text-slate-400">{kpi.unit}</span>
+                      <span className="text-xs font-normal text-[var(--color-text-tertiary)]">{kpi.unit}</span>
                     </div>
                   </div>
 
-                  <div className="mt-2 pt-2 border-t border-slate-800 text-[10px] font-mono text-slate-400 flex items-center justify-between">
+                  <div className="mt-2 pt-2 border-t border-[var(--color-border)] text-[11px] text-[var(--color-text-tertiary)] flex items-center justify-between">
                     <span>Target: {kpi.target != null ? kpi.target : '—'}</span>
                     <span>Var: {kpi.variance != null ? `${kpi.variance > 0 ? '+' : ''}${kpi.variance.toFixed(1)}` : '—'}</span>
                   </div>
@@ -654,15 +638,16 @@ function ExecutiveDashboardContent() {
             })}
           </div>
 
-          {/* NO_SOURCE_DATA Disclosure Banner */}
-          <div className="mt-4 p-3 bg-slate-900/60 border border-slate-800 rounded flex items-center justify-between text-xs">
-            <div className="flex items-center gap-2">
-              <span className="text-amber-400">ℹ</span>
-              <span className="text-slate-300">
-                <strong>17 Governed KPIs</strong> classified as <span className="font-mono font-semibold text-slate-200">NO_SOURCE_DATA</span> (yard dwell, gate queues, crane telemetry). Zero values are never fabricated.
+          {/* NO_SOURCE_DATA Disclosure */}
+          <div className="mt-4 p-3 bg-[var(--color-surface-muted)] border border-[var(--color-border)] rounded-lg flex items-center justify-between text-xs gap-3 flex-wrap">
+            <div className="flex items-center gap-2 text-[var(--color-text-secondary)]">
+              <span className="text-[var(--color-warning)]" aria-hidden="true">ℹ</span>
+              <span>
+                <strong className="text-[var(--color-text-primary)]">17 KPIs</strong> classified as{' '}
+                <span className="font-medium text-[var(--color-text-primary)]">NO_SOURCE_DATA</span> (yard dwell, gate queues, crane telemetry) — values are never fabricated as zero.
               </span>
             </div>
-            <Link href="/kpis" className="text-emerald-400 hover:underline font-semibold flex-shrink-0">
+            <Link href="/kpis" className="text-[var(--color-accent)] hover:underline font-medium flex-shrink-0">
               Inspect required source systems →
             </Link>
           </div>
@@ -671,45 +656,45 @@ function ExecutiveDashboardContent() {
 
       {/* 3-Way Reconciliation Modal */}
       {showReconModal && recon && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-lg max-w-2xl w-full p-6 space-y-4 shadow-xl">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg max-w-2xl w-full p-6 space-y-4 shadow-xl">
+            <div className="flex items-center justify-between border-b border-[var(--color-border)] pb-3">
               <div>
-                <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-                  3-Way Reconciliation Verification (Spec §20.13, §21A.5.10)
+                <h3 className="text-sm font-semibold text-[var(--color-text-primary)]">
+                  3-Way Reconciliation Verification
                 </h3>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  Proves that Dashboard totals, Analytics API, and direct database queries agree unconditionally.
+                <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
+                  Confirms that Dashboard totals, Analytics API, and direct database queries agree.
                 </p>
               </div>
               <button
                 onClick={() => setShowReconModal(false)}
-                className="text-slate-400 hover:text-white font-bold text-sm px-2"
+                className="text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] font-semibold text-sm px-2 cursor-pointer"
               >
                 ✕
               </button>
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs font-mono border-collapse">
+              <table className="w-full text-left text-xs border-collapse">
                 <thead>
-                  <tr className="border-b border-slate-800 text-slate-400">
-                    <th className="py-2 px-3">Filter Combination</th>
-                    <th className="py-2 px-3 text-right">Dashboard</th>
-                    <th className="py-2 px-3 text-right">Analytics API</th>
-                    <th className="py-2 px-3 text-right">Direct SQL</th>
-                    <th className="py-2 px-3 text-center">Status</th>
+                  <tr className="border-b border-[var(--color-border)] text-[var(--color-text-tertiary)]">
+                    <th className="py-2 px-3 font-medium">Filter Combination</th>
+                    <th className="py-2 px-3 text-right font-medium">Dashboard</th>
+                    <th className="py-2 px-3 text-right font-medium">Analytics API</th>
+                    <th className="py-2 px-3 text-right font-medium">Direct SQL</th>
+                    <th className="py-2 px-3 text-center font-medium">Status</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800/80">
+                <tbody className="divide-y divide-[var(--color-border)]">
                   {recon.results.map((r, i) => (
-                    <tr key={i} className="hover:bg-slate-800/40">
-                      <td className="py-2 px-3 font-semibold text-slate-200">{r.combination_name}</td>
-                      <td className="py-2 px-3 text-right text-white">{r.dashboard_total}</td>
-                      <td className="py-2 px-3 text-right text-white">{r.analytics_api_total}</td>
-                      <td className="py-2 px-3 text-right text-white">{r.database_direct_total}</td>
+                    <tr key={i} className="hover:bg-[var(--color-surface-muted)]">
+                      <td className="py-2 px-3 font-medium text-[var(--color-text-primary)]">{r.combination_name}</td>
+                      <td className="py-2 px-3 text-right text-[var(--color-text-primary)]">{r.dashboard_total}</td>
+                      <td className="py-2 px-3 text-right text-[var(--color-text-primary)]">{r.analytics_api_total}</td>
+                      <td className="py-2 px-3 text-right text-[var(--color-text-primary)]">{r.database_direct_total}</td>
                       <td className="py-2 px-3 text-center">
-                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-950 text-emerald-400 border border-emerald-800">
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-[var(--color-good-bg)] text-[var(--color-good)] border border-[var(--color-good-border)]">
                           MATCH
                         </span>
                       </td>
@@ -719,12 +704,12 @@ function ExecutiveDashboardContent() {
               </table>
             </div>
 
-            <div className="pt-3 border-t border-slate-800 flex justify-end">
+            <div className="pt-3 border-t border-[var(--color-border)] flex justify-end">
               <button
                 onClick={() => setShowReconModal(false)}
-                className="px-4 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded text-xs font-semibold"
+                className="px-4 py-1.5 bg-[var(--color-surface-muted)] hover:bg-[var(--color-border)] text-[var(--color-text-primary)] rounded-md text-xs font-medium cursor-pointer"
               >
-                Close Verification
+                Close
               </button>
             </div>
           </div>

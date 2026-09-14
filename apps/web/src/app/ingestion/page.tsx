@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { PageHeader, Card, SectionHeader, StatusBadge } from "@/components/ui";
 
 export default function IngestionPage() {
   const { can, roles } = useAuth();
@@ -9,25 +10,29 @@ export default function IngestionPage() {
   const [status, setStatus] = useState<string>("");
 
   if (!can("create:vessel_call")) {
-    return <div className="p-8 text-red-500">Access Denied: Missing create:vessel_call permission</div>;
+    return (
+      <div className="flex-1 flex items-center justify-center p-8">
+        <StatusBadge label="Access Denied — missing create:vessel_call permission" tone="critical" />
+      </div>
+    );
   }
 
   const handleUpload = async () => {
     if (!file) return;
     setStatus("Uploading...");
-    
+
     const formData = new FormData();
     formData.append("file", file);
-    
+
     try {
       const res = await fetch("/api/v1/ingestion/upload", {
         method: "POST",
         body: formData,
         // credentials: "omit", // in real, we pass token
       });
-      
+
       if (!res.ok) throw new Error("Upload failed");
-      
+
       const data = await res.json();
       setStatus(`Success! Batch ID: ${data.batch_id}`);
     } catch (error) {
@@ -50,45 +55,53 @@ export default function IngestionPage() {
   };
 
   return (
-    <div className="p-8 max-w-4xl mx-auto space-y-8">
-      <h1 className="text-2xl font-bold">Data Ingestion</h1>
-      
-      <div className="border p-6 rounded-lg space-y-4">
-        <h2 className="text-xl font-semibold">Upload Data File</h2>
-        <input 
-          type="file" 
-          onChange={(e) => setFile(e.target.files?.[0] || null)}
-          className="block w-full border p-2"
-        />
-        <button 
-          onClick={handleUpload}
-          disabled={!file}
-          className="bg-blue-600 text-white px-4 py-2 rounded disabled:opacity-50"
-        >
-          Upload & Process
-        </button>
+    <div className="flex-1 flex flex-col h-full bg-[var(--color-bg)] overflow-y-auto">
+      <PageHeader
+        title="Data Ingestion"
+        description="Upload source data files or load the governed synthetic benchmark dataset through the standard ingestion pipeline."
+      />
+
+      <div className="p-6 max-w-3xl w-full mx-auto space-y-6">
+        <Card>
+          <SectionHeader title="Upload Data File" description="Accepted formats follow the standard ingestion contract." />
+          <div className="space-y-4">
+            <input
+              type="file"
+              onChange={(e) => setFile(e.target.files?.[0] || null)}
+              className="block w-full text-sm text-[var(--color-text-secondary)] border border-[var(--color-border)] rounded-md p-2 file:mr-3 file:px-3 file:py-1.5 file:rounded-md file:border-0 file:text-xs file:font-medium file:bg-[var(--color-accent-soft)] file:text-[var(--color-accent)] cursor-pointer"
+            />
+            <button
+              onClick={handleUpload}
+              disabled={!file}
+              className="px-4 py-1.5 bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-white rounded-md text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+            >
+              Upload &amp; Process
+            </button>
+          </div>
+        </Card>
+
+        {(roles.includes("Platform Administrator") || roles.includes("Developer")) && (
+          <Card className="border-[var(--color-warning-border)] bg-[var(--color-warning-bg)]">
+            <SectionHeader
+              title="Synthetic Test Dataset"
+              description="Resets the synthetic tenant and loads the fixture data through the standard ingestion pipeline."
+            />
+            <button
+              onClick={loadSynthetic}
+              className="px-4 py-1.5 bg-[var(--color-warning)] hover:opacity-90 text-white rounded-md text-sm font-medium cursor-pointer"
+            >
+              Load Synthetic Dataset
+            </button>
+          </Card>
+        )}
+
+        {status && (
+          <Card className="text-sm text-[var(--color-text-secondary)]">
+            <span className="font-medium text-[var(--color-text-primary)]">Status: </span>
+            {status}
+          </Card>
+        )}
       </div>
-
-      {roles.includes("Platform Administrator") || roles.includes("Developer") ? (
-        <div className="border p-6 rounded-lg space-y-4 bg-orange-50 border-orange-200">
-          <h2 className="text-xl font-semibold text-orange-800">Synthetic Test Dataset</h2>
-          <p className="text-sm text-orange-700">
-            This action will reset the synthetic tenant and load the fixture data through the standard ingestion pipeline.
-          </p>
-          <button 
-            onClick={loadSynthetic}
-            className="bg-orange-600 text-white px-4 py-2 rounded"
-          >
-            Load Synthetic Dataset
-          </button>
-        </div>
-      ) : null}
-
-      {status && (
-        <div className="p-4 bg-gray-100 rounded">
-          <strong>Status: </strong> {status}
-        </div>
-      )}
     </div>
   );
 }

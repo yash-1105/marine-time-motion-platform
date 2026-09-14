@@ -4,6 +4,17 @@ import React, { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { useAuth } from '../../lib/auth-context'
+import {
+  PageHeader,
+  SectionHeader,
+  Card,
+  KpiCard,
+  StatusBadge,
+  EmptyState,
+  LoadingState,
+  ErrorState,
+  FilterField,
+} from '@/components/ui'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
@@ -353,44 +364,39 @@ function TimeAndMotionContent() {
   }
 
   return (
-    <div className="flex flex-col h-full bg-slate-50 overflow-hidden">
+    <div className="flex flex-col h-full bg-[var(--color-bg)] overflow-hidden">
       {/* ── Top Header ──────────────────────────────────────────────────────── */}
-      <header className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between flex-shrink-0">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-lg font-bold text-slate-900">Time and Motion Analytics</h1>
-            <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-800">
-              Polars Engine · Linear Interpolation
-            </span>
+      <PageHeader
+        title="Time and Motion Analytics"
+        description="Governed lead-time catalogue, stage variability, tail risk, early service delivery, and golden reconciliation."
+        meta={
+          <StatusBadge label="Polars Engine · Linear Interpolation" tone="good" showGlyph={false} />
+        }
+        actions={
+          <div className="flex items-center gap-3">
+            {computeMsg && <span className="text-xs text-[var(--color-good)] font-medium">{computeMsg}</span>}
+            {can('recalculate') && (
+              <button
+                onClick={handleCompute}
+                disabled={recomputing}
+                className="px-3.5 py-1.5 bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-white rounded-md text-xs font-semibold transition-colors disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
+              >
+                {recomputing ? (
+                  <>
+                    <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                    Computing…
+                  </>
+                ) : (
+                  <>↺ Recalculate Metrics</>
+                )}
+              </button>
+            )}
           </div>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Governed lead-time catalogue, stage variability, tail risk, early service delivery, and golden reconciliation.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-3">
-          {computeMsg && <span className="text-xs text-emerald-600 font-medium">{computeMsg}</span>}
-          {can('recalculate') && (
-            <button
-              onClick={handleCompute}
-              disabled={recomputing}
-              className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs font-semibold transition-colors disabled:opacity-50 flex items-center gap-1.5 shadow-xs"
-            >
-              {recomputing ? (
-                <>
-                  <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                  Computing…
-                </>
-              ) : (
-                <>↺ Recalculate Metrics</>
-              )}
-            </button>
-          )}
-        </div>
-      </header>
+        }
+      />
 
       {/* ── Tab Navigation ─────────────────────────────────────────────────── */}
-      <div className="bg-white border-b border-slate-200 px-6 flex gap-2 flex-shrink-0">
+      <div className="bg-[var(--color-surface)] border-b border-[var(--color-border)] px-6 flex gap-2 flex-shrink-0">
         {[
           { id: 'catalogue', label: 'Governed Catalogue & Stats' },
           { id: 'reconciliation', label: 'Golden Reconciliation Scorecard' },
@@ -400,10 +406,10 @@ function TimeAndMotionContent() {
           <button
             key={t.id}
             onClick={() => setActiveTab(t.id as 'catalogue' | 'reconciliation' | 'explorer' | 'custom')}
-            className={`py-3 px-3 text-xs font-medium border-b-2 transition-colors ${
+            className={`py-3 px-3 text-xs font-medium border-b-2 transition-colors cursor-pointer ${
               activeTab === t.id
-                ? 'border-emerald-600 text-emerald-700 font-semibold'
-                : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+                ? 'border-[var(--color-accent)] text-[var(--color-accent)] font-semibold'
+                : 'border-transparent text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:border-[var(--color-border-strong)]'
             }`}
           >
             {t.label}
@@ -416,192 +422,82 @@ function TimeAndMotionContent() {
         {/* 1. Governed Catalogue & Stats */}
         {activeTab === 'catalogue' && (
           <div className="space-y-4">
-            <div className="bg-white rounded-lg border border-slate-200 shadow-xs overflow-hidden">
-              <div className="px-4 py-3 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
-                <h2 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                  Standard Metric Catalogue ({definitions.length})
-                </h2>
-                <span className="text-[11px] text-slate-500">
-                  Percentiles computed via linear interpolation · Quarantined records excluded by default
-                </span>
-              </div>
-
+            <SectionHeader
+              title={`Standard Metric Catalogue (${definitions.length})`}
+              description="Percentiles computed via linear interpolation · Quarantined records excluded by default"
+            />
+            <Card padded={false} className="overflow-hidden">
               {loadingDefs ? (
-                <div className="p-8 text-center text-xs text-slate-400">Loading catalogue…</div>
+                <LoadingState label="Loading catalogue…" />
+              ) : definitions.length === 0 ? (
+                <EmptyState title="No metric definitions found" />
               ) : (
-                <table className="w-full text-xs text-left border-collapse">
-                  <thead>
-                    <tr className="border-b border-slate-200 bg-slate-50/50 text-slate-500 font-semibold">
-                      <th className="py-2.5 px-3">Metric Name</th>
-                      <th className="py-2.5 px-3">Formula / Events</th>
-                      <th className="py-2.5 px-3">Status</th>
-                      <th className="py-2.5 px-3 text-right">Obs Count</th>
-                      <th className="py-2.5 px-3 text-right">Mean</th>
-                      <th className="py-2.5 px-3 text-right">Median</th>
-                      <th className="py-2.5 px-3 text-right">P90</th>
-                      <th className="py-2.5 px-3 text-right">CV (σ/μ)</th>
-                      <th className="py-2.5 px-3 text-right">Tail Risk (P90/Med)</th>
-                      <th className="py-2.5 px-3 text-center">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {definitions.map((d) => {
-                      const st = statsMap[d.id]
-                      const isNoSource = d.availability_status === 'NO_SOURCE_DATA'
-                      return (
-                        <tr key={d.id} className="hover:bg-slate-50/80 transition-colors">
-                          <td className="py-2.5 px-3 font-semibold text-slate-800">
-                            <div>{d.name}</div>
-                            {d.description && <div className="text-[10px] text-slate-400 font-normal">{d.description}</div>}
-                          </td>
-                          <td className="py-2.5 px-3 font-mono text-[11px] text-slate-600">
-                            {d.is_execution_delay
-                              ? `${d.execution_delay_movement} Pilotage (Served − Sched)`
-                              : `${d.start_event} → ${d.end_event}`}
-                          </td>
-                          <td className="py-2.5 px-3">
-                            <span
-                              className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
-                                isNoSource
-                                  ? 'bg-slate-100 text-slate-600 border border-slate-200'
-                                  : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                              }`}
-                            >
-                              {d.availability_status}
-                            </span>
-                          </td>
-                          <td className="py-2.5 px-3 text-right font-medium">
-                            {isNoSource ? '—' : st?.observation_count ?? '—'}
-                          </td>
-                          <td className="py-2.5 px-3 text-right font-mono">
-                            {isNoSource ? '—' : st?.mean_hours != null ? `${st.mean_hours.toFixed(2)}h` : '—'}
-                          </td>
-                          <td className="py-2.5 px-3 text-right font-mono">
-                            {isNoSource ? '—' : st?.median_hours != null ? `${st.median_hours.toFixed(2)}h` : '—'}
-                          </td>
-                          <td className="py-2.5 px-3 text-right font-mono">
-                            {isNoSource ? '—' : st?.p90_hours != null ? `${st.p90_hours.toFixed(2)}h` : '—'}
-                          </td>
-                          <td className="py-2.5 px-3 text-right font-mono">
-                            {isNoSource ? '—' : st?.cv != null ? st.cv.toFixed(2) : '—'}
-                          </td>
-                          <td className="py-2.5 px-3 text-right font-mono">
-                            {isNoSource ? '—' : st?.tail_risk_ratio != null ? `${st.tail_risk_ratio.toFixed(2)}x` : '—'}
-                          </td>
-                          <td className="py-2.5 px-3 text-center">
-                            {!isNoSource && (
-                              <button
-                                onClick={() => {
-                                  setSelectedDefId(d.id)
-                                  setActiveTab('explorer')
-                                }}
-                                className="text-emerald-600 hover:text-emerald-800 font-semibold text-[11px] underline"
-                              >
-                                Drill down
-                              </button>
-                            )}
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* 2. Golden Reconciliation Scorecard */}
-        {activeTab === 'reconciliation' && (
-          <div className="space-y-4">
-            <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-xs">
-              <div className="flex items-center justify-between mb-3">
-                <div>
-                  <h2 className="text-xs font-bold text-slate-800 uppercase tracking-wide">
-                    ExpectedOutputs Oracle Reconciliation (±0.02h Tolerance)
-                  </h2>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Validates independently calculated vessel metrics against the governed fixture oracle (spec §21A.2, AGENTS.md §6).
-                  </p>
-                </div>
-                {reconciliation && (
-                  <div className="flex gap-2">
-                    <span className="px-2 py-1 rounded text-xs font-bold bg-sky-100 text-sky-800">
-                      Early Arrival Delays: {reconciliation.early_service.negative_arrival_delays}
-                    </span>
-                    <span className="px-2 py-1 rounded text-xs font-bold bg-sky-100 text-sky-800">
-                      Early Sailing Delays: {reconciliation.early_service.negative_sailing_delays}
-                    </span>
-                  </div>
-                )}
-              </div>
-
-              {loadingRecon ? (
-                <div className="p-8 text-center text-xs text-slate-400">Comparing with oracle…</div>
-              ) : !reconciliation ? (
-                <div className="p-8 text-center text-xs text-slate-400">No reconciliation data available.</div>
-              ) : (
-                <div className="space-y-4">
-                  <div className="grid grid-cols-4 gap-3">
-                    <div className="bg-slate-50 border border-slate-200 rounded p-3 text-center">
-                      <div className="text-[10px] uppercase font-bold text-slate-500">Target Metrics</div>
-                      <div className="text-lg font-bold text-slate-800">{reconciliation.summary.total_targets}</div>
-                    </div>
-                    <div className="bg-emerald-50 border border-emerald-200 rounded p-3 text-center">
-                      <div className="text-[10px] uppercase font-bold text-emerald-700">Fully Reconciled</div>
-                      <div className="text-lg font-bold text-emerald-800">
-                        {reconciliation.summary.fully_reconciled_targets} of {reconciliation.summary.total_targets}
-                      </div>
-                    </div>
-                    <div className="bg-slate-50 border border-slate-200 rounded p-3 text-center">
-                      <div className="text-[10px] uppercase font-bold text-slate-500">Total Comparisons</div>
-                      <div className="text-lg font-bold text-slate-800">{reconciliation.summary.total_comparisons}</div>
-                    </div>
-                    <div className="bg-emerald-50 border border-emerald-200 rounded p-3 text-center">
-                      <div className="text-[10px] uppercase font-bold text-emerald-700">Passed Comparisons</div>
-                      <div className="text-lg font-bold text-emerald-800">
-                        {reconciliation.summary.passed_comparisons} / {reconciliation.summary.total_comparisons}
-                      </div>
-                    </div>
-                  </div>
-
-                  <table className="w-full text-xs text-left border-collapse border border-slate-200 rounded">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs text-left border-collapse">
                     <thead>
-                      <tr className="border-b border-slate-200 bg-slate-50 text-slate-600 font-semibold">
-                        <th className="py-2 px-3">Reconciliation Target</th>
-                        <th className="py-2 px-3">Expected Column</th>
-                        <th className="py-2 px-3 text-right">Eligible Calls</th>
-                        <th className="py-2 px-3 text-right">Passed (±0.02h)</th>
-                        <th className="py-2 px-3 text-right">Failed / Excluded</th>
-                        <th className="py-2 px-3 text-center">Status</th>
+                      <tr className="border-b border-[var(--color-border)] bg-[var(--color-surface-muted)] text-[var(--color-text-secondary)] font-semibold">
+                        <th className="py-2.5 px-3">Metric Name</th>
+                        <th className="py-2.5 px-3">Formula / Events</th>
+                        <th className="py-2.5 px-3">Status</th>
+                        <th className="py-2.5 px-3 text-right">Obs Count</th>
+                        <th className="py-2.5 px-3 text-right">Mean</th>
+                        <th className="py-2.5 px-3 text-right">Median</th>
+                        <th className="py-2.5 px-3 text-right">P90</th>
+                        <th className="py-2.5 px-3 text-right">CV (σ/μ)</th>
+                        <th className="py-2.5 px-3 text-right">Tail Risk (P90/Med)</th>
+                        <th className="py-2.5 px-3 text-center">Action</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {Object.entries(reconciliation.metrics_reconciled).map(([name, m]) => {
-                        const isPass = m.failed === 0 && m.passed > 0
+                    <tbody className="divide-y divide-[var(--color-border)]">
+                      {definitions.map((d) => {
+                        const st = statsMap[d.id]
+                        const isNoSource = d.availability_status === 'NO_SOURCE_DATA'
                         return (
-                          <tr key={name} className="hover:bg-slate-50">
-                            <td className="py-2 px-3 font-semibold text-slate-800">{name}</td>
-                            <td className="py-2 px-3 font-mono text-[11px] text-slate-500">{m.expected_metric}</td>
-                            <td className="py-2 px-3 text-right">{m.total_eligible_calls}</td>
-                            <td className="py-2 px-3 text-right text-emerald-700 font-semibold">{m.passed}</td>
-                            <td className="py-2 px-3 text-right text-slate-600">
-                              {m.failed > 0 ? (
-                                <span className="text-amber-700 font-semibold">
-                                  {m.failed} ({m.unavailable_in_actual} unavailable)
-                                </span>
-                              ) : (
-                                '0'
+                          <tr key={d.id} className="hover:bg-[var(--color-surface-muted)] transition-colors">
+                            <td className="py-2.5 px-3 font-semibold text-[var(--color-text-primary)]">
+                              <div>{d.name}</div>
+                              {d.description && (
+                                <div className="text-[10px] text-[var(--color-text-tertiary)] font-normal">{d.description}</div>
                               )}
                             </td>
-                            <td className="py-2 px-3 text-center">
-                              <span
-                                className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                                  isPass ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
-                                }`}
-                              >
-                                {isPass ? '100% RECONCILED' : `${m.reconciled_fraction}`}
-                              </span>
+                            <td className="py-2.5 px-3 font-mono text-[11px] text-[var(--color-text-secondary)]">
+                              {d.is_execution_delay
+                                ? `${d.execution_delay_movement} Pilotage (Served − Sched)`
+                                : `${d.start_event} → ${d.end_event}`}
+                            </td>
+                            <td className="py-2.5 px-3">
+                              <StatusBadge status={d.availability_status} tone={isNoSource ? 'neutral' : 'good'} />
+                            </td>
+                            <td className="py-2.5 px-3 text-right font-medium text-[var(--color-text-primary)]">
+                              {isNoSource ? '—' : st?.observation_count ?? '—'}
+                            </td>
+                            <td className="py-2.5 px-3 text-right font-mono text-[var(--color-text-primary)]">
+                              {isNoSource ? '—' : st?.mean_hours != null ? `${st.mean_hours.toFixed(2)}h` : '—'}
+                            </td>
+                            <td className="py-2.5 px-3 text-right font-mono text-[var(--color-text-primary)]">
+                              {isNoSource ? '—' : st?.median_hours != null ? `${st.median_hours.toFixed(2)}h` : '—'}
+                            </td>
+                            <td className="py-2.5 px-3 text-right font-mono text-[var(--color-text-primary)]">
+                              {isNoSource ? '—' : st?.p90_hours != null ? `${st.p90_hours.toFixed(2)}h` : '—'}
+                            </td>
+                            <td className="py-2.5 px-3 text-right font-mono text-[var(--color-text-primary)]">
+                              {isNoSource ? '—' : st?.cv != null ? st.cv.toFixed(2) : '—'}
+                            </td>
+                            <td className="py-2.5 px-3 text-right font-mono text-[var(--color-text-primary)]">
+                              {isNoSource ? '—' : st?.tail_risk_ratio != null ? `${st.tail_risk_ratio.toFixed(2)}x` : '—'}
+                            </td>
+                            <td className="py-2.5 px-3 text-center">
+                              {!isNoSource && (
+                                <button
+                                  onClick={() => {
+                                    setSelectedDefId(d.id)
+                                    setActiveTab('explorer')
+                                  }}
+                                  className="text-[var(--color-accent)] hover:text-[var(--color-accent-hover)] font-semibold text-[11px] underline cursor-pointer"
+                                >
+                                  Drill down
+                                </button>
+                              )}
                             </td>
                           </tr>
                         )
@@ -610,25 +506,116 @@ function TimeAndMotionContent() {
                   </table>
                 </div>
               )}
-            </div>
+            </Card>
+          </div>
+        )}
+
+        {/* 2. Golden Reconciliation Scorecard */}
+        {activeTab === 'reconciliation' && (
+          <div className="space-y-4">
+            <SectionHeader
+              title="ExpectedOutputs Oracle Reconciliation (±0.02h Tolerance)"
+              description="Validates independently calculated vessel metrics against the governed fixture oracle (spec §21A.2, AGENTS.md §6)."
+              action={
+                reconciliation && (
+                  <div className="flex gap-2">
+                    <StatusBadge
+                      tone="inferred"
+                      showGlyph={false}
+                      label={`Early Arrival Delays: ${reconciliation.early_service.negative_arrival_delays}`}
+                    />
+                    <StatusBadge
+                      tone="inferred"
+                      showGlyph={false}
+                      label={`Early Sailing Delays: ${reconciliation.early_service.negative_sailing_delays}`}
+                    />
+                  </div>
+                )
+              }
+            />
+
+            <Card>
+              {loadingRecon ? (
+                <LoadingState label="Comparing with oracle…" />
+              ) : !reconciliation ? (
+                <EmptyState title="No reconciliation data available" />
+              ) : (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <KpiCard label="Target Metrics" value={reconciliation.summary.total_targets} />
+                    <KpiCard
+                      label="Fully Reconciled"
+                      value={`${reconciliation.summary.fully_reconciled_targets} / ${reconciliation.summary.total_targets}`}
+                      tone="good"
+                    />
+                    <KpiCard label="Total Comparisons" value={reconciliation.summary.total_comparisons} />
+                    <KpiCard
+                      label="Passed Comparisons"
+                      value={`${reconciliation.summary.passed_comparisons} / ${reconciliation.summary.total_comparisons}`}
+                      tone="good"
+                    />
+                  </div>
+
+                  <div className="overflow-x-auto border border-[var(--color-border)] rounded-lg">
+                    <table className="w-full text-xs text-left border-collapse">
+                      <thead>
+                        <tr className="border-b border-[var(--color-border)] bg-[var(--color-surface-muted)] text-[var(--color-text-secondary)] font-semibold">
+                          <th className="py-2 px-3">Reconciliation Target</th>
+                          <th className="py-2 px-3">Expected Column</th>
+                          <th className="py-2 px-3 text-right">Eligible Calls</th>
+                          <th className="py-2 px-3 text-right">Passed (±0.02h)</th>
+                          <th className="py-2 px-3 text-right">Failed / Excluded</th>
+                          <th className="py-2 px-3 text-center">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[var(--color-border)]">
+                        {Object.entries(reconciliation.metrics_reconciled).map(([name, m]) => {
+                          const isPass = m.failed === 0 && m.passed > 0
+                          return (
+                            <tr key={name} className="hover:bg-[var(--color-surface-muted)]">
+                              <td className="py-2 px-3 font-semibold text-[var(--color-text-primary)]">{name}</td>
+                              <td className="py-2 px-3 font-mono text-[11px] text-[var(--color-text-secondary)]">{m.expected_metric}</td>
+                              <td className="py-2 px-3 text-right text-[var(--color-text-primary)]">{m.total_eligible_calls}</td>
+                              <td className="py-2 px-3 text-right text-[var(--color-good)] font-semibold">{m.passed}</td>
+                              <td className="py-2 px-3 text-right text-[var(--color-text-secondary)]">
+                                {m.failed > 0 ? (
+                                  <span className="text-[var(--color-warning)] font-semibold">
+                                    {m.failed} ({m.unavailable_in_actual} unavailable)
+                                  </span>
+                                ) : (
+                                  '0'
+                                )}
+                              </td>
+                              <td className="py-2 px-3 text-center">
+                                <StatusBadge
+                                  tone={isPass ? 'good' : 'warning'}
+                                  label={isPass ? '100% Reconciled' : m.reconciled_fraction}
+                                />
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </Card>
           </div>
         )}
 
         {/* 3. Per-Call Explorer & Lineage */}
         {activeTab === 'explorer' && (
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             {/* Results Table */}
-            <div className="col-span-2 bg-white rounded-lg border border-slate-200 shadow-xs flex flex-col">
-              <div className="p-3 border-b border-slate-200 flex items-center justify-between bg-slate-50">
-                <div className="flex items-center gap-3">
-                  <label htmlFor="metric-select" className="text-xs font-semibold text-slate-700">
-                    Metric:
-                  </label>
+            <Card padded={false} className="lg:col-span-2 flex flex-col overflow-hidden">
+              <div className="p-3 border-b border-[var(--color-border)] flex items-center justify-between bg-[var(--color-surface-muted)]">
+                <FilterField label="Metric" className="w-64">
                   <select
                     id="metric-select"
                     value={selectedDefId}
                     onChange={(e) => setSelectedDefId(e.target.value)}
-                    className="text-xs border border-slate-300 rounded px-2.5 py-1 bg-white focus:ring-1 focus:ring-emerald-500"
+                    className="w-full text-xs border border-[var(--color-border)] rounded-md px-2.5 py-1 bg-[var(--color-surface)] focus:ring-2 focus:ring-[var(--color-accent)] focus:outline-none cursor-pointer"
                   >
                     {definitions
                       .filter((d) => d.availability_status === 'COMPUTABLE')
@@ -638,19 +625,19 @@ function TimeAndMotionContent() {
                         </option>
                       ))}
                   </select>
-                </div>
-                <span className="text-xs text-slate-500">Total: {resultsTotal} calls</span>
+                </FilterField>
+                <span className="text-xs text-[var(--color-text-secondary)]">Total: {resultsTotal} calls</span>
               </div>
 
               <div className="flex-1 overflow-y-auto max-h-[600px]">
                 {loadingResults ? (
-                  <div className="p-8 text-center text-xs text-slate-400">Loading results…</div>
+                  <LoadingState label="Loading results…" />
                 ) : results.length === 0 ? (
-                  <div className="p-8 text-center text-xs text-slate-400">No calculation results found.</div>
+                  <EmptyState title="No calculation results found" />
                 ) : (
                   <table className="w-full text-xs text-left border-collapse">
                     <thead>
-                      <tr className="border-b border-slate-200 bg-slate-50/50 text-slate-500 sticky top-0 bg-slate-50">
+                      <tr className="border-b border-[var(--color-border)] bg-[var(--color-surface-muted)] text-[var(--color-text-secondary)] sticky top-0">
                         <th className="py-2 px-3">VCN</th>
                         <th className="py-2 px-3">Vessel Name</th>
                         <th className="py-2 px-3 text-right">Duration</th>
@@ -658,38 +645,34 @@ function TimeAndMotionContent() {
                         <th className="py-2 px-3">Start / End (Local)</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-100">
+                    <tbody className="divide-y divide-[var(--color-border)]">
                       {results.map((r) => {
                         const isSelected = selectedResult?.id === r.id
+                        const isEarly = r.status === 'AVAILABLE' && r.duration_hours != null && r.duration_hours < 0
                         return (
                           <tr
                             key={r.id}
                             onClick={() => setSelectedResult(r)}
                             className={`cursor-pointer transition-colors ${
-                              isSelected ? 'bg-emerald-50 border-l-2 border-emerald-500' : 'hover:bg-slate-50'
+                              isSelected
+                                ? 'bg-[var(--color-accent-soft)] border-l-2 border-[var(--color-accent)]'
+                                : 'hover:bg-[var(--color-surface-muted)]'
                             }`}
                           >
-                            <td className="py-2 px-3 font-semibold text-slate-800">{r.vcn}</td>
-                            <td className="py-2 px-3 text-slate-600 truncate max-w-[140px]">{r.vessel_name || '—'}</td>
-                            <td className="py-2 px-3 text-right font-mono font-medium text-slate-800">
+                            <td className="py-2 px-3 font-semibold text-[var(--color-text-primary)]">{r.vcn}</td>
+                            <td className="py-2 px-3 text-[var(--color-text-secondary)] truncate max-w-[140px]">
+                              {r.vessel_name || '—'}
+                            </td>
+                            <td className="py-2 px-3 text-right font-mono font-medium text-[var(--color-text-primary)]">
                               {r.status === 'AVAILABLE' ? fmtHours(r.duration_hours) : '—'}
                             </td>
                             <td className="py-2 px-3 text-center">
-                              <span
-                                className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
-                                  r.status === 'AVAILABLE'
-                                    ? r.duration_hours != null && r.duration_hours < 0
-                                      ? 'bg-sky-100 text-sky-800'
-                                      : 'bg-emerald-100 text-emerald-800'
-                                    : 'bg-slate-200 text-slate-600'
-                                }`}
-                              >
-                                {r.status === 'AVAILABLE' && r.duration_hours != null && r.duration_hours < 0
-                                  ? 'EARLY SERVICE'
-                                  : r.status}
-                              </span>
+                              <StatusBadge
+                                tone={r.status === 'AVAILABLE' ? (isEarly ? 'inferred' : 'good') : 'neutral'}
+                                label={isEarly ? 'Early Service' : r.status}
+                              />
                             </td>
-                            <td className="py-2 px-3 text-[10px] text-slate-500">
+                            <td className="py-2 px-3 text-[10px] text-[var(--color-text-tertiary)]">
                               {r.start_time ? fmtTs(r.start_time).split(',')[1] : '—'} →{' '}
                               {r.end_time ? fmtTs(r.end_time).split(',')[1] : '—'}
                             </td>
@@ -700,184 +683,171 @@ function TimeAndMotionContent() {
                   </table>
                 )}
               </div>
-            </div>
+            </Card>
 
             {/* Traceability Envelope Drawer */}
-            <div className="bg-white rounded-lg border border-slate-200 shadow-xs p-4 flex flex-col">
-              <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wide border-b border-slate-200 pb-2 mb-3">
-                Traceability Envelope (Spec §2 & §10)
-              </h3>
+            <Card className="flex flex-col">
+              <SectionHeader title="Traceability Envelope (Spec §2 & §10)" className="border-b border-[var(--color-border)] pb-3" />
 
               {!selectedResult ? (
-                <div className="flex-1 flex items-center justify-center text-xs text-slate-400 text-center px-4">
-                  Select a vessel call row to inspect formula lineage, contributing source IDs, filter context, and DQ status.
-                </div>
+                <EmptyState
+                  title="No call selected"
+                  description="Select a vessel call row to inspect formula lineage, contributing source IDs, filter context, and DQ status."
+                />
               ) : (
                 <div className="space-y-3 text-xs overflow-y-auto">
                   <div>
-                    <span className="text-slate-500 font-medium">VCN:</span>{' '}
-                    <span className="font-bold text-slate-800">{selectedResult.vcn}</span>
+                    <span className="text-[var(--color-text-secondary)] font-medium">VCN:</span>{' '}
+                    <span className="font-bold text-[var(--color-text-primary)]">{selectedResult.vcn}</span>
                   </div>
 
                   <div>
-                    <span className="text-slate-500 font-medium">Status:</span>{' '}
-                    <span
-                      className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
-                        selectedResult.status === 'AVAILABLE' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'
-                      }`}
-                    >
-                      {selectedResult.status}
-                    </span>
+                    <span className="text-[var(--color-text-secondary)] font-medium">Status:</span>{' '}
+                    <StatusBadge tone={selectedResult.status === 'AVAILABLE' ? 'good' : 'neutral'} label={selectedResult.status} />
                     {selectedResult.unavailable_reason && (
-                      <p className="text-red-600 text-[11px] mt-1 bg-red-50 p-2 rounded border border-red-200">
+                      <p className="text-[var(--color-critical)] text-[11px] mt-1 bg-[var(--color-critical-bg)] p-2 rounded border border-[var(--color-critical-border)]">
                         {selectedResult.unavailable_reason}
                       </p>
                     )}
                   </div>
 
                   <div>
-                    <span className="text-slate-500 font-medium">Duration:</span>{' '}
-                    <span className="font-mono font-bold text-slate-900">
+                    <span className="text-[var(--color-text-secondary)] font-medium">Duration:</span>{' '}
+                    <span className="font-mono font-bold text-[var(--color-text-primary)]">
                       {fmtHours(selectedResult.duration_hours)}
                     </span>
                   </div>
 
                   <div>
-                    <span className="text-slate-500 font-medium">Start Timestamp:</span>
-                    <div className="font-mono text-[11px] text-slate-700">{fmtTs(selectedResult.start_time)}</div>
+                    <span className="text-[var(--color-text-secondary)] font-medium">Start Timestamp:</span>
+                    <div className="font-mono text-[11px] text-[var(--color-text-primary)]">{fmtTs(selectedResult.start_time)}</div>
                   </div>
 
                   <div>
-                    <span className="text-slate-500 font-medium">End Timestamp:</span>
-                    <div className="font-mono text-[11px] text-slate-700">{fmtTs(selectedResult.end_time)}</div>
+                    <span className="text-[var(--color-text-secondary)] font-medium">End Timestamp:</span>
+                    <div className="font-mono text-[11px] text-[var(--color-text-primary)]">{fmtTs(selectedResult.end_time)}</div>
                   </div>
 
-                  <div className="pt-2 border-t border-slate-100">
-                    <span className="text-slate-500 font-medium">Formula Version:</span>{' '}
-                    <span className="font-mono text-slate-700">{selectedResult.traceability.formula_version || '1.0'}</span>
-                  </div>
-
-                  <div>
-                    <span className="text-slate-500 font-medium">Data Quality Status:</span>{' '}
-                    <span className="font-semibold text-slate-700">{selectedResult.traceability.dq_status || 'CLEAN'}</span>
+                  <div className="pt-2 border-t border-[var(--color-border)]">
+                    <span className="text-[var(--color-text-secondary)] font-medium">Formula Version:</span>{' '}
+                    <span className="font-mono text-[var(--color-text-primary)]">{selectedResult.traceability.formula_version || '1.0'}</span>
                   </div>
 
                   <div>
-                    <span className="text-slate-500 font-medium">Contributing Source IDs:</span>
-                    <div className="bg-slate-50 p-2 rounded border border-slate-200 mt-1 max-h-24 overflow-y-auto space-y-1">
+                    <span className="text-[var(--color-text-secondary)] font-medium">Data Quality Status:</span>{' '}
+                    <span className="font-semibold text-[var(--color-text-primary)]">{selectedResult.traceability.dq_status || 'CLEAN'}</span>
+                  </div>
+
+                  <div>
+                    <span className="text-[var(--color-text-secondary)] font-medium">Contributing Source IDs:</span>
+                    <div className="bg-[var(--color-surface-muted)] p-2 rounded border border-[var(--color-border)] mt-1 max-h-24 overflow-y-auto space-y-1">
                       {selectedResult.traceability.source_record_ids.length > 0 ? (
                         selectedResult.traceability.source_record_ids.map((id) => (
-                          <div key={id} className="font-mono text-[10px] text-slate-600 truncate">
+                          <div key={id} className="font-mono text-[10px] text-[var(--color-text-secondary)] truncate">
                             {id}
                           </div>
                         ))
                       ) : (
-                        <div className="text-[10px] text-slate-400 italic">None recorded</div>
+                        <div className="text-[10px] text-[var(--color-text-tertiary)] italic">None recorded</div>
                       )}
                     </div>
                   </div>
 
                   <div>
-                    <span className="text-slate-500 font-medium">Calculated At:</span>
-                    <div className="text-[10px] text-slate-400">{fmtTs(selectedResult.traceability.calculated_at)}</div>
+                    <span className="text-[var(--color-text-secondary)] font-medium">Calculated At:</span>
+                    <div className="text-[10px] text-[var(--color-text-tertiary)]">{fmtTs(selectedResult.traceability.calculated_at)}</div>
                   </div>
                 </div>
               )}
-            </div>
+            </Card>
           </div>
         )}
 
         {/* 4. Custom Lead-Time Builder */}
         {activeTab === 'custom' && (
-          <div className="grid grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Builder Form */}
-            <div className="bg-white rounded-lg border border-slate-200 p-5 shadow-xs">
-              <h2 className="text-xs font-bold text-slate-800 uppercase tracking-wide border-b border-slate-200 pb-2 mb-4">
-                Custom Lead-Time Configuration
-              </h2>
+            <Card>
+              <SectionHeader title="Custom Lead-Time Configuration" className="border-b border-[var(--color-border)] pb-3" />
 
-              <form onSubmit={handleRunCustom} className="space-y-4 text-xs">
+              <form onSubmit={handleRunCustom} className="space-y-5 text-xs">
+                {/* Event Range group */}
                 <div>
-                  <label htmlFor="start-event-select" className="block text-slate-600 font-semibold mb-1">
-                    Start Event
-                  </label>
-                  <select
-                    id="start-event-select"
-                    value={customStart}
-                    onChange={(e) => setCustomStart(e.target.value)}
-                    className="w-full border border-slate-300 rounded px-2.5 py-1.5 bg-white focus:ring-1 focus:ring-emerald-500"
-                  >
-                    {events.map((ev) => (
-                      <option key={ev.id} value={ev.name}>
-                        {ev.name} {ev.category ? `(${ev.category})` : ''}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="text-[10px] uppercase font-bold tracking-wide text-[var(--color-text-tertiary)] mb-2">
+                    Event Range
+                  </div>
+                  <div className="space-y-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-muted)] p-3">
+                    <FilterField label="Start Event">
+                      <select
+                        id="start-event-select"
+                        value={customStart}
+                        onChange={(e) => setCustomStart(e.target.value)}
+                        className="w-full border border-[var(--color-border)] rounded-md px-2.5 py-1.5 bg-[var(--color-surface)] focus:ring-2 focus:ring-[var(--color-accent)] focus:outline-none cursor-pointer"
+                      >
+                        {events.map((ev) => (
+                          <option key={ev.id} value={ev.name}>
+                            {ev.name} {ev.category ? `(${ev.category})` : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </FilterField>
+
+                    <FilterField label="End Event">
+                      <select
+                        id="end-event-select"
+                        value={customEnd}
+                        onChange={(e) => setCustomEnd(e.target.value)}
+                        className="w-full border border-[var(--color-border)] rounded-md px-2.5 py-1.5 bg-[var(--color-surface)] focus:ring-2 focus:ring-[var(--color-accent)] focus:outline-none cursor-pointer"
+                      >
+                        {events.map((ev) => (
+                          <option key={ev.id} value={ev.name}>
+                            {ev.name} {ev.category ? `(${ev.category})` : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </FilterField>
+
+                    <FilterField label="Occurrence Selection">
+                      <select
+                        id="occurrence-select"
+                        value={customOcc}
+                        onChange={(e) => setCustomOcc(e.target.value)}
+                        className="w-full border border-[var(--color-border)] rounded-md px-2.5 py-1.5 bg-[var(--color-surface)] cursor-pointer"
+                      >
+                        <option value="first">First occurrence</option>
+                        <option value="last">Last occurrence</option>
+                        <option value="all">All occurrences (pairwise)</option>
+                      </select>
+                    </FilterField>
+
+                    <FilterField label="Movement Scope (Optional)">
+                      <select
+                        id="movement-scope-select"
+                        value={customScope}
+                        onChange={(e) => setCustomScope(e.target.value)}
+                        className="w-full border border-[var(--color-border)] rounded-md px-2.5 py-1.5 bg-[var(--color-surface)] cursor-pointer"
+                      >
+                        <option value="">Any scope</option>
+                        <option value="ARRIVAL">ARRIVAL</option>
+                        <option value="SAILING">SAILING</option>
+                        <option value="SHIFTING">SHIFTING</option>
+                      </select>
+                    </FilterField>
+                  </div>
                 </div>
 
+                {/* Cohort group */}
                 <div>
-                  <label htmlFor="end-event-select" className="block text-slate-600 font-semibold mb-1">
-                    End Event
-                  </label>
-                  <select
-                    id="end-event-select"
-                    value={customEnd}
-                    onChange={(e) => setCustomEnd(e.target.value)}
-                    className="w-full border border-slate-300 rounded px-2.5 py-1.5 bg-white focus:ring-1 focus:ring-emerald-500"
-                  >
-                    {events.map((ev) => (
-                      <option key={ev.id} value={ev.name}>
-                        {ev.name} {ev.category ? `(${ev.category})` : ''}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label htmlFor="occurrence-select" className="block text-slate-600 font-semibold mb-1">
-                    Occurrence Selection
-                  </label>
-                  <select
-                    id="occurrence-select"
-                    value={customOcc}
-                    onChange={(e) => setCustomOcc(e.target.value)}
-                    className="w-full border border-slate-300 rounded px-2.5 py-1.5 bg-white"
-                  >
-                    <option value="first">First occurrence</option>
-                    <option value="last">Last occurrence</option>
-                    <option value="all">All occurrences (pairwise)</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label htmlFor="movement-scope-select" className="block text-slate-600 font-semibold mb-1">
-                    Movement Scope (Optional)
-                  </label>
-                  <select
-                    id="movement-scope-select"
-                    value={customScope}
-                    onChange={(e) => setCustomScope(e.target.value)}
-                    className="w-full border border-slate-300 rounded px-2.5 py-1.5 bg-white"
-                  >
-                    <option value="">Any scope</option>
-                    <option value="ARRIVAL">ARRIVAL</option>
-                    <option value="SAILING">SAILING</option>
-                    <option value="SHIFTING">SHIFTING</option>
-                  </select>
-                </div>
-
-                <div className="pt-2 border-t border-slate-100">
-                  <div className="font-semibold text-slate-700 mb-2">Cohort Filters</div>
-                  <div className="space-y-2">
-                    <div>
-                      <label htmlFor="cohort-vessel-type" className="block text-slate-500 text-[11px] mb-0.5">
-                        Vessel Type
-                      </label>
+                  <div className="text-[10px] uppercase font-bold tracking-wide text-[var(--color-text-tertiary)] mb-2">
+                    Cohort
+                  </div>
+                  <div className="space-y-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-muted)] p-3">
+                    <FilterField label="Vessel Type">
                       <select
                         id="cohort-vessel-type"
                         value={customVesselType}
                         onChange={(e) => setCustomVesselType(e.target.value)}
-                        className="w-full border border-slate-300 rounded px-2 py-1 bg-white"
+                        className="w-full border border-[var(--color-border)] rounded-md px-2 py-1 bg-[var(--color-surface)] cursor-pointer"
                       >
                         <option value="">All Vessel Types</option>
                         <option value="Fully Cellular Containership">Fully Cellular Containership</option>
@@ -885,17 +855,14 @@ function TimeAndMotionContent() {
                         <option value="Product Tanker">Product Tanker</option>
                         <option value="Vehicle Carrier">Vehicle Carrier</option>
                       </select>
-                    </div>
+                    </FilterField>
 
-                    <div>
-                      <label htmlFor="cohort-cargo-type" className="block text-slate-500 text-[11px] mb-0.5">
-                        Cargo Type
-                      </label>
+                    <FilterField label="Cargo Type">
                       <select
                         id="cohort-cargo-type"
                         value={customCargoType}
                         onChange={(e) => setCustomCargoType(e.target.value)}
-                        className="w-full border border-slate-300 rounded px-2 py-1 bg-white"
+                        className="w-full border border-[var(--color-border)] rounded-md px-2 py-1 bg-[var(--color-surface)] cursor-pointer"
                       >
                         <option value="">All Cargo Types</option>
                         <option value="Container">Container</option>
@@ -904,156 +871,155 @@ function TimeAndMotionContent() {
                         <option value="RoRo">RoRo</option>
                         <option value="Break Bulk">Break Bulk</option>
                       </select>
-                    </div>
+                    </FilterField>
                   </div>
                 </div>
 
-                <div className="pt-2 border-t border-slate-100">
-                  <label htmlFor="save-name-input" className="block text-slate-600 font-semibold mb-1">
-                    Save as Catalogue Metric (Optional)
-                  </label>
-                  <input
-                    id="save-name-input"
-                    type="text"
-                    placeholder="e.g. Custom Pilot-to-All-Fast"
-                    value={customSaveName}
-                    onChange={(e) => setCustomSaveName(e.target.value)}
-                    className="w-full border border-slate-300 rounded px-2.5 py-1.5"
-                  />
+                <div className="pt-1 border-t border-[var(--color-border)]">
+                  <FilterField label="Save as Catalogue Metric (Optional)" className="mt-3">
+                    <input
+                      id="save-name-input"
+                      type="text"
+                      placeholder="e.g. Custom Pilot-to-All-Fast"
+                      value={customSaveName}
+                      onChange={(e) => setCustomSaveName(e.target.value)}
+                      className="w-full border border-[var(--color-border)] rounded-md px-2.5 py-1.5 bg-[var(--color-surface)]"
+                    />
+                  </FilterField>
                 </div>
 
-                {customError && <div className="text-red-600 bg-red-50 p-2 rounded text-xs">{customError}</div>}
+                {customError && (
+                  <ErrorState
+                    title="Calculation failed"
+                    description={customError}
+                    onRetry={() => setCustomError(null)}
+                    className="py-4"
+                  />
+                )}
 
                 <button
                   type="submit"
                   disabled={customRunning}
-                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white rounded py-2 font-semibold transition-colors disabled:opacity-50"
+                  className="w-full bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-white rounded-md py-2 font-semibold transition-colors disabled:opacity-50 cursor-pointer"
                 >
                   {customRunning ? 'Computing…' : 'Calculate Custom Lead Time'}
                 </button>
               </form>
-            </div>
+            </Card>
 
             {/* Custom Output */}
-            <div className="col-span-2 space-y-4">
+            <div className="lg:col-span-2 space-y-4">
               {!customOutput ? (
-                <div className="bg-white rounded-lg border border-slate-200 p-8 text-center text-xs text-slate-400">
-                  Configure an event pair on the left and run the calculation to view Polars statistics and per-call results.
-                </div>
+                <Card>
+                  <EmptyState
+                    title="No calculation run yet"
+                    description="Configure an event range and cohort on the left and run the calculation to view statistics and per-call results."
+                  />
+                </Card>
               ) : (
                 <>
                   {/* 1. Extended Summary Cards */}
-                  <div className="grid grid-cols-6 gap-2 text-xs">
-                    <div className="bg-white border border-slate-200 rounded p-2.5 text-center">
-                      <div className="text-[10px] uppercase font-bold text-slate-500">Sample Size</div>
-                      <div className="text-base font-bold text-slate-800 font-mono">
-                        {customOutput.aggregate?.observation_count ?? 0}
-                      </div>
-                      <div className="text-[10px] text-slate-400">
-                        {customOutput.aggregate?.missing_count ?? 0} missing
-                      </div>
-                    </div>
-                    <div className="bg-white border border-slate-200 rounded p-2.5 text-center">
-                      <div className="text-[10px] uppercase font-bold text-slate-500">Mean Duration</div>
-                      <div className="text-base font-bold text-emerald-700 font-mono">
-                        {customOutput.aggregate?.mean_hours != null ? `${customOutput.aggregate.mean_hours.toFixed(2)}h` : '—'}
-                      </div>
-                      <div className="text-[10px] text-slate-400">Average</div>
-                    </div>
-                    <div className="bg-white border border-slate-200 rounded p-2.5 text-center">
-                      <div className="text-[10px] uppercase font-bold text-slate-500">Median (P50)</div>
-                      <div className="text-base font-bold text-emerald-700 font-mono">
-                        {customOutput.aggregate?.median_hours != null ? `${customOutput.aggregate.median_hours.toFixed(2)}h` : '—'}
-                      </div>
-                      <div className="text-[10px] text-slate-400">50th percentile</div>
-                    </div>
-                    <div className="bg-white border border-slate-200 rounded p-2.5 text-center">
-                      <div className="text-[10px] uppercase font-bold text-slate-500">P90 Tail Risk</div>
-                      <div className="text-base font-bold text-amber-700 font-mono">
-                        {customOutput.aggregate?.p90_hours != null ? `${customOutput.aggregate.p90_hours.toFixed(2)}h` : '—'}
-                      </div>
-                      <div className="text-[10px] text-slate-400">90th percentile</div>
-                    </div>
-                    <div className="bg-white border border-slate-200 rounded p-2.5 text-center">
-                      <div className="text-[10px] uppercase font-bold text-slate-500">Minimum</div>
-                      <div className="text-base font-bold text-slate-700 font-mono">
-                        {customOutput.aggregate?.min_hours != null ? `${customOutput.aggregate.min_hours.toFixed(2)}h` : '—'}
-                      </div>
-                      <div className="text-[10px] text-slate-400">Fastest call</div>
-                    </div>
-                    <div className="bg-white border border-slate-200 rounded p-2.5 text-center">
-                      <div className="text-[10px] uppercase font-bold text-slate-500">Maximum</div>
-                      <div className="text-base font-bold text-slate-700 font-mono">
-                        {customOutput.aggregate?.max_hours != null ? `${customOutput.aggregate.max_hours.toFixed(2)}h` : '—'}
-                      </div>
-                      <div className="text-[10px] text-slate-400">Slowest call</div>
-                    </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-xs">
+                    <KpiCard
+                      label="Sample Size"
+                      value={customOutput.aggregate?.observation_count ?? 0}
+                      context={`${customOutput.aggregate?.missing_count ?? 0} missing`}
+                    />
+                    <KpiCard
+                      label="Mean Duration"
+                      value={customOutput.aggregate?.mean_hours != null ? `${customOutput.aggregate.mean_hours.toFixed(2)}h` : '—'}
+                      context="Average"
+                    />
+                    <KpiCard
+                      label="Median (P50)"
+                      value={customOutput.aggregate?.median_hours != null ? `${customOutput.aggregate.median_hours.toFixed(2)}h` : '—'}
+                      context="50th percentile"
+                    />
+                    <KpiCard
+                      label="P90 Tail Risk"
+                      value={customOutput.aggregate?.p90_hours != null ? `${customOutput.aggregate.p90_hours.toFixed(2)}h` : '—'}
+                      context="90th percentile"
+                    />
+                    <KpiCard
+                      label="Minimum"
+                      value={customOutput.aggregate?.min_hours != null ? `${customOutput.aggregate.min_hours.toFixed(2)}h` : '—'}
+                      context="Fastest call"
+                    />
+                    <KpiCard
+                      label="Maximum"
+                      value={customOutput.aggregate?.max_hours != null ? `${customOutput.aggregate.max_hours.toFixed(2)}h` : '—'}
+                      context="Slowest call"
+                    />
                   </div>
 
                   {/* 2. Distribution Visualization (Histogram) */}
                   {customOutput.distribution && customOutput.distribution.length > 0 && (
-                    <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-xs">
-                      <div className="flex items-center justify-between mb-3 text-xs">
-                        <span className="font-bold text-slate-700 uppercase tracking-wide">
-                          Duration Distribution Frequency
-                        </span>
-                        <span className="text-[11px] text-slate-500">5-Bin Linear Histogram</span>
-                      </div>
+                    <Card>
+                      <SectionHeader
+                        title="Duration Distribution Frequency"
+                        description="5-bin linear histogram"
+                      />
                       <div className="space-y-2">
                         {customOutput.distribution.map((bin, idx) => (
                           <div key={idx} className="text-xs">
                             <div className="flex items-center justify-between text-[11px] mb-1 font-mono">
-                              <span className="text-slate-600 font-medium">{bin.bin_label}</span>
-                              <span className="text-slate-500 font-bold">
+                              <span className="text-[var(--color-text-secondary)] font-medium">{bin.bin_label}</span>
+                              <span className="text-[var(--color-text-secondary)] font-bold">
                                 {bin.count} calls ({bin.pct}%)
                               </span>
                             </div>
-                            <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden border border-slate-200">
+                            <div className="w-full bg-[var(--color-surface-muted)] rounded-full h-2 overflow-hidden border border-[var(--color-border)]">
                               <div
-                                className="bg-emerald-600 h-full rounded-full transition-all"
+                                className="bg-[var(--color-accent)] h-full rounded-full transition-all"
                                 style={{ width: `${Math.max(2, bin.pct)}%` }}
                               ></div>
                             </div>
                           </div>
                         ))}
                       </div>
-                    </div>
+                    </Card>
                   )}
 
-                  {/* 3. Methodology & Governance Explanation */}
-                  <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs">
-                    <div className="font-bold text-slate-700 uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
-                      <span>📖</span>
-                      <span>Governed Methodology & Calculations</span>
+                  {/* 3. Methodology & Governance Explanation (collapsible, low-emphasis) */}
+                  <details className="group bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg text-xs">
+                    <summary className="cursor-pointer select-none px-3 py-2.5 text-[var(--color-text-secondary)] font-medium flex items-center justify-between">
+                      <span>Governed Methodology &amp; Calculations</span>
+                      <span className="text-[var(--color-text-tertiary)] transition-transform group-open:rotate-180">⌄</span>
+                    </summary>
+                    <div className="px-3 pb-3 grid grid-cols-1 sm:grid-cols-3 gap-3 text-[11px] text-[var(--color-text-secondary)] border-t border-[var(--color-border)] pt-3">
+                      <div>
+                        <strong className="text-[var(--color-text-primary)]">Eligibility:</strong>{' '}
+                        {customOutput.methodology?.eligibility || 'Active non-merged calls'}
+                      </div>
+                      <div>
+                        <strong className="text-[var(--color-text-primary)]">Exclusions:</strong>{' '}
+                        {customOutput.methodology?.exclusions || 'Quarantined excluded'}
+                      </div>
+                      <div>
+                        <strong className="text-[var(--color-text-primary)]">Missing Events:</strong>{' '}
+                        {customOutput.methodology?.missing_events || 'Reported as UNAVAILABLE'}
+                      </div>
+                      <div>
+                        <strong className="text-[var(--color-text-primary)]">Percentile Method:</strong>{' '}
+                        {customOutput.methodology?.percentile_method || 'Linear interpolation'}
+                      </div>
+                      <div>
+                        <strong className="text-[var(--color-text-primary)]">Formula Version:</strong>{' '}
+                        {customOutput.methodology?.formula_version || '1.0'}
+                      </div>
+                      <div>
+                        <strong className="text-[var(--color-text-primary)]">Sample Size:</strong>{' '}
+                        {customOutput.methodology?.sample_size ?? customOutput.aggregate?.observation_count} calls
+                      </div>
                     </div>
-                    <div className="grid grid-cols-3 gap-3 text-[11px] text-slate-600">
-                      <div>
-                        <strong>Eligibility:</strong> {customOutput.methodology?.eligibility || 'Active non-merged calls'}
-                      </div>
-                      <div>
-                        <strong>Exclusions:</strong> {customOutput.methodology?.exclusions || 'Quarantined excluded'}
-                      </div>
-                      <div>
-                        <strong>Missing Events:</strong> {customOutput.methodology?.missing_events || 'Reported as UNAVAILABLE'}
-                      </div>
-                      <div>
-                        <strong>Percentile Method:</strong> {customOutput.methodology?.percentile_method || 'Linear interpolation'}
-                      </div>
-                      <div>
-                        <strong>Formula Version:</strong> {customOutput.methodology?.formula_version || '1.0'}
-                      </div>
-                      <div>
-                        <strong>Sample Size:</strong> {customOutput.methodology?.sample_size ?? customOutput.aggregate?.observation_count} calls
-                      </div>
-                    </div>
-                  </div>
+                  </details>
 
                   {/* 4. Outliers Table */}
                   {customOutput.outliers && customOutput.outliers.length > 0 && (
-                    <div className="bg-amber-50/60 border border-amber-200 rounded-lg p-3 text-xs">
-                      <div className="font-bold text-amber-900 uppercase tracking-wide mb-2 flex items-center justify-between">
-                        <span>⚠ Detected Tail Outliers ({customOutput.outliers.length})</span>
-                        <span className="text-[10px] font-normal text-amber-700 font-mono">
+                    <Card className="!p-3">
+                      <div className="font-semibold text-[var(--color-text-primary)] mb-2 flex items-center justify-between text-xs">
+                        <StatusBadge tone="warning" label={`Detected Tail Outliers (${customOutput.outliers.length})`} />
+                        <span className="text-[10px] font-normal text-[var(--color-text-tertiary)] font-mono">
                           Duration &gt; P90 ({customOutput.aggregate?.p90_hours?.toFixed(1)}h) or negative
                         </span>
                       </div>
@@ -1061,74 +1027,72 @@ function TimeAndMotionContent() {
                         {customOutput.outliers.map((o, idx) => (
                           <div
                             key={idx}
-                            className="flex items-center justify-between bg-white/80 px-2 py-1 rounded border border-amber-200/60 text-[11px]"
+                            className="flex items-center justify-between bg-[var(--color-warning-bg)] px-2 py-1 rounded border border-[var(--color-warning-border)] text-[11px]"
                           >
-                            <span className="font-mono font-bold text-amber-900">{o.vcn}</span>
-                            <span className="text-slate-600">{o.vessel_name || '—'}</span>
-                            <span className="font-mono font-bold text-amber-800">{fmtHours(o.duration_hours)}</span>
+                            <span className="font-mono font-bold text-[var(--color-warning)]">{o.vcn}</span>
+                            <span className="text-[var(--color-text-secondary)]">{o.vessel_name || '—'}</span>
+                            <span className="font-mono font-bold text-[var(--color-warning)]">{fmtHours(o.duration_hours)}</span>
                             <Link
                               href={`/vessel-journey?vcn=${o.vcn}`}
-                              className="text-emerald-600 hover:underline font-semibold text-[10px]"
+                              className="text-[var(--color-accent)] hover:underline font-semibold text-[10px]"
                             >
                               Inspect Journey →
                             </Link>
                           </div>
                         ))}
                       </div>
-                    </div>
+                    </Card>
                   )}
 
                   {/* 5. Results Table */}
-                  <div className="bg-white rounded-lg border border-slate-200 shadow-xs overflow-hidden">
-                    <div className="px-4 py-2.5 border-b border-slate-200 bg-slate-50 flex items-center justify-between text-xs">
-                      <span className="font-semibold text-slate-700">{customOutput.formula}</span>
-                      <span className="text-[11px] text-slate-500">
+                  <Card padded={false} className="overflow-hidden">
+                    <div className="px-4 py-2.5 border-b border-[var(--color-border)] bg-[var(--color-surface-muted)] flex items-center justify-between text-xs">
+                      <span className="font-semibold text-[var(--color-text-primary)]">{customOutput.formula}</span>
+                      <span className="text-[11px] text-[var(--color-text-secondary)]">
                         {customOutput.results?.length || 0} vessel calls analyzed
                       </span>
                     </div>
 
-                    <div className="max-h-[300px] overflow-y-auto">
-                      <table className="w-full text-xs text-left border-collapse">
-                        <thead>
-                          <tr className="border-b border-slate-200 bg-slate-50/50 text-slate-500 font-semibold">
-                            <th className="py-2 px-3">VCN</th>
-                            <th className="py-2 px-3">Vessel Name</th>
-                            <th className="py-2 px-3 text-right">Duration</th>
-                            <th className="py-2 px-3 text-center">Status</th>
-                            <th className="py-2 px-3 text-center">Action</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {customOutput.results?.map((r, idx: number) => (
-                            <tr key={idx} className="hover:bg-slate-50">
-                              <td className="py-1.5 px-3 font-semibold text-slate-800 font-mono">{r.vcn}</td>
-                              <td className="py-1.5 px-3 text-slate-600">{r.vessel_name || '—'}</td>
-                              <td className="py-1.5 px-3 text-right font-mono font-medium">
-                                {r.status === 'AVAILABLE' ? fmtHours(r.duration_hours) : '—'}
-                              </td>
-                              <td className="py-1.5 px-3 text-center">
-                                <span
-                                  className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
-                                    r.status === 'AVAILABLE' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'
-                                  }`}
-                                >
-                                  {r.status}
-                                </span>
-                              </td>
-                              <td className="py-1.5 px-3 text-center">
-                                <Link
-                                  href={`/vessel-journey?vcn=${r.vcn}`}
-                                  className="text-emerald-600 hover:underline font-semibold text-[11px]"
-                                >
-                                  Drill down
-                                </Link>
-                              </td>
+                    {!customOutput.results || customOutput.results.length === 0 ? (
+                      <EmptyState title="No per-call results" />
+                    ) : (
+                      <div className="max-h-[300px] overflow-y-auto">
+                        <table className="w-full text-xs text-left border-collapse">
+                          <thead>
+                            <tr className="border-b border-[var(--color-border)] bg-[var(--color-surface-muted)] text-[var(--color-text-secondary)] font-semibold">
+                              <th className="py-2 px-3">VCN</th>
+                              <th className="py-2 px-3">Vessel Name</th>
+                              <th className="py-2 px-3 text-right">Duration</th>
+                              <th className="py-2 px-3 text-center">Status</th>
+                              <th className="py-2 px-3 text-center">Action</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
+                          </thead>
+                          <tbody className="divide-y divide-[var(--color-border)]">
+                            {customOutput.results.map((r, idx: number) => (
+                              <tr key={idx} className="hover:bg-[var(--color-surface-muted)]">
+                                <td className="py-1.5 px-3 font-semibold text-[var(--color-text-primary)] font-mono">{r.vcn}</td>
+                                <td className="py-1.5 px-3 text-[var(--color-text-secondary)]">{r.vessel_name || '—'}</td>
+                                <td className="py-1.5 px-3 text-right font-mono font-medium text-[var(--color-text-primary)]">
+                                  {r.status === 'AVAILABLE' ? fmtHours(r.duration_hours) : '—'}
+                                </td>
+                                <td className="py-1.5 px-3 text-center">
+                                  <StatusBadge tone={r.status === 'AVAILABLE' ? 'good' : 'neutral'} label={r.status} />
+                                </td>
+                                <td className="py-1.5 px-3 text-center">
+                                  <Link
+                                    href={`/vessel-journey?vcn=${r.vcn}`}
+                                    className="text-[var(--color-accent)] hover:underline font-semibold text-[11px]"
+                                  >
+                                    Drill down
+                                  </Link>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </Card>
                 </>
               )}
             </div>
@@ -1143,8 +1107,8 @@ export default function TimeAndMotionPage() {
   return (
     <React.Suspense
       fallback={
-        <div className="flex-1 flex items-center justify-center bg-slate-50 text-slate-400 text-xs font-mono">
-          Loading Time & Motion Explorer…
+        <div className="flex-1 flex items-center justify-center bg-[var(--color-bg)]">
+          <LoadingState label="Loading Time & Motion Explorer…" />
         </div>
       }
     >

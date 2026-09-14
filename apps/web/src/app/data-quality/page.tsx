@@ -4,6 +4,16 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { useAuth } from '../../lib/auth-context'
+import {
+  PageHeader,
+  KpiCard,
+  StatusBadge,
+  statusToTone,
+  EmptyState,
+  LoadingState,
+  ErrorState,
+  FilterChip,
+} from '@/components/ui'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
@@ -151,135 +161,109 @@ function DataQualityContent() {
     return Array.from(rules).sort()
   }, [issues])
 
+  const hasActiveFilters = severityFilter !== 'ALL' || statusFilter !== 'ALL' || ruleFilter !== 'ALL'
+
   return (
-    <div className="flex-1 flex flex-col h-full overflow-hidden bg-slate-100 text-slate-900">
-      {/* 1. Top Header */}
-      <div className="bg-white border-b border-slate-200 px-6 py-3.5 flex-shrink-0 flex items-center justify-between gap-4 flex-wrap">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-1.5">
-              <span>🛡</span> Data Quality Governance &amp; Issue Resolution
-            </h1>
-            <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-slate-100 border border-slate-300 text-slate-700">
-              {filteredIssues.length} issues
-            </span>
-          </div>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Operational quality rules, chronology sequence assertions, quarantine enforcement, and steward remediation.
-          </p>
-        </div>
+    <div className="flex-1 flex flex-col h-full overflow-hidden bg-[var(--color-bg)] text-[var(--color-text-primary)]">
+      <PageHeader
+        title="Data Quality Governance"
+        description="Operational quality rules, chronology sequence assertions, quarantine enforcement, and steward remediation."
+        meta={`${filteredIssues.length} issue${filteredIssues.length === 1 ? '' : 's'} shown`}
+        actions={
+          <button
+            onClick={fetchQualityData}
+            className="px-3 py-1.5 bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-white rounded-md text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+          >
+            <span aria-hidden="true">↺</span> Refresh Status
+          </button>
+        }
+      />
 
-        <button
-          onClick={fetchQualityData}
-          className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded text-xs font-semibold flex items-center gap-1.5 cursor-pointer shadow-2xs"
-        >
-          <span>↺</span> Refresh Status
-        </button>
-      </div>
-
-      {/* 2. Real KPI Summary Stat Cards */}
+      {/* KPI Summary */}
       {summary && (
-        <div className="bg-slate-50 border-b border-slate-200 px-6 py-3 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 flex-shrink-0">
-          <div className="bg-white p-2.5 rounded border border-slate-200 shadow-2xs">
-            <div className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Total Issues</div>
-            <div className="text-lg font-bold font-mono text-slate-900 mt-0.5">{summary.total_issues}</div>
-            <div className="text-[10px] text-slate-500">{summary.open_issues} active</div>
-          </div>
-
-          <div className="bg-white p-2.5 rounded border border-red-200 shadow-2xs bg-red-50/20">
-            <div className="text-[10px] uppercase tracking-wider text-red-700 font-bold">Critical / Quarantined</div>
-            <div className="text-lg font-bold font-mono text-red-700 mt-0.5">{summary.critical_issues}</div>
-            <div className="text-[10px] text-red-600 font-medium">Excluded from KPIs</div>
-          </div>
-
-          <div className="bg-white p-2.5 rounded border border-amber-200 shadow-2xs bg-amber-50/20">
-            <div className="text-[10px] uppercase tracking-wider text-amber-700 font-bold">High Severity</div>
-            <div className="text-lg font-bold font-mono text-amber-700 mt-0.5">{summary.high_issues}</div>
-            <div className="text-[10px] text-amber-600">Requires review</div>
-          </div>
-
-          <div className="bg-white p-2.5 rounded border border-slate-200 shadow-2xs">
-            <div className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Quarantined Calls</div>
-            <div className="text-lg font-bold font-mono text-slate-800 mt-0.5">{summary.quarantined_calls_count}</div>
-            <div className="text-[10px] text-slate-500">of {summary.total_active_calls} active calls</div>
-          </div>
-
-          <div className="bg-white p-2.5 rounded border border-emerald-200 shadow-2xs bg-emerald-50/20">
-            <div className="text-[10px] uppercase tracking-wider text-emerald-700 font-bold">Clean Calls</div>
-            <div className="text-lg font-bold font-mono text-emerald-700 mt-0.5">{summary.clean_calls_count}</div>
-            <div className="text-[10px] text-emerald-600">Zero DQ issues</div>
-          </div>
-
-          <div className="bg-white p-2.5 rounded border border-slate-200 shadow-2xs">
-            <div className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Cleanliness Score</div>
-            <div className="text-lg font-bold font-mono text-cyan-800 mt-0.5">
-              {summary.cleanliness_percentage.toFixed(1)}%
-            </div>
-            <div className="text-[10px] text-slate-500">Governed composite</div>
-          </div>
+        <div className="border-b border-[var(--color-border)] bg-[var(--color-surface-muted)] px-6 py-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 flex-shrink-0">
+          <KpiCard
+            label="Total Issues"
+            value={summary.total_issues}
+            context={<span>{summary.open_issues} active</span>}
+          />
+          <KpiCard
+            label="Critical"
+            value={summary.critical_issues}
+            tone="critical"
+            context={<span>Excluded from KPIs</span>}
+          />
+          <KpiCard
+            label="High Severity"
+            value={summary.high_issues}
+            tone="warning"
+            context={<span>Requires review</span>}
+          />
+          <KpiCard
+            label="Quarantined Calls"
+            value={summary.quarantined_calls_count}
+            context={<span>of {summary.total_active_calls} active calls</span>}
+          />
+          <KpiCard
+            label="Clean Calls"
+            value={summary.clean_calls_count}
+            tone="good"
+            context={<span>Zero DQ issues</span>}
+          />
+          <KpiCard
+            label="Cleanliness Score"
+            value={`${summary.cleanliness_percentage.toFixed(1)}%`}
+            context={<span>Governed composite</span>}
+          />
         </div>
       )}
 
-      {/* 3. Filter and Search Bar */}
-      <div className="bg-white border-b border-slate-200 px-6 py-2.5 flex items-center justify-between gap-3 flex-wrap flex-shrink-0 text-xs">
+      {/* Filter and Search Bar */}
+      <div className="bg-[var(--color-surface)] border-b border-[var(--color-border)] px-6 py-3 flex items-center justify-between gap-3 flex-wrap flex-shrink-0 text-xs">
         <div className="flex items-center gap-2 flex-wrap flex-1">
-          {/* Severity filter */}
-          <div className="flex items-center gap-1">
-            <span className="text-slate-500 font-semibold">Severity:</span>
-            <select
-              value={severityFilter}
-              onChange={(e) => setSeverityFilter(e.target.value)}
-              className="bg-slate-50 border border-slate-300 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-cyan-600"
-            >
-              <option value="ALL">All Severities</option>
-              <option value="CRITICAL">Critical [✕]</option>
-              <option value="HIGH">High [⚠]</option>
-              <option value="MEDIUM">Medium [!]</option>
-              <option value="LOW">Low [i]</option>
-            </select>
-          </div>
+          <FilterChip
+            ariaLabel="Severity"
+            value={severityFilter}
+            onChange={setSeverityFilter}
+            options={[
+              { value: 'ALL', label: 'All Severities' },
+              { value: 'CRITICAL', label: 'Critical' },
+              { value: 'HIGH', label: 'High' },
+              { value: 'MEDIUM', label: 'Medium' },
+              { value: 'LOW', label: 'Low' },
+            ]}
+          />
 
-          {/* Status filter */}
-          <div className="flex items-center gap-1">
-            <span className="text-slate-500 font-semibold">Status:</span>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="bg-slate-50 border border-slate-300 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-cyan-600"
-            >
-              <option value="ALL">All Statuses</option>
-              <option value="OPEN">Open</option>
-              <option value="RESOLVED">Resolved</option>
-              <option value="QUARANTINED">Quarantined</option>
-            </select>
-          </div>
+          <FilterChip
+            ariaLabel="Status"
+            value={statusFilter}
+            onChange={setStatusFilter}
+            options={[
+              { value: 'ALL', label: 'All Statuses' },
+              { value: 'OPEN', label: 'Open' },
+              { value: 'RESOLVED', label: 'Resolved' },
+              { value: 'QUARANTINED', label: 'Quarantined' },
+            ]}
+          />
 
-          {/* Rule filter */}
-          <div className="flex items-center gap-1">
-            <span className="text-slate-500 font-semibold">Rule:</span>
-            <select
-              value={ruleFilter}
-              onChange={(e) => setRuleFilter(e.target.value)}
-              className="bg-slate-50 border border-slate-300 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-cyan-600"
-            >
-              <option value="ALL">All Rules</option>
-              {distinctRules.map((r) => (
-                <option key={r} value={r}>
-                  {r}
-                </option>
-              ))}
-            </select>
-          </div>
+          <FilterChip
+            ariaLabel="Rule"
+            value={ruleFilter}
+            onChange={setRuleFilter}
+            options={[
+              { value: 'ALL', label: 'All Rules' },
+              ...distinctRules.map((r) => ({ value: r, label: r })),
+            ]}
+          />
 
-          {/* Reset Filters */}
-          {(severityFilter !== 'ALL' || statusFilter !== 'ALL' || ruleFilter !== 'ALL') && (
+          {hasActiveFilters && (
             <button
               onClick={() => {
                 setSeverityFilter('ALL')
                 setStatusFilter('ALL')
                 setRuleFilter('ALL')
               }}
-              className="text-cyan-700 hover:text-cyan-900 underline text-xs cursor-pointer ml-1"
+              className="text-[var(--color-accent)] hover:text-[var(--color-accent-hover)] underline text-xs cursor-pointer ml-1"
             >
               Reset Filters
             </button>
@@ -293,13 +277,16 @@ function DataQualityContent() {
             placeholder="Search VCN, rule, description…"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full text-xs bg-slate-50 border border-slate-300 rounded px-3 py-1.5 pl-8 focus:outline-none focus:ring-1 focus:ring-cyan-600"
+            className="w-full text-xs bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-primary)] rounded-md px-3 py-1.5 pl-8 focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
           />
-          <span className="absolute left-2.5 top-1.5 text-slate-400 text-xs">🔍</span>
+          <span className="absolute left-2.5 top-1.5 text-[var(--color-text-tertiary)] text-xs" aria-hidden="true">
+            🔍
+          </span>
           {searchTerm && (
             <button
               onClick={() => setSearchTerm('')}
-              className="absolute right-2.5 top-1.5 text-slate-400 hover:text-slate-600 text-xs"
+              className="absolute right-2.5 top-1.5 text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] text-xs cursor-pointer"
+              aria-label="Clear search"
             >
               ✕
             </button>
@@ -307,80 +294,54 @@ function DataQualityContent() {
         </div>
       </div>
 
-      {/* 4. Issues Data Table */}
-      <div className="flex-1 overflow-auto bg-white">
+      {/* Issues Data Table */}
+      <div className="flex-1 overflow-auto bg-[var(--color-surface)]">
         {loading ? (
-          <div className="h-64 flex flex-col items-center justify-center text-slate-500 text-sm gap-2">
-            <span className="inline-block animate-spin text-xl">⚙</span>
-            <span>Loading Data Quality issues from governance engine…</span>
-          </div>
+          <LoadingState label="Loading Data Quality issues from governance engine…" />
         ) : error ? (
-          <div className="p-8 text-center">
-            <p className="text-sm font-semibold text-red-600 mb-2">Error Loading Quality Issues</p>
-            <p className="text-xs text-slate-600 mb-4">{error}</p>
-            <button
-              onClick={fetchQualityData}
-              className="px-3 py-1.5 bg-slate-800 text-white rounded text-xs hover:bg-slate-700"
-            >
-              Retry
-            </button>
-          </div>
+          <ErrorState
+            title="Error Loading Quality Issues"
+            description={error}
+            onRetry={fetchQualityData}
+          />
         ) : filteredIssues.length === 0 ? (
-          <div className="h-64 flex flex-col items-center justify-center text-slate-500 text-sm">
-            <span>No data quality issues match the selected criteria.</span>
-          </div>
+          <EmptyState
+            title="No matching issues"
+            description="No data quality issues match the selected criteria."
+          />
         ) : (
           <table className="w-full border-collapse text-left text-xs" aria-label="Data Quality Issues Table">
-            <thead className="bg-slate-900 text-slate-200 sticky top-0 z-10 select-none">
+            <thead className="bg-[var(--color-surface-muted)] text-[var(--color-text-secondary)] sticky top-0 z-10 select-none">
               <tr>
-                <th className="px-3 py-2.5 font-semibold border-b border-slate-700 whitespace-nowrap">Rule ID</th>
-                <th className="px-3 py-2.5 font-semibold border-b border-slate-700 whitespace-nowrap">Severity</th>
-                <th className="px-3 py-2.5 font-semibold border-b border-slate-700 whitespace-nowrap">Scope / Domain</th>
-                <th className="px-3 py-2.5 font-semibold border-b border-slate-700">Affected Record (VCN)</th>
-                <th className="px-3 py-2.5 font-semibold border-b border-slate-700">Record Reference</th>
-                <th className="px-3 py-2.5 font-semibold border-b border-slate-700 whitespace-nowrap">Disposition</th>
-                <th className="px-3 py-2.5 font-semibold border-b border-slate-700">Rule Expression &amp; Guidance</th>
-                <th className="px-3 py-2.5 font-semibold border-b border-slate-700 whitespace-nowrap">Workflow State</th>
-                <th className="px-3 py-2.5 font-semibold border-b border-slate-700 text-center">Action</th>
+                <th className="px-3 py-2.5 font-semibold border-b border-[var(--color-border)] whitespace-nowrap">Rule ID</th>
+                <th className="px-3 py-2.5 font-semibold border-b border-[var(--color-border)] whitespace-nowrap">Severity</th>
+                <th className="px-3 py-2.5 font-semibold border-b border-[var(--color-border)] whitespace-nowrap">Scope / Domain</th>
+                <th className="px-3 py-2.5 font-semibold border-b border-[var(--color-border)]">Affected Record (VCN)</th>
+                <th className="px-3 py-2.5 font-semibold border-b border-[var(--color-border)]">Record Reference</th>
+                <th className="px-3 py-2.5 font-semibold border-b border-[var(--color-border)] whitespace-nowrap">Disposition</th>
+                <th className="px-3 py-2.5 font-semibold border-b border-[var(--color-border)]">Rule Expression &amp; Guidance</th>
+                <th className="px-3 py-2.5 font-semibold border-b border-[var(--color-border)] whitespace-nowrap">Workflow State</th>
+                <th className="px-3 py-2.5 font-semibold border-b border-[var(--color-border)] text-center">Action</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-200 bg-white">
-              {filteredIssues.map((iss, idx) => {
-                const isCritical = iss.severity === 'CRITICAL'
-                const isHigh = iss.severity === 'HIGH'
+            <tbody className="divide-y divide-[var(--color-border)] bg-[var(--color-surface)]">
+              {filteredIssues.map((iss) => {
                 const isResolved = iss.issue_status === 'RESOLVED'
 
                 return (
-                  <tr
-                    key={iss.id}
-                    className={`hover:bg-slate-50 transition-colors ${
-                      idx % 2 === 1 ? 'bg-slate-50/50' : 'bg-white'
-                    } ${isCritical && !isResolved ? 'bg-red-50/40' : ''}`}
-                  >
+                  <tr key={iss.id} className="hover:bg-[var(--color-surface-muted)] transition-colors">
                     {/* Rule ID */}
-                    <td className="px-3 py-2 font-mono font-bold text-slate-900 whitespace-nowrap">
+                    <td className="px-3 py-2 font-mono font-semibold text-[var(--color-text-primary)] whitespace-nowrap">
                       {iss.rule_id}
                     </td>
 
                     {/* Severity Badge */}
                     <td className="px-3 py-2 whitespace-nowrap">
-                      {isCritical ? (
-                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-800 border border-red-200">
-                          <span>✕</span> CRITICAL
-                        </span>
-                      ) : isHigh ? (
-                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
-                          <span>⚠</span> HIGH
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
-                          <span>!</span> {iss.severity || 'MEDIUM'}
-                        </span>
-                      )}
+                      <StatusBadge status={iss.severity || 'MEDIUM'} />
                     </td>
 
                     {/* Scope */}
-                    <td className="px-3 py-2 font-mono text-[10px] text-slate-600 whitespace-nowrap">
+                    <td className="px-3 py-2 font-mono text-[10px] text-[var(--color-text-secondary)] whitespace-nowrap">
                       {iss.scope || 'VALIDITY'}
                     </td>
 
@@ -390,45 +351,43 @@ function DataQualityContent() {
                         <div>
                           <Link
                             href={`/vessel-journey?vcn=${iss.vcn}`}
-                            className="font-mono font-bold text-cyan-700 hover:text-cyan-900 hover:underline"
+                            className="font-mono font-semibold text-[var(--color-accent)] hover:text-[var(--color-accent-hover)] hover:underline"
                             title="Drill into Vessel Journey"
                           >
                             {iss.vcn}
                           </Link>
-                          <div className="text-[10px] text-slate-500 truncate max-w-[160px]">
+                          <div className="text-[10px] text-[var(--color-text-tertiary)] truncate max-w-[160px]">
                             {iss.vessel_name || '—'}
                           </div>
                         </div>
                       ) : (
-                        <span className="text-slate-400 italic">Global / Unattached</span>
+                        <span className="text-[var(--color-text-tertiary)] italic">Global / Unattached</span>
                       )}
                     </td>
 
                     {/* Record Reference */}
-                    <td className="px-3 py-2 font-mono text-[10px] text-slate-500 truncate max-w-[140px]" title={iss.record_reference}>
+                    <td
+                      className="px-3 py-2 font-mono text-[10px] text-[var(--color-text-tertiary)] truncate max-w-[140px]"
+                      title={iss.record_reference}
+                    >
                       {iss.record_reference}
                     </td>
 
                     {/* Disposition */}
                     <td className="px-3 py-2 whitespace-nowrap">
-                      <span
-                        className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                          iss.disposition === 'QUARANTINED'
-                            ? 'bg-red-700 text-white'
-                            : 'bg-slate-100 text-slate-700'
-                        }`}
-                      >
-                        {iss.disposition || 'FLAGGED'}
-                      </span>
+                      <StatusBadge
+                        label={iss.disposition || 'FLAGGED'}
+                        tone={iss.disposition === 'QUARANTINED' ? 'critical' : 'neutral'}
+                      />
                     </td>
 
                     {/* Rule Expression & Guidance */}
                     <td className="px-3 py-2 max-w-xs">
-                      <div className="font-medium text-slate-800 text-[11px] truncate" title={iss.rule_name || ''}>
+                      <div className="font-medium text-[var(--color-text-primary)] text-[11px] truncate" title={iss.rule_name || ''}>
                         {iss.rule_name || iss.rule_id}
                       </div>
                       {iss.remediation_guidance && (
-                        <div className="text-[10px] text-slate-500 truncate" title={iss.remediation_guidance}>
+                        <div className="text-[10px] text-[var(--color-text-tertiary)] truncate" title={iss.remediation_guidance}>
                           Guidance: {iss.remediation_guidance}
                         </div>
                       )}
@@ -436,15 +395,10 @@ function DataQualityContent() {
 
                     {/* Workflow State */}
                     <td className="px-3 py-2 whitespace-nowrap">
-                      <span
-                        className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold ${
-                          isResolved
-                            ? 'bg-emerald-100 text-emerald-800'
-                            : 'bg-amber-100 text-amber-800'
-                        }`}
-                      >
-                        {iss.issue_status}
-                      </span>
+                      <StatusBadge
+                        status={iss.issue_status}
+                        tone={isResolved ? 'good' : statusToTone(iss.issue_status)}
+                      />
                     </td>
 
                     {/* Action */}
@@ -453,7 +407,7 @@ function DataQualityContent() {
                         {iss.vcn && (
                           <Link
                             href={`/vessel-journey?vcn=${iss.vcn}`}
-                            className="px-2 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-[10px] font-semibold transition-colors"
+                            className="px-2 py-1 bg-[var(--color-surface-muted)] hover:bg-[var(--color-border)] text-[var(--color-text-primary)] rounded-md text-[10px] font-semibold transition-colors"
                           >
                             Journey →
                           </Link>
@@ -464,7 +418,7 @@ function DataQualityContent() {
                               setResolveTarget(iss)
                               setResolutionNotes('')
                             }}
-                            className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[10px] font-semibold transition-colors cursor-pointer"
+                            className="px-2 py-1 bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-white rounded-md text-[10px] font-semibold transition-colors cursor-pointer"
                           >
                             Resolve
                           </button>
@@ -479,35 +433,42 @@ function DataQualityContent() {
         )}
       </div>
 
-      {/* 5. Resolution Dialog Modal */}
+      {/* Resolution Dialog Modal */}
       {resolveTarget && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-2xs p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4"
           role="dialog"
           aria-modal="true"
         >
-          <div className="bg-white rounded-lg shadow-2xl max-w-md w-full border border-slate-200 overflow-hidden text-xs">
-            <div className="bg-slate-900 text-white px-5 py-3.5 flex items-center justify-between">
-              <div className="font-bold">
+          <div className="bg-[var(--color-surface)] rounded-lg shadow-xl max-w-md w-full border border-[var(--color-border)] overflow-hidden text-xs">
+            <div className="border-b border-[var(--color-border)] px-5 py-3.5 flex items-center justify-between">
+              <div className="font-semibold text-[var(--color-text-primary)]">
                 Resolve Data Quality Issue: {resolveTarget.rule_id}
               </div>
               <button
                 onClick={() => setResolveTarget(null)}
-                className="text-slate-400 hover:text-white text-base font-bold cursor-pointer"
+                className="text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] text-base font-bold cursor-pointer"
+                aria-label="Close"
               >
                 ✕
               </button>
             </div>
 
             <form onSubmit={handleResolveIssue} className="p-5 space-y-4">
-              <div className="bg-slate-50 p-3 rounded border border-slate-200 space-y-1">
-                <div>Record Key: <strong>{resolveTarget.vcn || resolveTarget.record_reference}</strong></div>
-                <div>Rule Expression: <strong>{resolveTarget.rule_name || resolveTarget.rule_id}</strong></div>
-                <div>Severity: <strong>{resolveTarget.severity}</strong></div>
+              <div className="bg-[var(--color-surface-muted)] p-3 rounded-md border border-[var(--color-border)] space-y-1 text-[var(--color-text-secondary)]">
+                <div>
+                  Record Key: <strong className="text-[var(--color-text-primary)]">{resolveTarget.vcn || resolveTarget.record_reference}</strong>
+                </div>
+                <div>
+                  Rule Expression: <strong className="text-[var(--color-text-primary)]">{resolveTarget.rule_name || resolveTarget.rule_id}</strong>
+                </div>
+                <div>
+                  Severity: <strong className="text-[var(--color-text-primary)]">{resolveTarget.severity}</strong>
+                </div>
               </div>
 
               <div>
-                <label className="block text-slate-700 font-semibold mb-1">
+                <label className="block text-[var(--color-text-primary)] font-semibold mb-1">
                   Resolution Decision Notes:
                 </label>
                 <textarea
@@ -516,22 +477,22 @@ function DataQualityContent() {
                   value={resolutionNotes}
                   onChange={(e) => setResolutionNotes(e.target.value)}
                   placeholder="State reason for resolution (e.g. verified by terminal steward, manual timestamp envelope confirmed)..."
-                  className="w-full border border-slate-300 rounded p-2 text-xs focus:ring-1 focus:ring-cyan-600 focus:outline-none"
+                  className="w-full border border-[var(--color-border)] rounded-md p-2 text-xs text-[var(--color-text-primary)] bg-[var(--color-surface)] focus:ring-2 focus:ring-[var(--color-accent)] focus:outline-none"
                 />
               </div>
 
-              <div className="flex justify-end gap-2 pt-2 border-t border-slate-200">
+              <div className="flex justify-end gap-2 pt-2 border-t border-[var(--color-border)]">
                 <button
                   type="button"
                   onClick={() => setResolveTarget(null)}
-                  className="px-3 py-1.5 border border-slate-300 text-slate-700 rounded hover:bg-slate-50 cursor-pointer"
+                  className="px-3 py-1.5 border border-[var(--color-border)] text-[var(--color-text-primary)] rounded-md hover:bg-[var(--color-surface-muted)] cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={resolving}
-                  className="px-4 py-1.5 bg-emerald-600 text-white font-semibold rounded hover:bg-emerald-700 disabled:opacity-50 cursor-pointer"
+                  className="px-4 py-1.5 bg-[var(--color-accent)] text-white font-semibold rounded-md hover:bg-[var(--color-accent-hover)] disabled:opacity-50 cursor-pointer"
                 >
                   {resolving ? 'Submitting…' : 'Confirm Resolution'}
                 </button>
@@ -546,7 +507,13 @@ function DataQualityContent() {
 
 export default function DataQualityPage() {
   return (
-    <React.Suspense fallback={<div className="p-8 text-xs text-slate-500">Loading Data Quality Dashboard...</div>}>
+    <React.Suspense
+      fallback={
+        <div className="p-8">
+          <LoadingState label="Loading Data Quality Dashboard..." />
+        </div>
+      }
+    >
       <DataQualityContent />
     </React.Suspense>
   )

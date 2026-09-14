@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '../../lib/auth-context'
+import { PageHeader, StatusBadge, EmptyState, LoadingState, ErrorState, statusToTone } from '@/components/ui'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
@@ -118,43 +119,32 @@ function fmtTs(ts: string | undefined | null): string {
   }
 }
 
-function categoryColor(cat: string): string {
+/** Maps internal time-category vocabulary to a StatusBadge tone. */
+function categoryTone(cat: string): 'good' | 'warning' | 'critical' | 'inferred' | 'neutral' {
   switch (cat) {
-    case 'ACTIVE_SERVICE': return 'bg-emerald-100 text-emerald-800'
-    case 'PASSIVE_WAIT': return 'bg-sky-100 text-sky-800'
-    case 'HOLD': return 'bg-amber-100 text-amber-800'
-    case 'DELAY': return 'bg-red-100 text-red-800'
-    default: return 'bg-slate-100 text-slate-700'
+    case 'ACTIVE_SERVICE': return 'good'
+    case 'PASSIVE_WAIT': return 'neutral'
+    case 'HOLD': return 'warning'
+    case 'DELAY': return 'critical'
+    default: return 'neutral'
   }
+}
+
+function CategoryBadge({ cat }: { cat: string }) {
+  return <StatusBadge label={cat.replace('_', ' ')} tone={categoryTone(cat)} showGlyph={false} />
 }
 
 function availabilityBadge(row: StageRow) {
   if (row.availability !== 'AVAILABLE') {
-    return (
-      <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-200 text-slate-600">
-        UNAVAILABLE
-      </span>
-    )
+    return <StatusBadge label="Unavailable" tone="neutral" />
   }
   if (row.deviation_type === 'SEQUENCE_VIOLATION') {
-    return (
-      <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-red-100 text-red-700">
-        SEQUENCE VIOLATION
-      </span>
-    )
+    return <StatusBadge label="Sequence Violation" tone="critical" />
   }
   if (row.is_inferred) {
-    return (
-      <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-purple-100 text-purple-700">
-        INFERRED
-      </span>
-    )
+    return <StatusBadge label="Inferred" tone="inferred" />
   }
-  return (
-    <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-700">
-      AVAILABLE
-    </span>
-  )
+  return <StatusBadge label="Available" tone="good" />
 }
 
 // ── Components ───────────────────────────────────────────────────────────────
@@ -162,16 +152,16 @@ function availabilityBadge(row: StageRow) {
 function DecompositionBar({ d }: { d: NonNullable<JourneyData['time_decomposition']> }) {
   const total = d.total_hours || 1
   const cats = [
-    { key: 'ACTIVE_SERVICE', label: 'Active', color: 'bg-emerald-500' },
-    { key: 'PASSIVE_WAIT', label: 'Wait', color: 'bg-sky-400' },
-    { key: 'HOLD', label: 'Hold', color: 'bg-amber-400' },
-    { key: 'DELAY', label: 'Delay', color: 'bg-red-400' },
-    { key: 'UNCLASSIFIED', label: 'Unclassified', color: 'bg-slate-300' },
+    { key: 'ACTIVE_SERVICE', label: 'Active', color: 'bg-[var(--color-good)]' },
+    { key: 'PASSIVE_WAIT', label: 'Wait', color: 'bg-[var(--color-neutral)]' },
+    { key: 'HOLD', label: 'Hold', color: 'bg-[var(--color-warning)]' },
+    { key: 'DELAY', label: 'Delay', color: 'bg-[var(--color-critical)]' },
+    { key: 'UNCLASSIFIED', label: 'Unclassified', color: 'bg-[var(--color-border-strong)]' },
   ] as const
 
   return (
     <div className="mt-2">
-      <div className="flex h-5 rounded overflow-hidden">
+      <div className="flex h-3 rounded-full overflow-hidden bg-[var(--color-surface-muted)]">
         {cats.map(({ key, label, color }) => {
           const val = d[key] as number
           if (!val || val <= 0) return null
@@ -179,24 +169,24 @@ function DecompositionBar({ d }: { d: NonNullable<JourneyData['time_decompositio
           return (
             <div
               key={key}
-              className={`${color} flex items-center justify-center text-[9px] text-white font-bold`}
+              className={color}
               style={{ width: `${pct}%` }}
               title={`${label}: ${fmt(val)}`}
             />
           )
         })}
       </div>
-      <div className="flex gap-3 mt-1 flex-wrap">
+      <div className="flex gap-4 mt-2 flex-wrap">
         {cats.map(({ key, label, color }) => {
           const val = d[key] as number
           return (
-            <span key={key} className="flex items-center gap-1 text-[10px] text-slate-600">
+            <span key={key} className="flex items-center gap-1.5 text-xs text-[var(--color-text-secondary)]">
               <span className={`inline-block w-2 h-2 rounded-sm ${color}`} />
               {label}: {fmt(val)}
             </span>
           )
         })}
-        <span className="text-[10px] font-semibold text-slate-700 ml-auto">
+        <span className="text-xs font-semibold text-[var(--color-text-primary)] ml-auto">
           Total: {fmt(d.total_hours)}
         </span>
       </div>
@@ -222,6 +212,15 @@ interface RawEventRow {
   is_quarantined: boolean
   capture_method: string
 }
+
+const TABS = [
+  { id: 'swimlane', label: 'Operational Swimlane' },
+  { id: 'timeline', label: 'Stage Details' },
+  { id: 'events', label: 'Raw Envelopes' },
+  { id: 'decomposition', label: 'Time Decomposition' },
+  { id: 'conflicts', label: 'Conflicts' },
+  { id: 'history', label: 'History' },
+] as const
 
 function VesselJourneyContent() {
   const router = useRouter()
@@ -348,11 +347,11 @@ function VesselJourneyContent() {
   )
 
   return (
-    <div className="h-full flex gap-0 overflow-hidden">
+    <div className="h-full flex gap-0 overflow-hidden bg-[var(--color-bg)]">
       {/* ── LEFT: Vessel Call List ─────────────────────────────────────── */}
-      <aside className="w-64 flex-shrink-0 bg-white border-r border-slate-200 flex flex-col overflow-hidden">
-        <div className="p-3 border-b border-slate-200">
-          <h2 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+      <aside className="w-64 flex-shrink-0 bg-[var(--color-surface)] border-r border-[var(--color-border)] flex flex-col overflow-hidden">
+        <div className="p-3 border-b border-[var(--color-border)]">
+          <h2 className="text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wide mb-2">
             Vessel Calls
           </h2>
           <input
@@ -360,27 +359,27 @@ function VesselJourneyContent() {
             placeholder="Search VCN or vessel name…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full text-xs border border-slate-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+            className="w-full text-xs bg-[var(--color-surface)] border border-[var(--color-border)] rounded-md px-2.5 py-1.5 text-[var(--color-text-primary)] placeholder:text-[var(--color-text-tertiary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
           />
         </div>
         <div className="flex-1 overflow-y-auto">
           {loadingList ? (
-            <p className="p-3 text-xs text-slate-400">Loading…</p>
+            <LoadingState label="Loading vessel calls…" />
           ) : filtered.length === 0 ? (
-            <p className="p-3 text-xs text-slate-400">No vessel calls found.</p>
+            <EmptyState title="No vessel calls found" />
           ) : (
             filtered.map((vc) => (
               <button
                 key={vc.id}
                 onClick={() => handleSelect(vc.id)}
-                className={`w-full text-left px-3 py-2.5 border-b border-slate-100 text-xs transition-colors ${
+                className={`w-full text-left px-3 py-2.5 border-b border-[var(--color-border)] text-xs transition-colors cursor-pointer ${
                   selectedVcId === vc.id
-                    ? 'bg-emerald-50 border-l-2 border-l-emerald-500'
-                    : 'hover:bg-slate-50'
+                    ? 'bg-[var(--color-accent-soft)] border-l-2 border-l-[var(--color-accent)]'
+                    : 'hover:bg-[var(--color-surface-muted)]'
                 }`}
               >
-                <div className="font-semibold text-slate-800 truncate">{vc.vcn}</div>
-                <div className="text-slate-500 truncate">{vc.vessel_name}</div>
+                <div className="font-semibold text-[var(--color-text-primary)] truncate">{vc.vcn}</div>
+                <div className="text-[var(--color-text-secondary)] truncate">{vc.vessel_name}</div>
               </button>
             ))
           )}
@@ -388,391 +387,384 @@ function VesselJourneyContent() {
       </aside>
 
       {/* ── RIGHT: Journey Detail ─────────────────────────────────────── */}
-      <main className="flex-1 flex flex-col min-w-0 overflow-hidden bg-slate-50">
+      <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {!selectedVcId ? (
-          <div className="flex-1 flex items-center justify-center text-sm text-slate-400">
-            Select a vessel call to view its journey reconstruction.
-          </div>
+          <EmptyState
+            className="flex-1"
+            title="Select a vessel call"
+            description="Choose a vessel call from the list to view its journey reconstruction."
+          />
         ) : loadingJourney ? (
-          <div className="flex-1 flex items-center justify-center text-sm text-slate-400">
-            Loading journey…
-          </div>
+          <LoadingState className="flex-1" label="Loading journey…" />
         ) : error && !journey ? (
-          <div className="p-6">
-            <p className="text-sm text-red-600 mb-3">{error}</p>
-            <button
-              onClick={handleReconstruct}
-              disabled={reconstructing}
-              className="px-3 py-1.5 bg-emerald-600 text-white text-xs rounded hover:bg-emerald-700 disabled:opacity-50"
-            >
-              {reconstructing ? 'Reconstructing…' : 'Reconstruct Journey'}
-            </button>
-          </div>
+          <ErrorState
+            className="flex-1"
+            title="No reconstructed journey"
+            description={error}
+            onRetry={handleReconstruct}
+          />
         ) : journey ? (
           <>
             {/* Header */}
-            <div className="bg-white border-b border-slate-200 px-5 py-3 flex items-start justify-between gap-4 flex-shrink-0">
-              <div>
-                <h1 className="text-sm font-bold text-slate-900">
-                  {journey.vcn} — {journey.vessel_name}
-                </h1>
-                <div className="flex gap-3 mt-1 flex-wrap">
-                  <span className="text-[10px] text-slate-500">
-                    Status:{' '}
-                    <span
-                      className={`font-semibold ${journey.status === 'RECONSTRUCTED' ? 'text-emerald-700' : 'text-amber-700'}`}
-                    >
-                      {journey.status}
+            <PageHeader
+              title={`${journey.vcn} — ${journey.vessel_name}`}
+              meta={
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex gap-4 flex-wrap items-center">
+                    <span>
+                      Status: <StatusBadge status={journey.status} showGlyph={false} className="ml-1" />
                     </span>
-                  </span>
-                  <span className="text-[10px] text-slate-500">
-                    Version: <span className="font-semibold">{journey.reconstruction_version}</span>
-                  </span>
-                  <span className="text-[10px] text-slate-500">
-                    Rule: <span className="font-semibold">{journey.rule_version ?? '—'}</span>
-                  </span>
-                  <span className="text-[10px] text-slate-500">
-                    Computed: <span className="font-semibold">{fmtTs(journey.computed_at)}</span>
-                  </span>
-                </div>
-                {journey.coverage_summary && (
-                  <div className="flex gap-3 mt-1 flex-wrap">
-                    <span className="text-[10px] text-slate-400">
-                      Stages: {journey.coverage_summary.stages_available} available /{' '}
-                      {journey.coverage_summary.stages_missing} missing /{' '}
-                      {journey.coverage_summary.stages_inferred} inferred /{' '}
-                      {journey.coverage_summary.stages_total} total
+                    <span>
+                      Version: <span className="font-semibold text-[var(--color-text-primary)]">{journey.reconstruction_version}</span>
                     </span>
-                    {journey.coverage_summary.shifting_occurrences > 0 && (
-                      <span className="text-[10px] text-amber-700 font-semibold">
-                        ⇄ {journey.coverage_summary.shifting_occurrences} shift(s)
-                      </span>
-                    )}
-                    {conflicts.filter((c) => c.conflict_detected).length > 0 && (
-                      <span className="text-[10px] text-red-700 font-semibold">
-                        ⚠ {conflicts.filter((c) => c.conflict_detected).length} observation conflict(s)
-                      </span>
-                    )}
+                    <span>
+                      Rule: <span className="font-semibold text-[var(--color-text-primary)]">{journey.rule_version ?? '—'}</span>
+                    </span>
+                    <span>
+                      Computed: <span className="font-semibold text-[var(--color-text-primary)]">{fmtTs(journey.computed_at)}</span>
+                    </span>
                   </div>
-                )}
-              </div>
-              <div className="flex items-center gap-2 flex-shrink-0">
-                {reconstructMsg && (
-                  <span className="text-[10px] text-emerald-700">{reconstructMsg}</span>
-                )}
-                <button
-                  onClick={handleReconstruct}
-                  disabled={reconstructing}
-                  className="px-3 py-1.5 bg-emerald-600 text-white text-[11px] font-semibold rounded hover:bg-emerald-700 disabled:opacity-50"
-                >
-                  {reconstructing ? 'Reconstructing…' : '↺ Reconstruct'}
-                </button>
-              </div>
-            </div>
+                  {journey.coverage_summary && (
+                    <div className="flex gap-4 flex-wrap items-center">
+                      <span>
+                        Stages: {journey.coverage_summary.stages_available} available /{' '}
+                        {journey.coverage_summary.stages_missing} missing /{' '}
+                        {journey.coverage_summary.stages_inferred} inferred /{' '}
+                        {journey.coverage_summary.stages_total} total
+                      </span>
+                      {journey.coverage_summary.shifting_occurrences > 0 && (
+                        <StatusBadge
+                          label={`${journey.coverage_summary.shifting_occurrences} shift(s)`}
+                          tone="warning"
+                        />
+                      )}
+                      {conflicts.filter((c) => c.conflict_detected).length > 0 && (
+                        <StatusBadge
+                          label={`${conflicts.filter((c) => c.conflict_detected).length} observation conflict(s)`}
+                          tone="critical"
+                        />
+                      )}
+                    </div>
+                  )}
+                </div>
+              }
+              actions={
+                <div className="flex items-center gap-3">
+                  {reconstructMsg && (
+                    <span className="text-xs text-[var(--color-good)]">{reconstructMsg}</span>
+                  )}
+                  <button
+                    onClick={handleReconstruct}
+                    disabled={reconstructing}
+                    className="px-3 py-1.5 bg-[var(--color-accent)] text-white text-xs font-medium rounded-md hover:bg-[var(--color-accent-hover)] disabled:opacity-50 cursor-pointer"
+                  >
+                    {reconstructing ? 'Reconstructing…' : '↺ Reconstruct'}
+                  </button>
+                </div>
+              }
+            />
 
             {/* Intentional DQ Callout Banners */}
             {journey.vcn === 'SYNVCN2600018' && (
-              <div className="bg-amber-50 border-b border-amber-200 px-5 py-2 text-xs text-amber-900 flex items-center gap-2">
-                <span className="font-bold text-amber-700">🛡 DQ-003 CASE:</span>
+              <div className="bg-[var(--color-warning-bg)] border-b border-[var(--color-warning-border)] px-6 py-2.5 text-xs text-[var(--color-text-primary)] flex items-center gap-2 flex-shrink-0">
+                <StatusBadge label="DQ-003 Case" tone="warning" />
                 <span>Missing mandatory ATA in staging record. Dependent durations (Turnaround, Inward Movement) are formally preserved as <strong>UNAVAILABLE</strong> with explicit reason. No fake zeroes are fabricated.</span>
               </div>
             )}
             {journey.vcn === 'SYNVCN2600070' && (
-              <div className="bg-sky-50 border-b border-sky-200 px-5 py-2 text-xs text-sky-900 flex items-center gap-2">
-                <span className="font-bold text-sky-700">🛡 DQ-010 CASE:</span>
+              <div className="bg-[var(--color-accent-soft)] border-b border-[var(--color-accent-soft-border)] px-6 py-2.5 text-xs text-[var(--color-text-primary)] flex items-center gap-2 flex-shrink-0">
+                <StatusBadge label="DQ-010 Case" tone="neutral" />
                 <span>Two conflicting ATA timestamps received (AIS 15:22 vs Manual Log 20:22). Both observations are preserved in canonical storage; inspect the <strong>Conflicts</strong> tab for the winning selection.</span>
               </div>
             )}
             {journey.vcn === 'SYNVCN2600045' && (
-              <div className="bg-red-50 border-b border-red-200 px-5 py-2 text-xs text-red-900 flex items-center gap-2">
-                <span className="font-bold text-red-700">🛡 DQ-006 CASE:</span>
+              <div className="bg-[var(--color-critical-bg)] border-b border-[var(--color-critical-border)] px-6 py-2.5 text-xs text-[var(--color-text-primary)] flex items-center gap-2 flex-shrink-0">
+                <StatusBadge label="DQ-006 Case" tone="critical" />
                 <span>Chronology sequence violation detected (Pilot On Board before scheduled). Quarantined by Data Quality Engine without dropping the raw observation.</span>
               </div>
             )}
 
             {/* Tabs */}
-            <div className="bg-white border-b border-slate-200 px-5 flex gap-1 flex-shrink-0">
-              {(
-                [
-                  { id: 'swimlane', label: 'Operational Swimlane' },
-                  { id: 'timeline', label: 'Stage Details' },
-                  { id: 'events', label: `Raw Envelopes (${rawEvents.length})` },
-                  { id: 'decomposition', label: 'Time Decomposition' },
-                  { id: 'conflicts', label: `Conflicts (${conflicts.filter((c) => c.conflict_detected).length})` },
-                  { id: 'history', label: 'History' },
-                ] as const
-              ).map((t) => (
-                <button
-                  key={t.id}
-                  onClick={() => {
-                    setTab(t.id)
-                    if (t.id === 'history') handleLoadHistory()
-                  }}
-                  className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors cursor-pointer ${
-                    tab === t.id
-                      ? 'border-emerald-500 text-emerald-700 font-bold'
-                      : 'border-transparent text-slate-500 hover:text-slate-700'
-                  }`}
-                >
-                  {t.label}
-                </button>
-              ))}
+            <div className="bg-[var(--color-surface)] border-b border-[var(--color-border)] px-6 flex gap-1 flex-shrink-0 overflow-x-auto">
+              {TABS.map((t) => {
+                const count =
+                  t.id === 'events'
+                    ? rawEvents.length
+                    : t.id === 'conflicts'
+                    ? conflicts.filter((c) => c.conflict_detected).length
+                    : null
+                return (
+                  <button
+                    key={t.id}
+                    onClick={() => {
+                      setTab(t.id)
+                      if (t.id === 'history') handleLoadHistory()
+                    }}
+                    className={`px-3 py-2.5 text-xs font-medium border-b-2 transition-colors cursor-pointer whitespace-nowrap ${
+                      tab === t.id
+                        ? 'border-[var(--color-accent)] text-[var(--color-accent)]'
+                        : 'border-transparent text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'
+                    }`}
+                  >
+                    {t.label}
+                    {count !== null && <span className="ml-1 text-[var(--color-text-tertiary)]">({count})</span>}
+                  </button>
+                )
+              })}
             </div>
 
             {/* Tab content */}
-            <div className="flex-1 overflow-y-auto p-4">
+            <div className="flex-1 overflow-y-auto p-6">
               {/* ── Operational Swimlane ── */}
               {tab === 'swimlane' && (
-                <div className="space-y-4">
+                <div className="space-y-5">
                   {/* Path comparison banner */}
-                  <div className="bg-white border border-slate-200 rounded p-3 text-xs">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="font-bold text-slate-800">
+                  <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg p-4 text-xs">
+                    <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+                      <span className="font-semibold text-sm text-[var(--color-text-primary)]">
                         Operational Flow: Standard Path vs Actual Reconstructed Path
                       </span>
-                      <span className="text-[11px] text-slate-500 font-mono">
-                        {journey.coverage_summary?.shifting_occurrences
-                          ? '⇄ Actual: Non-Standard Shifting Call'
-                          : '✓ Actual: Standard Port Call'}
-                      </span>
+                      <StatusBadge
+                        label={
+                          journey.coverage_summary?.shifting_occurrences
+                            ? 'Actual: Non-Standard Shifting Call'
+                            : 'Actual: Standard Port Call'
+                        }
+                        tone={journey.coverage_summary?.shifting_occurrences ? 'warning' : 'good'}
+                      />
                     </div>
-                    <div className="flex items-center gap-1.5 flex-wrap font-mono text-[10px] text-slate-600 bg-slate-50 p-2 rounded border border-slate-100">
-                      <span className="px-1.5 py-0.5 bg-slate-200 rounded text-slate-800 font-bold">Standard:</span>
+                    <div className="flex items-center gap-2 flex-wrap text-[var(--color-text-secondary)] bg-[var(--color-surface-muted)] p-3 rounded-md border border-[var(--color-border)]">
+                      <span className="px-2 py-0.5 bg-[var(--color-surface)] border border-[var(--color-border-strong)] rounded text-[var(--color-text-primary)] font-semibold">Standard:</span>
                       <span>Arrival</span>
-                      <span>→</span>
+                      <span className="text-[var(--color-text-tertiary)]">→</span>
                       <span>Anchorage Wait</span>
-                      <span>→</span>
+                      <span className="text-[var(--color-text-tertiary)]">→</span>
                       <span>Inward Pilotage</span>
-                      <span>→</span>
+                      <span className="text-[var(--color-text-tertiary)]">→</span>
                       <span>Berthing</span>
-                      <span>→</span>
+                      <span className="text-[var(--color-text-tertiary)]">→</span>
                       <span>Cargo Working</span>
-                      <span>→</span>
+                      <span className="text-[var(--color-text-tertiary)]">→</span>
                       <span>Unberthing</span>
-                      <span>→</span>
+                      <span className="text-[var(--color-text-tertiary)]">→</span>
                       <span>Outward Pilotage</span>
-                      <span>→</span>
+                      <span className="text-[var(--color-text-tertiary)]">→</span>
                       <span>Departure</span>
                     </div>
                   </div>
 
-                  {/* Horizontal visual swimlane ribbons */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-                    {journey.stages.map((s, idx) => {
-                      const isAvail = s.availability === 'AVAILABLE'
-                      const isViolation = s.deviation_type === 'SEQUENCE_VIOLATION'
-                      const isShift = s.shift_occurrence_index > 0
+                  {/* Horizontal visual timeline of stage cards */}
+                  <div className="relative">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                      {journey.stages.map((s, idx) => {
+                        const isAvail = s.availability === 'AVAILABLE'
+                        const isViolation = s.deviation_type === 'SEQUENCE_VIOLATION'
+                        const isShift = s.shift_occurrence_index > 0
 
-                      return (
-                        <div
-                          key={s.id}
-                          className={`rounded border p-3 flex flex-col justify-between bg-white text-xs shadow-2xs ${
-                            isViolation
-                              ? 'border-red-300 bg-red-50/50'
-                              : !isAvail
-                              ? 'border-slate-200 opacity-70'
-                              : isShift
-                              ? 'border-amber-300 bg-amber-50/30'
-                              : 'border-slate-200'
-                          }`}
-                        >
-                          <div>
-                            {/* Card top */}
-                            <div className="flex items-center justify-between gap-1 mb-1.5">
-                              <span className="font-mono text-[10px] font-bold text-slate-400">
-                                #{idx + 1}
-                              </span>
-                              <span
-                                className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${categoryColor(
-                                  s.time_category
-                                )}`}
-                              >
-                                {s.time_category.replace('_', ' ')}
-                              </span>
+                        return (
+                          <div
+                            key={s.id}
+                            className={`relative rounded-lg border p-4 flex flex-col justify-between bg-[var(--color-surface)] text-xs shadow-[0_1px_2px_rgba(15,23,42,0.04)] ${
+                              isViolation
+                                ? 'border-[var(--color-critical-border)]'
+                                : !isAvail
+                                ? 'border-[var(--color-border)] opacity-70'
+                                : isShift
+                                ? 'border-[var(--color-warning-border)]'
+                                : 'border-[var(--color-border)]'
+                            }`}
+                          >
+                            {/* Connector to next stage on wide layouts */}
+                            {idx < journey.stages.length - 1 && (
+                              <div
+                                className="hidden lg:block absolute top-1/2 -right-4 w-4 h-0.5 bg-[var(--color-accent-soft-border)]"
+                                aria-hidden="true"
+                              />
+                            )}
+                            <div>
+                              {/* Card top */}
+                              <div className="flex items-center justify-between gap-1 mb-2">
+                                <span className="text-[10px] font-semibold text-[var(--color-text-tertiary)] tabular-nums">
+                                  STAGE #{idx + 1}
+                                </span>
+                                <CategoryBadge cat={s.time_category} />
+                              </div>
+
+                              {/* Stage Name */}
+                              <div className="font-semibold text-[var(--color-text-primary)] text-sm truncate" title={s.stage_name}>
+                                {s.stage_name}
+                                {isShift && (
+                                  <span className="ml-1 text-[var(--color-warning)] font-normal">
+                                    #{s.shift_occurrence_index}
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Duration Ribbon Bar */}
+                              <div className="mt-3 mb-2">
+                                <div className="h-1.5 rounded-full bg-[var(--color-surface-muted)] overflow-hidden">
+                                  <div
+                                    className={`h-full rounded-full ${
+                                      isViolation
+                                        ? 'bg-[var(--color-critical)]'
+                                        : s.time_category === 'ACTIVE_SERVICE'
+                                        ? 'bg-[var(--color-good)]'
+                                        : s.time_category === 'PASSIVE_WAIT'
+                                        ? 'bg-[var(--color-neutral)]'
+                                        : s.time_category === 'HOLD'
+                                        ? 'bg-[var(--color-warning)]'
+                                        : 'bg-[var(--color-border-strong)]'
+                                    }`}
+                                    style={{ width: isAvail ? '100%' : '0%' }}
+                                  />
+                                </div>
+                              </div>
                             </div>
 
-                            {/* Stage Name */}
-                            <div className="font-bold text-slate-900 text-xs truncate" title={s.stage_name}>
-                              {s.stage_name}
-                              {isShift && (
-                                <span className="ml-1 text-amber-700 font-normal">
-                                  #{s.shift_occurrence_index}
+                            {/* Duration and timestamps */}
+                            <div className="mt-2 pt-3 border-t border-[var(--color-border)] space-y-1.5">
+                              <div className="flex items-center justify-between">
+                                <span className="text-[var(--color-text-tertiary)]">Duration</span>
+                                <span className="font-semibold text-[var(--color-text-primary)] tabular-nums">
+                                  {isAvail ? fmt(s.duration_hours) : 'UNAVAILABLE'}
                                 </span>
+                              </div>
+
+                              <div className="text-[10px] text-[var(--color-text-tertiary)] truncate">
+                                Start: {fmtTs(s.start_time)}
+                              </div>
+                              <div className="text-[10px] text-[var(--color-text-tertiary)] truncate">
+                                End: {fmtTs(s.end_time)}
+                              </div>
+
+                              {isViolation && (
+                                <div className="pt-1">
+                                  <StatusBadge label={s.deviation_detail?.description || 'Sequence violation'} tone="critical" />
+                                </div>
+                              )}
+                              {s.is_inferred && (
+                                <div className="pt-1">
+                                  <StatusBadge label="Inferred observation" tone="inferred" />
+                                </div>
                               )}
                             </div>
-
-                            {/* Duration Ribbon Bar */}
-                            <div className="mt-2 mb-1.5">
-                              <div className="h-2 rounded bg-slate-100 overflow-hidden">
-                                <div
-                                  className={`h-full rounded ${
-                                    isViolation
-                                      ? 'bg-red-500'
-                                      : s.time_category === 'ACTIVE_SERVICE'
-                                      ? 'bg-emerald-500'
-                                      : s.time_category === 'PASSIVE_WAIT'
-                                      ? 'bg-sky-500'
-                                      : s.time_category === 'HOLD'
-                                      ? 'bg-amber-500'
-                                      : 'bg-slate-400'
-                                  }`}
-                                  style={{ width: isAvail ? '100%' : '0%' }}
-                                />
-                              </div>
-                            </div>
                           </div>
-
-                          {/* Duration and timestamps */}
-                          <div className="mt-2 pt-2 border-t border-slate-100 font-mono text-[10px] space-y-1">
-                            <div className="flex items-center justify-between">
-                              <span className="text-slate-500">Duration:</span>
-                              <span className="font-bold text-slate-800">
-                                {isAvail ? fmt(s.duration_hours) : 'UNAVAILABLE'}
-                              </span>
-                            </div>
-
-                            <div className="text-[9px] text-slate-400 truncate">
-                              Start: {fmtTs(s.start_time)}
-                            </div>
-                            <div className="text-[9px] text-slate-400 truncate">
-                              End: {fmtTs(s.end_time)}
-                            </div>
-
-                            {isViolation && (
-                              <div className="text-red-700 font-bold text-[9px] mt-1">
-                                ⚠ {s.deviation_detail?.description || 'Sequence violation'}
-                              </div>
-                            )}
-                            {s.is_inferred && (
-                              <div className="text-purple-700 text-[9px] mt-1">
-                                ⚡ Inferred observation
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      )
-                    })}
+                        )
+                      })}
+                    </div>
                   </div>
                 </div>
               )}
 
               {/* ── Raw Envelopes Tab ── */}
               {tab === 'events' && (
-                <div className="bg-white rounded border border-slate-200 overflow-hidden">
-                  <div className="p-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between text-xs">
-                    <span className="font-bold text-slate-800">
+                <div className="bg-[var(--color-surface)] rounded-lg border border-[var(--color-border)] overflow-hidden">
+                  <div className="p-4 bg-[var(--color-surface-muted)] border-b border-[var(--color-border)] flex items-center justify-between text-xs flex-wrap gap-2">
+                    <span className="font-semibold text-sm text-[var(--color-text-primary)]">
                       Canonical Timestamp Envelopes &amp; Audit Trail
                     </span>
-                    <span className="text-slate-500 font-mono">
+                    <span className="text-[var(--color-text-secondary)]">
                       {rawEvents.length} preserved event occurrences
                     </span>
                   </div>
-                  <table className="w-full text-xs text-left">
-                    <thead className="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
-                      <tr>
-                        <th className="px-3 py-2">Event Name</th>
-                        <th className="px-3 py-2">Category</th>
-                        <th className="px-3 py-2 font-mono">Original String</th>
-                        <th className="px-3 py-2 font-mono">UTC Value</th>
-                        <th className="px-3 py-2">Source</th>
-                        <th className="px-3 py-2">Confidence</th>
-                        <th className="px-3 py-2">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 font-mono text-[11px]">
-                      {rawEvents.map((ev) => (
-                        <tr key={ev.id} className="hover:bg-slate-50">
-                          <td className="px-3 py-1.5 font-bold text-slate-900 font-sans">
-                            {ev.event_name}
-                          </td>
-                          <td className="px-3 py-1.5 text-slate-600 font-sans">
-                            {ev.category}
-                          </td>
-                          <td className="px-3 py-1.5 text-slate-700">
-                            {ev.original_string || '—'}
-                          </td>
-                          <td className="px-3 py-1.5 text-slate-800">
-                            {fmtTs(ev.utc_value)}
-                          </td>
-                          <td className="px-3 py-1.5 font-sans">
-                            <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 font-semibold text-[10px]">
-                              {ev.source_system}
-                            </span>
-                          </td>
-                          <td className="px-3 py-1.5 text-slate-700">
-                            {ev.confidence !== null ? `${(ev.confidence * 100).toFixed(0)}%` : '—'}
-                          </td>
-                          <td className="px-3 py-1.5 font-sans">
-                            <span
-                              className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                                ev.verification_status === 'Verified'
-                                  ? 'bg-emerald-100 text-emerald-800'
-                                  : ev.verification_status === 'Conflicting'
-                                  ? 'bg-red-100 text-red-800'
-                                  : 'bg-slate-100 text-slate-700'
-                              }`}
-                            >
-                              {ev.verification_status || 'Unverified'}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                  {rawEvents.length === 0 ? (
+                    <EmptyState title="No raw event occurrences" description="No canonical envelopes have been captured for this vessel call." />
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs text-left">
+                        <thead className="bg-[var(--color-surface-muted)] text-[var(--color-text-secondary)] font-semibold border-b border-[var(--color-border)]">
+                          <tr>
+                            <th className="px-4 py-2.5">Event Name</th>
+                            <th className="px-4 py-2.5">Category</th>
+                            <th className="px-4 py-2.5">Original String</th>
+                            <th className="px-4 py-2.5">UTC Value</th>
+                            <th className="px-4 py-2.5">Source</th>
+                            <th className="px-4 py-2.5">Confidence</th>
+                            <th className="px-4 py-2.5">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-[var(--color-border)]">
+                          {rawEvents.map((ev) => (
+                            <tr key={ev.id} className="hover:bg-[var(--color-surface-muted)]">
+                              <td className="px-4 py-3 font-semibold text-[var(--color-text-primary)]">
+                                {ev.event_name}
+                              </td>
+                              <td className="px-4 py-3 text-[var(--color-text-secondary)]">
+                                {ev.category}
+                              </td>
+                              <td className="px-4 py-3 text-[var(--color-text-secondary)]">
+                                {ev.original_string || '—'}
+                              </td>
+                              <td className="px-4 py-3 text-[var(--color-text-primary)]">
+                                {fmtTs(ev.utc_value)}
+                              </td>
+                              <td className="px-4 py-3">
+                                <StatusBadge label={ev.source_system} tone="neutral" showGlyph={false} />
+                              </td>
+                              <td className="px-4 py-3 text-[var(--color-text-secondary)] tabular-nums">
+                                {ev.confidence !== null ? `${(ev.confidence * 100).toFixed(0)}%` : '—'}
+                              </td>
+                              <td className="px-4 py-3">
+                                <StatusBadge
+                                  label={ev.verification_status || 'Unverified'}
+                                  tone={statusToTone(ev.verification_status)}
+                                  showGlyph={false}
+                                />
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
               )}
 
               {/* ── Stage Details (formerly Timeline) ── */}
               {tab === 'timeline' && (
-                <div className="space-y-1">
+                <div className="space-y-2">
                   {journey.stages.map((s, i) => (
                     <div
                       key={s.id}
-                      className={`rounded border px-3 py-2 text-xs ${
+                      className={`rounded-lg border px-4 py-3 text-xs bg-[var(--color-surface)] ${
                         s.availability !== 'AVAILABLE'
-                          ? 'border-slate-200 bg-white opacity-60'
+                          ? 'border-[var(--color-border)] opacity-60'
                           : s.deviation_type === 'SEQUENCE_VIOLATION'
-                          ? 'border-red-200 bg-red-50'
-                          : 'border-slate-200 bg-white'
+                          ? 'border-[var(--color-critical-border)] bg-[var(--color-critical-bg)]'
+                          : 'border-[var(--color-border)]'
                       }`}
                     >
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-[10px] text-slate-400 w-5 text-right">{i + 1}</span>
-                        <span className="font-semibold text-slate-800 flex-1 min-w-0 truncate">
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <span className="text-[10px] text-[var(--color-text-tertiary)] w-5 text-right tabular-nums">{i + 1}</span>
+                        <span className="font-semibold text-[var(--color-text-primary)] flex-1 min-w-0 truncate text-sm">
                           {s.stage_name}
                           {s.shift_occurrence_index > 0 && (
-                            <span className="ml-1 text-amber-600 font-normal">
+                            <span className="ml-1 text-[var(--color-warning)] font-normal">
                               #{s.shift_occurrence_index}
                             </span>
                           )}
                         </span>
                         {availabilityBadge(s)}
-                        <span
-                          className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${categoryColor(s.time_category)}`}
-                        >
-                          {s.time_category.replace('_', ' ')}
-                        </span>
+                        <CategoryBadge cat={s.time_category} />
                       </div>
                       {s.availability === 'AVAILABLE' && (
-                        <div className="flex gap-3 mt-1 ml-7 flex-wrap text-[10px] text-slate-500">
+                        <div className="flex gap-4 mt-2 ml-8 flex-wrap text-[var(--color-text-secondary)]">
                           <span>Start: {fmtTs(s.start_time)}</span>
                           <span>End: {fmtTs(s.end_time)}</span>
-                          <span className="font-semibold text-slate-700">Duration: {fmt(s.duration_hours)}</span>
+                          <span className="font-semibold text-[var(--color-text-primary)]">Duration: {fmt(s.duration_hours)}</span>
                           {s.deviation_type === 'SEQUENCE_VIOLATION' && (
-                            <span className="text-red-600 font-semibold">
-                              ⚠ {s.deviation_detail?.description}
-                            </span>
+                            <StatusBadge label={s.deviation_detail?.description || 'Sequence violation'} tone="critical" />
                           )}
                         </div>
                       )}
                       {s.availability !== 'AVAILABLE' && s.inference_reason && (
-                        <div className="ml-7 mt-0.5 text-[10px] text-slate-400 italic">
+                        <div className="ml-8 mt-1 text-[var(--color-text-tertiary)] italic">
                           {s.inference_reason}
                         </div>
                       )}
                       {s.is_inferred && s.inference_reason && (
-                        <div className="ml-7 mt-0.5 text-[10px] text-purple-600 italic">
-                          ⓘ Inferred: {s.inference_reason}
+                        <div className="ml-8 mt-1 text-[var(--color-inferred)] italic">
+                          Inferred: {s.inference_reason}
                         </div>
                       )}
                     </div>
@@ -780,22 +772,22 @@ function VesselJourneyContent() {
 
                   {/* Handovers */}
                   {journey.handovers.filter((h) => h.status === 'AVAILABLE').length > 0 && (
-                    <div className="mt-4 pt-4 border-t border-slate-200">
-                      <h3 className="text-xs font-bold text-slate-600 uppercase tracking-wide mb-2">
+                    <div className="mt-6 pt-5 border-t border-[var(--color-border)]">
+                      <h3 className="text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wide mb-3">
                         Stakeholder Handovers
                       </h3>
-                      <div className="space-y-1">
+                      <div className="space-y-2">
                         {journey.handovers
                           .filter((h) => h.status === 'AVAILABLE')
                           .map((h, i) => (
                             <div
                               key={i}
-                              className="rounded border border-sky-100 bg-sky-50 px-3 py-1.5 text-[10px] text-slate-600 flex gap-3 flex-wrap"
+                              className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2.5 text-xs text-[var(--color-text-secondary)] flex gap-4 flex-wrap"
                             >
                               <span>
-                                <span className="font-semibold">{h.from_actor ?? '—'}</span>
+                                <span className="font-semibold text-[var(--color-text-primary)]">{h.from_actor ?? '—'}</span>
                                 {' → '}
-                                <span className="font-semibold">{h.to_actor ?? '—'}</span>
+                                <span className="font-semibold text-[var(--color-text-primary)]">{h.to_actor ?? '—'}</span>
                               </span>
                               <span>At: {fmtTs(h.handover_time)}</span>
                               {h.wait_duration_hours != null && (
@@ -811,15 +803,15 @@ function VesselJourneyContent() {
 
                   {/* Deviation report */}
                   {journey.deviation_report && journey.deviation_report.length > 0 && (
-                    <div className="mt-4 pt-4 border-t border-slate-200">
-                      <h3 className="text-xs font-bold text-red-700 uppercase tracking-wide mb-2">
+                    <div className="mt-6 pt-5 border-t border-[var(--color-border)]">
+                      <h3 className="text-xs font-semibold text-[var(--color-critical)] uppercase tracking-wide mb-3">
                         Operational Deviations
                       </h3>
-                      <div className="space-y-1">
+                      <div className="space-y-2">
                         {journey.deviation_report.map((d, i) => (
                           <div
                             key={i}
-                            className="rounded border border-red-200 bg-red-50 px-3 py-1.5 text-[10px] text-red-800"
+                            className="rounded-lg border border-[var(--color-critical-border)] bg-[var(--color-critical-bg)] px-4 py-2.5 text-xs text-[var(--color-text-primary)]"
                           >
                             <span className="font-semibold">{d.stage}</span> — {d.type}
                           </div>
@@ -832,19 +824,19 @@ function VesselJourneyContent() {
 
               {/* ── Decomposition ── */}
               {tab === 'decomposition' && (
-                <div className="bg-white rounded border border-slate-200 p-4">
+                <div className="bg-[var(--color-surface)] rounded-lg border border-[var(--color-border)] p-5">
                   {journey.time_decomposition && journey.time_decomposition.status === 'AVAILABLE' ? (
                     <>
-                      <h3 className="text-xs font-bold text-slate-700 mb-3">
+                      <h3 className="text-sm font-semibold text-[var(--color-text-primary)] mb-4">
                         Active / Wait / Hold / Delay / Unclassified Decomposition
                       </h3>
                       <DecompositionBar d={journey.time_decomposition} />
-                      <table className="mt-4 w-full text-xs border-collapse">
+                      <table className="mt-6 w-full text-xs border-collapse">
                         <thead>
-                          <tr className="border-b border-slate-200">
-                            <th className="text-left py-1.5 text-slate-500 font-semibold">Category</th>
-                            <th className="text-right py-1.5 text-slate-500 font-semibold">Hours</th>
-                            <th className="text-right py-1.5 text-slate-500 font-semibold">%</th>
+                          <tr className="border-b border-[var(--color-border)]">
+                            <th className="text-left py-2 text-[var(--color-text-secondary)] font-semibold">Category</th>
+                            <th className="text-right py-2 text-[var(--color-text-secondary)] font-semibold">Hours</th>
+                            <th className="text-right py-2 text-[var(--color-text-secondary)] font-semibold">%</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -856,38 +848,35 @@ function VesselJourneyContent() {
                                   ? ((val / journey.time_decomposition!.total_hours) * 100).toFixed(1)
                                   : '—'
                               return (
-                                <tr key={cat} className="border-b border-slate-100">
-                                  <td className="py-1.5">
-                                    <span
-                                      className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${categoryColor(cat)}`}
-                                    >
-                                      {cat.replace('_', ' ')}
-                                    </span>
+                                <tr key={cat} className="border-b border-[var(--color-border)]">
+                                  <td className="py-2.5">
+                                    <CategoryBadge cat={cat} />
                                   </td>
-                                  <td className="text-right text-slate-700 font-mono">{fmt(val)}</td>
-                                  <td className="text-right text-slate-500">{pct}%</td>
+                                  <td className="text-right text-[var(--color-text-primary)] tabular-nums">{fmt(val)}</td>
+                                  <td className="text-right text-[var(--color-text-secondary)] tabular-nums">{pct}%</td>
                                 </tr>
                               )
                             }
                           )}
-                          <tr className="font-semibold text-slate-800">
-                            <td className="py-2">Total</td>
-                            <td className="text-right font-mono">
+                          <tr className="font-semibold text-[var(--color-text-primary)]">
+                            <td className="py-3">Total</td>
+                            <td className="text-right tabular-nums">
                               {fmt(journey.time_decomposition.total_hours)}
                             </td>
                             <td className="text-right">100%</td>
                           </tr>
                         </tbody>
                       </table>
-                      <p className="mt-3 text-[10px] text-slate-400 italic">
+                      <p className="mt-4 text-xs text-[var(--color-text-tertiary)] italic">
                         Components are non-overlapping. Shifting time is carved out of the containing
                         stage&apos;s bucket and recorded under DELAY.
                       </p>
                     </>
                   ) : (
-                    <p className="text-sm text-slate-500 italic">
-                      Time decomposition is UNAVAILABLE — insufficient stage data to compute.
-                    </p>
+                    <EmptyState
+                      title="Time decomposition unavailable"
+                      description="Insufficient stage data to compute the active/wait/hold/delay breakdown."
+                    />
                   )}
                 </div>
               )}
@@ -896,62 +885,56 @@ function VesselJourneyContent() {
               {tab === 'conflicts' && (
                 <div className="space-y-3">
                   {conflicts.filter((c) => c.conflict_detected).length === 0 ? (
-                    <p className="text-sm text-slate-500 italic">
-                      No observation conflicts detected for this vessel call.
-                    </p>
+                    <EmptyState title="No observation conflicts" description="No observation conflicts detected for this vessel call." />
                   ) : (
                     conflicts
                       .filter((c) => c.conflict_detected)
                       .map((c) => (
                         <div
                           key={c.id}
-                          className="bg-white rounded border border-amber-200 px-4 py-3 text-xs"
+                          className="bg-[var(--color-surface)] rounded-lg border border-[var(--color-warning-border)] px-5 py-4 text-xs"
                         >
-                          <div className="flex items-center gap-2 mb-2">
-                            <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-semibold text-[10px]">
-                              CONFLICT
-                            </span>
-                            <span className="font-semibold text-slate-700">
+                          <div className="flex items-center gap-2 mb-3 flex-wrap">
+                            <StatusBadge label="Conflict" tone="warning" />
+                            <span className="font-semibold text-[var(--color-text-primary)]">
                               Event Definition: {c.event_definition_id.slice(0, 8)}…
                             </span>
-                            <span className="text-slate-400 text-[10px]">
+                            <span className="text-[var(--color-text-tertiary)]">
                               Method: {c.selection_method}
                             </span>
                           </div>
                           {c.selection_reasoning?.comparison && (
-                            <div className="space-y-1 mt-2">
-                              <p className="text-[10px] font-semibold text-slate-600 uppercase tracking-wide">
+                            <div className="space-y-1.5 mt-2">
+                              <p className="text-[10px] font-semibold text-[var(--color-text-secondary)] uppercase tracking-wide">
                                 Competing observations — all retained, none deleted:
                               </p>
                               {c.selection_reasoning.comparison.map((obs) => (
                                 <div
                                   key={obs.event_occurrence_id}
-                                  className={`rounded px-2 py-1 flex gap-3 flex-wrap text-[10px] ${
+                                  className={`rounded-md px-3 py-2 flex gap-4 flex-wrap items-center ${
                                     obs.selected
-                                      ? 'bg-emerald-50 border border-emerald-200'
-                                      : 'bg-slate-50 border border-slate-200'
+                                      ? 'bg-[var(--color-good-bg)] border border-[var(--color-good-border)]'
+                                      : 'bg-[var(--color-surface-muted)] border border-[var(--color-border)]'
                                   }`}
                                 >
-                                  <span className="font-mono text-slate-500">
+                                  <span className="text-[var(--color-text-tertiary)]">
                                     {obs.event_occurrence_id.slice(0, 8)}…
                                   </span>
-                                  <span>Source: <strong>{obs.source_system}</strong></span>
-                                  <span>Verification: <strong>{obs.verification_status}</strong></span>
+                                  <span>Source: <strong className="text-[var(--color-text-primary)]">{obs.source_system}</strong></span>
+                                  <span>Verification: <strong className="text-[var(--color-text-primary)]">{obs.verification_status}</strong></span>
                                   <span>Confidence: {obs.confidence}</span>
                                   <span>UTC: {fmtTs(obs.utc_value)}</span>
-                                  {obs.selected && (
-                                    <span className="font-semibold text-emerald-700">✓ CANONICAL</span>
-                                  )}
+                                  {obs.selected && <StatusBadge label="Canonical" tone="good" />}
                                 </div>
                               ))}
                             </div>
                           )}
                           {c.selection_reasoning?.winning_reason && (
-                            <p className="mt-2 text-[10px] text-slate-500 italic">
+                            <p className="mt-3 text-[var(--color-text-secondary)] italic">
                               Selection rationale: {c.selection_reasoning.winning_reason}
                             </p>
                           )}
-                          <p className="mt-1.5 text-[10px] text-slate-400">
+                          <p className="mt-2 text-[var(--color-text-tertiary)]">
                             Decided by: {c.decided_by ?? '—'} at {fmtTs(c.decided_at)}
                           </p>
                         </div>
@@ -964,21 +947,21 @@ function VesselJourneyContent() {
               {tab === 'history' && (
                 <div>
                   {loadingHistory ? (
-                    <p className="text-sm text-slate-400">Loading history…</p>
+                    <LoadingState label="Loading history…" />
                   ) : historyRows.length === 0 ? (
-                    <p className="text-sm text-slate-500 italic">No reconstruction history yet.</p>
+                    <EmptyState title="No reconstruction history" description="No reconstruction runs have been recorded yet." />
                   ) : (
                     <div className="space-y-2">
                       {historyRows.map((h) => (
                         <div
                           key={h.run_version}
-                          className="bg-white rounded border border-slate-200 px-4 py-2.5 text-xs"
+                          className="bg-[var(--color-surface)] rounded-lg border border-[var(--color-border)] px-5 py-3 text-xs"
                         >
-                          <div className="flex items-center gap-3">
-                            <span className="font-semibold text-slate-700">v{h.run_version}</span>
-                            <span className="text-slate-400">Rule: {h.rule_version ?? '—'}</span>
-                            <span className="text-slate-400">Trigger: {h.triggered_by}</span>
-                            <span className="text-slate-400 ml-auto">{fmtTs(h.created_at)}</span>
+                          <div className="flex items-center gap-4 flex-wrap">
+                            <span className="font-semibold text-[var(--color-text-primary)]">v{h.run_version}</span>
+                            <span className="text-[var(--color-text-secondary)]">Rule: {h.rule_version ?? '—'}</span>
+                            <span className="text-[var(--color-text-secondary)]">Trigger: {h.triggered_by}</span>
+                            <span className="text-[var(--color-text-tertiary)] ml-auto">{fmtTs(h.created_at)}</span>
                           </div>
                         </div>
                       ))}
@@ -996,7 +979,7 @@ function VesselJourneyContent() {
 
 export default function VesselJourneyPage() {
   return (
-    <React.Suspense fallback={<div className="p-8 text-xs text-slate-500">Loading Vessel Journey...</div>}>
+    <React.Suspense fallback={<LoadingState className="p-8" label="Loading Vessel Journey..." />}>
       <VesselJourneyContent />
     </React.Suspense>
   )

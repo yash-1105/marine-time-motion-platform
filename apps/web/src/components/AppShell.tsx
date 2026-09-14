@@ -14,6 +14,11 @@ interface NavItem {
   glyph: string
 }
 
+interface NavGroup {
+  label: string
+  items: NavItem[]
+}
+
 const ALL_ROLES = [
   'Platform Administrator',
   'Data Steward',
@@ -26,113 +31,142 @@ const ALL_ROLES = [
   'Integration Service Account',
 ]
 
-const NAV_ITEMS: NavItem[] = [
-  { label: 'Executive Dashboard', path: '/', requiredAction: 'view', glyph: '🏛' },
-  { label: 'Vessel Calls', path: '/vessel-calls', requiredAction: 'view', glyph: '🚢' },
-  { label: 'Vessel Journey', path: '/vessel-journey', requiredAction: 'view', glyph: '⏱' },
-  { label: 'Data Quality', path: '/data-quality', requiredAction: 'view', glyph: '🛡' },
-  { label: 'Time & Motion Explorer', path: '/time-and-motion', requiredAction: 'view', glyph: '⚡' },
-  { label: 'Governed KPIs', path: '/kpis', requiredAction: 'view', glyph: '🎯' },
-  { label: 'Delays & Bottlenecks', path: '/delays', requiredAction: 'view', glyph: '⏳' },
-  { label: 'Alerts & Actions', path: '/alerts', requiredAction: 'view', glyph: '🚨' },
-  { label: 'Identity & Merges', path: '/identity', requiredAction: 'view', glyph: '🔗' },
-  { label: 'Data Ingestion', path: '/ingestion', requiredAction: 'view', glyph: '📥' },
+const NAV_GROUPS: NavGroup[] = [
+  {
+    label: 'Overview',
+    items: [{ label: 'Executive Dashboard', path: '/', requiredAction: 'view', glyph: '▦' }],
+  },
+  {
+    label: 'Operations',
+    items: [
+      { label: 'Vessel Calls', path: '/vessel-calls', requiredAction: 'view', glyph: '⚓' },
+      { label: 'Vessel Journey', path: '/vessel-journey', requiredAction: 'view', glyph: '⇄' },
+      { label: 'Data Ingestion', path: '/ingestion', requiredAction: 'view', glyph: '⤓' },
+    ],
+  },
+  {
+    label: 'Analytics',
+    items: [
+      { label: 'Time & Motion Explorer', path: '/time-and-motion', requiredAction: 'view', glyph: '◰' },
+      { label: 'Governed KPIs', path: '/kpis', requiredAction: 'view', glyph: '◎' },
+      { label: 'Delays & Bottlenecks', path: '/delays', requiredAction: 'view', glyph: '⏳' },
+      { label: 'Alerts & Actions', path: '/alerts', requiredAction: 'view', glyph: '☢' },
+    ],
+  },
+  {
+    label: 'Data Governance',
+    items: [
+      { label: 'Data Quality', path: '/data-quality', requiredAction: 'view', glyph: '✔' },
+      { label: 'Identity & Merges', path: '/identity', requiredAction: 'view', glyph: '⧉' },
+    ],
+  },
 ]
+
+const ALL_NAV_ITEMS = NAV_GROUPS.flatMap((g) => g.items)
+
+const PAGE_TITLES: Record<string, string> = Object.fromEntries(
+  ALL_NAV_ITEMS.map((item) => [item.path, item.label])
+)
 
 export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const pathname = usePathname()
   const { user, roles, permissions, isSynthetic, can, switchRole, logout } = useAuth()
 
   const currentRole = roles[0] || 'Platform Administrator'
-
-  // Filter navigation items by permission action payload from API
-  const visibleNavItems = NAV_ITEMS.filter((item) => can(item.requiredAction))
+  const currentTitle = PAGE_TITLES[pathname] || 'Marine Time & Motion'
 
   return (
-    <div className="flex flex-col h-screen w-screen overflow-hidden bg-slate-900 text-slate-900">
-      {/* 1. Mandatory Synthetic Data Banner */}
-      <SyntheticBanner isSynthetic={isSynthetic} />
-
-      <div className="flex flex-1 overflow-hidden">
-        {/* 2. Sidebar with Role-Aware Navigation */}
-        <aside className="w-60 bg-slate-950 text-slate-200 flex flex-col flex-shrink-0 border-r border-slate-800">
-          <div className="p-3 border-b border-slate-800 font-bold text-sm tracking-wide flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 inline-block shadow-xs shadow-emerald-400"></span>
-            <span className="text-white font-semibold">Marine Control Room</span>
-          </div>
-
-          <div className="px-3 py-2 bg-slate-900/60 border-b border-slate-800">
-            <div className="flex items-center justify-between">
-              <label htmlFor="role-select" className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">
-                Role Context
-              </label>
-              <button
-                onClick={() => logout()}
-                className="text-[10px] text-slate-500 hover:text-slate-300 cursor-pointer"
-                title="Sign out"
-              >
-                Sign out
-              </button>
-            </div>
-            <select
-              id="role-select"
-              aria-label="Switch Role"
-              value={currentRole}
-              onChange={(e) => switchRole(e.target.value)}
-              className="w-full mt-1 bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-xs text-emerald-400 font-semibold focus:outline-none focus:ring-1 focus:ring-emerald-500 cursor-pointer"
-            >
-              {ALL_ROLES.map((r) => (
-                <option key={r} value={r}>
-                  {r}
-                </option>
-              ))}
-            </select>
-            <div className="text-[10px] text-slate-500 truncate mt-1">
-              {user?.email || 'admin@port.local'}
-            </div>
-          </div>
-
-          <nav className="flex-1 py-2 overflow-y-auto" aria-label="Primary Navigation">
-            <ul className="space-y-0.5 px-2">
-              {visibleNavItems.map((item) => {
-                const isActive = pathname === item.path
-                return (
-                  <li key={item.path}>
-                    <Link
-                      href={item.path}
-                      className={`flex items-center gap-2 px-2.5 py-1.5 text-xs rounded font-medium transition-colors ${
-                        isActive
-                          ? 'bg-emerald-600 text-white shadow-xs'
-                          : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                      }`}
-                    >
-                      <span className="text-sm">{item.glyph}</span>
-                      <span className="truncate">{item.label}</span>
-                    </Link>
-                  </li>
-                )
-              })}
-            </ul>
-          </nav>
-
-          <div className="p-3 border-t border-slate-800 text-[10px] text-slate-400 flex items-center justify-between">
-            <span>Auth: {permissions.length} actions</span>
-            <span className="text-emerald-400 font-bold">V1 LIVE</span>
-          </div>
-        </aside>
-
-        {/* 3. Main Workspace */}
-        <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-slate-100">
-          {/* Global Filter Bar wrapped in Suspense */}
-          <React.Suspense fallback={<div className="h-9 bg-slate-900 border-b border-slate-800" />}>
-            <GlobalFilterBar />
-          </React.Suspense>
-
-          {/* Screen Content Container */}
-          <main className="flex-1 overflow-hidden flex flex-col min-w-0">
-            {children}
-          </main>
+    <div className="flex h-screen w-screen overflow-hidden bg-[var(--color-bg)] text-[var(--color-text-primary)]">
+      {/* Sidebar */}
+      <aside className="w-64 bg-[var(--color-surface)] border-r border-[var(--color-border)] flex flex-col flex-shrink-0">
+        <div className="h-14 px-4 flex items-center gap-2 border-b border-[var(--color-border)]">
+          <span className="w-2 h-2 rounded-full bg-[var(--color-accent)] inline-block" aria-hidden="true" />
+          <span className="font-semibold text-sm tracking-tight text-[var(--color-text-primary)]">
+            Marine Time &amp; Motion
+          </span>
         </div>
+
+        <nav className="flex-1 py-3 overflow-y-auto" aria-label="Primary Navigation">
+          {NAV_GROUPS.map((group) => {
+            const visibleItems = group.items.filter((item) => can(item.requiredAction))
+            if (visibleItems.length === 0) return null
+            return (
+              <div key={group.label} className="mb-4 px-3">
+                <div className="px-2 mb-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--color-text-tertiary)]">
+                  {group.label}
+                </div>
+                <ul className="space-y-0.5">
+                  {visibleItems.map((item) => {
+                    const isActive = pathname === item.path
+                    return (
+                      <li key={item.path}>
+                        <Link
+                          href={item.path}
+                          aria-current={isActive ? 'page' : undefined}
+                          className={`flex items-center gap-2.5 px-2.5 py-1.5 text-sm rounded-md transition-colors ${
+                            isActive
+                              ? 'bg-[var(--color-accent-soft)] text-[var(--color-accent)] font-medium'
+                              : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-muted)] hover:text-[var(--color-text-primary)]'
+                          }`}
+                        >
+                          <span className="text-sm w-4 text-center flex-shrink-0" aria-hidden="true">
+                            {item.glyph}
+                          </span>
+                          <span className="truncate">{item.label}</span>
+                        </Link>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </div>
+            )
+          })}
+        </nav>
+
+        <div className="p-3 border-t border-[var(--color-border)]">
+          <div className="flex items-center justify-between mb-1">
+            <label htmlFor="role-select" className="text-[10px] uppercase tracking-wider text-[var(--color-text-tertiary)] font-semibold">
+              Role
+            </label>
+            <button
+              onClick={() => logout()}
+              className="text-[10px] text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] cursor-pointer"
+            >
+              Sign out
+            </button>
+          </div>
+          <select
+            id="role-select"
+            aria-label="Switch Role"
+            value={currentRole}
+            onChange={(e) => switchRole(e.target.value)}
+            className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded-md px-2 py-1.5 text-xs text-[var(--color-text-primary)] font-medium focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] cursor-pointer"
+          >
+            {ALL_ROLES.map((r) => (
+              <option key={r} value={r}>
+                {r}
+              </option>
+            ))}
+          </select>
+          <div className="text-[11px] text-[var(--color-text-tertiary)] truncate mt-1.5">
+            {user?.email || 'admin@port.local'} &middot; {permissions.length} actions
+          </div>
+        </div>
+      </aside>
+
+      {/* Main workspace */}
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        {/* Header */}
+        <header className="h-14 flex-shrink-0 px-6 flex items-center justify-between border-b border-[var(--color-border)] bg-[var(--color-surface)]">
+          <h1 className="text-sm font-semibold text-[var(--color-text-primary)]">{currentTitle}</h1>
+          <SyntheticBanner isSynthetic={isSynthetic} />
+        </header>
+
+        <React.Suspense fallback={<div className="h-12 bg-[var(--color-surface)] border-b border-[var(--color-border)]" />}>
+          <GlobalFilterBar />
+        </React.Suspense>
+
+        <main className="flex-1 overflow-y-auto min-w-0 flex flex-col">{children}</main>
       </div>
     </div>
   )

@@ -2,6 +2,7 @@
 
 import React, { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { LoadingState } from '@/components/ui'
 
 export default function AlertsRedirectPage() {
   const router = useRouter()
@@ -11,11 +12,8 @@ export default function AlertsRedirectPage() {
   }, [router])
 
   return (
-    <div className="flex h-full w-full items-center justify-center p-8 text-slate-500">
-      <div className="text-center space-y-2">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600 mx-auto"></div>
-        <p className="text-sm">Loading Alerts &amp; Operational Actions...</p>
-      </div>
+    <div className="flex h-full w-full items-center justify-center p-8">
+      <LoadingState label="Loading Alerts & Operational Actions…" />
     </div>
   )
 }

@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { useAuth } from '../../lib/auth-context'
+import { PageHeader, StatusBadge, EmptyState, ErrorState, LoadingState } from '@/components/ui'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
@@ -224,51 +225,26 @@ function VesselCallsContent() {
   }, [calls])
 
   return (
-    <div className="flex-1 flex flex-col h-full overflow-hidden bg-slate-100 text-slate-900">
-      {/* 1. Header Toolbar & Real Operational KPI Pills */}
-      <div className="bg-white border-b border-slate-200 px-6 py-3 flex-shrink-0 flex items-center justify-between gap-4 flex-wrap">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-base font-bold text-slate-900 tracking-tight">
-              Consolidated Vessel Calls
-            </h1>
-            <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-slate-100 border border-slate-300 text-slate-700">
-              {filteredCalls.length} calls
-            </span>
+    <div className="flex-1 flex flex-col h-full overflow-hidden bg-[var(--color-bg)] text-[var(--color-text-primary)]">
+      {/* 1. Page Header & Real Operational KPI Pills */}
+      <PageHeader
+        title="Consolidated Vessel Calls"
+        description="Real-time port calls reconciled across AIS, TOS, and Marine Services with deterministic lead times and full traceability."
+        meta={
+          <div className="flex items-center gap-2 flex-wrap">
+            <StatusBadge label={`${filteredCalls.length} calls`} tone="neutral" showGlyph={false} />
+            <StatusBadge label={`Active Base: ${stats.total}`} tone="neutral" showGlyph={false} />
+            <StatusBadge label={`Shifting: ${stats.withShift}`} tone="warning" showGlyph={false} />
+            <StatusBadge label={`Early Svc: ${stats.earlyArrival + stats.earlySailing}`} tone="good" showGlyph={false} />
+            {stats.quarantined > 0 && (
+              <StatusBadge label={`Quarantined: ${stats.quarantined}`} tone="critical" showGlyph={false} />
+            )}
           </div>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Real-time port calls reconciled across AIS, TOS, and Marine Services with deterministic lead times and full traceability.
-          </p>
-        </div>
-
-        {/* Operational KPI summary pills */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 border border-slate-200 rounded text-xs">
-            <span className="text-slate-500">Active Base:</span>
-            <span className="font-bold text-slate-800">{stats.total}</span>
-          </div>
-
-          <div className="flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 border border-amber-200 rounded text-xs text-amber-800">
-            <span className="font-semibold">⇄ Shifting:</span>
-            <span className="font-bold">{stats.withShift}</span>
-          </div>
-
-          <div className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 border border-emerald-200 rounded text-xs text-emerald-800">
-            <span className="font-semibold">⚡ Early Svc:</span>
-            <span className="font-bold">{stats.earlyArrival + stats.earlySailing}</span>
-          </div>
-
-          {stats.quarantined > 0 && (
-            <div className="flex items-center gap-1.5 px-2.5 py-1 bg-red-50 border border-red-200 rounded text-xs text-red-800">
-              <span className="font-semibold">✕ Quarantined:</span>
-              <span className="font-bold">{stats.quarantined}</span>
-            </div>
-          )}
-        </div>
-      </div>
+        }
+      />
 
       {/* 2. Search & Controls Bar */}
-      <div className="bg-slate-50 border-b border-slate-200 px-6 py-2.5 flex items-center justify-between gap-4 flex-wrap flex-shrink-0">
+      <div className="bg-[var(--color-surface-muted)] border-b border-[var(--color-border)] px-6 py-2.5 flex items-center justify-between gap-4 flex-wrap flex-shrink-0">
         <div className="flex items-center gap-3 flex-1 min-w-[280px]">
           {/* Instant Search input */}
           <div className="relative flex-1 max-w-md">
@@ -280,13 +256,13 @@ function VesselCallsContent() {
                 setSearchTerm(e.target.value)
                 setPage(1)
               }}
-              className="w-full text-xs bg-white border border-slate-300 rounded px-3 py-1.5 pl-8 focus:outline-none focus:ring-1 focus:ring-cyan-600 shadow-2xs"
+              className="w-full text-xs bg-[var(--color-surface)] border border-[var(--color-border)] rounded-md px-3 py-1.5 pl-8 focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] text-[var(--color-text-primary)]"
             />
-            <span className="absolute left-2.5 top-1.5 text-slate-400 text-xs">🔍</span>
+            <span className="absolute left-2.5 top-1.5 text-[var(--color-text-tertiary)] text-xs">🔍</span>
             {searchTerm && (
               <button
                 onClick={() => setSearchTerm('')}
-                className="absolute right-2.5 top-1.5 text-slate-400 hover:text-slate-600 text-xs"
+                className="absolute right-2.5 top-1.5 text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] text-xs cursor-pointer"
               >
                 ✕
               </button>
@@ -294,7 +270,7 @@ function VesselCallsContent() {
           </div>
 
           {/* Include Merged Records Toggle */}
-          <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer select-none">
+          <label className="flex items-center gap-1.5 text-xs text-[var(--color-text-secondary)] cursor-pointer select-none">
             <input
               type="checkbox"
               checked={showMerged}
@@ -302,14 +278,14 @@ function VesselCallsContent() {
                 setShowMerged(e.target.checked)
                 setPage(1)
               }}
-              className="rounded text-cyan-600 focus:ring-cyan-500"
+              className="rounded border-[var(--color-border-strong)] text-[var(--color-accent)] focus:ring-[var(--color-accent)]"
             />
             <span>Show Merged Duplicates</span>
           </label>
         </div>
 
         {/* Page size selector */}
-        <div className="flex items-center gap-2 text-xs text-slate-600">
+        <div className="flex items-center gap-2 text-xs text-[var(--color-text-secondary)]">
           <span>Rows per page:</span>
           <select
             value={pageSize}
@@ -317,7 +293,7 @@ function VesselCallsContent() {
               setPageSize(Number(e.target.value))
               setPage(1)
             }}
-            className="bg-white border border-slate-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-cyan-600"
+            className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-md px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] cursor-pointer"
           >
             <option value={25}>25</option>
             <option value={50}>50</option>
@@ -327,83 +303,72 @@ function VesselCallsContent() {
       </div>
 
       {/* 3. Main Data Table */}
-      <div className="flex-1 overflow-auto bg-white">
+      <div className="flex-1 overflow-auto bg-[var(--color-surface)]">
         {loading ? (
-          <div className="h-64 flex flex-col items-center justify-center text-slate-500 text-sm gap-2">
-            <span className="inline-block animate-spin text-xl">⚙</span>
-            <span>Loading consolidated vessel calls and calculated lead times…</span>
-          </div>
+          <LoadingState label="Loading consolidated vessel calls and calculated lead times…" />
         ) : error ? (
-          <div className="p-8 text-center">
-            <p className="text-sm font-semibold text-red-600 mb-2">Error Loading Vessel Calls</p>
-            <p className="text-xs text-slate-600 mb-4">{error}</p>
-            <button
-              onClick={fetchData}
-              className="px-3 py-1.5 bg-slate-800 text-white rounded text-xs hover:bg-slate-700"
-            >
-              Retry
-            </button>
-          </div>
+          <ErrorState title="Error Loading Vessel Calls" description={error} onRetry={fetchData} />
         ) : paginatedCalls.length === 0 ? (
-          <div className="h-64 flex flex-col items-center justify-center text-slate-500 text-sm">
-            <span>No vessel calls found matching current filters.</span>
-          </div>
+          <EmptyState
+            title="No vessel calls found"
+            description="No vessel calls match the current filters. Try adjusting search or filter criteria."
+          />
         ) : (
           <table className="w-full border-collapse text-left text-xs" aria-label="Consolidated Vessel Calls Table">
-            <thead className="bg-slate-900 text-slate-200 sticky top-0 z-10 select-none">
+            <thead className="bg-[var(--color-surface-muted)] text-[var(--color-text-secondary)] sticky top-0 z-10 select-none">
               <tr>
                 <th
                   onClick={() => handleSort('vcn')}
-                  className="px-3 py-2.5 font-semibold text-slate-200 border-b border-slate-700 cursor-pointer hover:text-cyan-400 whitespace-nowrap"
+                  className="px-3 py-2.5 font-semibold border-b border-[var(--color-border)] cursor-pointer hover:text-[var(--color-accent)] whitespace-nowrap"
                 >
                   VCN {sortBy === 'vcn' && (sortDir === 'asc' ? '▲' : '▼')}
                 </th>
                 <th
                   onClick={() => handleSort('vessel_name')}
-                  className="px-3 py-2.5 font-semibold text-slate-200 border-b border-slate-700 cursor-pointer hover:text-cyan-400"
+                  className="px-3 py-2.5 font-semibold border-b border-[var(--color-border)] cursor-pointer hover:text-[var(--color-accent)]"
                 >
                   Vessel Name &amp; IMO {sortBy === 'vessel_name' && (sortDir === 'asc' ? '▲' : '▼')}
                 </th>
-                <th className="px-3 py-2.5 font-semibold text-slate-200 border-b border-slate-700">
+                <th className="px-3 py-2.5 font-semibold border-b border-[var(--color-border)]">
                   Type / Cargo
                 </th>
-                <th className="px-3 py-2.5 font-semibold text-slate-200 border-b border-slate-700">
+                <th className="px-3 py-2.5 font-semibold border-b border-[var(--color-border)]">
                   Quality Status
                 </th>
-                <th className="px-3 py-2.5 font-semibold text-slate-200 border-b border-slate-700">
+                <th className="px-3 py-2.5 font-semibold border-b border-[var(--color-border)]">
                   Journey
                 </th>
-                <th className="px-3 py-2.5 font-semibold text-slate-200 border-b border-slate-700">
+                <th className="px-3 py-2.5 font-semibold border-b border-[var(--color-border)]">
                   Arrival (ATA)
                 </th>
-                <th className="px-3 py-2.5 font-semibold text-slate-200 border-b border-slate-700">
+                <th className="px-3 py-2.5 font-semibold border-b border-[var(--color-border)]">
                   Departure (ATD)
                 </th>
                 <th
                   onClick={() => handleSort('turnaround_hours')}
-                  className="px-3 py-2.5 font-semibold text-slate-200 border-b border-slate-700 text-right cursor-pointer hover:text-cyan-400 whitespace-nowrap"
+                  className="px-3 py-2.5 font-semibold border-b border-[var(--color-border)] text-right cursor-pointer hover:text-[var(--color-accent)] whitespace-nowrap"
                   title="Click to sort. Click any cell to inspect mathematical formula and lineage."
                 >
                   Turnaround {sortBy === 'turnaround_hours' && (sortDir === 'asc' ? '▲' : '▼')}
                 </th>
-                <th className="px-3 py-2.5 font-semibold text-slate-200 border-b border-slate-700 text-right whitespace-nowrap">
+                <th className="px-3 py-2.5 font-semibold border-b border-[var(--color-border)] text-right whitespace-nowrap">
                   Anch. Wait
                 </th>
-                <th className="px-3 py-2.5 font-semibold text-slate-200 border-b border-slate-700 text-right whitespace-nowrap">
+                <th className="px-3 py-2.5 font-semibold border-b border-[var(--color-border)] text-right whitespace-nowrap">
                   Berth Stay
                 </th>
-                <th className="px-3 py-2.5 font-semibold text-slate-200 border-b border-slate-700 text-right whitespace-nowrap">
+                <th className="px-3 py-2.5 font-semibold border-b border-[var(--color-border)] text-right whitespace-nowrap">
                   Inward Mov.
                 </th>
-                <th className="px-3 py-2.5 font-semibold text-slate-200 border-b border-slate-700 text-right whitespace-nowrap">
+                <th className="px-3 py-2.5 font-semibold border-b border-[var(--color-border)] text-right whitespace-nowrap">
                   Delays
                 </th>
-                <th className="px-3 py-2.5 font-semibold text-slate-200 border-b border-slate-700 text-center">
+                <th className="px-3 py-2.5 font-semibold border-b border-[var(--color-border)] text-center">
                   Action
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-200 bg-white">
+            <tbody className="divide-y divide-[var(--color-border)] bg-[var(--color-surface)]">
               {paginatedCalls.map((c, idx) => {
                 const isQuarantined = c.quality_status === 'QUARANTINED'
                 const isFlagged = c.quality_status === 'FLAGGED'
@@ -411,89 +376,79 @@ function VesselCallsContent() {
                 return (
                   <tr
                     key={c.id}
-                    className={`hover:bg-slate-50 transition-colors ${
-                      idx % 2 === 1 ? 'bg-slate-50/50' : 'bg-white'
-                    } ${isQuarantined ? 'bg-red-50/40' : ''}`}
+                    className={`hover:bg-[var(--color-surface-muted)] transition-colors ${
+                      isQuarantined ? 'bg-[var(--color-critical-bg)]/40' : idx % 2 === 1 ? 'bg-[var(--color-surface-muted)]/40' : ''
+                    }`}
                   >
                     {/* VCN */}
-                    <td className="px-3 py-2 font-mono font-bold text-slate-900 whitespace-nowrap">
+                    <td className="px-3 py-2.5 font-mono font-semibold text-[var(--color-text-primary)] whitespace-nowrap">
                       <Link
                         href={`/vessel-journey?vcn=${c.vcn}`}
-                        className="text-cyan-700 hover:text-cyan-900 hover:underline flex items-center gap-1"
+                        className="text-[var(--color-accent)] hover:text-[var(--color-accent-hover)] hover:underline flex items-center gap-1.5"
                         title="Drill into Vessel Journey"
                       >
                         {c.vcn}
-                        {c.is_merged && (
-                          <span className="px-1 py-0.2 rounded text-[9px] font-bold bg-slate-200 text-slate-600">
-                            MERGED
-                          </span>
-                        )}
+                        {c.is_merged && <StatusBadge label="MERGED" tone="neutral" showGlyph={false} />}
                       </Link>
                     </td>
 
                     {/* Vessel Name & IMO */}
-                    <td className="px-3 py-2">
-                      <div className="font-semibold text-slate-900 truncate max-w-[180px]">{c.vessel_name}</div>
-                      <div className="text-[10px] text-slate-500 font-mono">
+                    <td className="px-3 py-2.5">
+                      <div className="font-medium text-[var(--color-text-primary)] truncate max-w-[180px]">{c.vessel_name}</div>
+                      <div className="text-[10px] text-[var(--color-text-tertiary)] font-mono">
                         {c.imo_number ? `IMO: ${c.imo_number}` : 'IMO: —'}
                       </div>
                     </td>
 
                     {/* Type & Cargo */}
-                    <td className="px-3 py-2 text-slate-700">
+                    <td className="px-3 py-2.5 text-[var(--color-text-secondary)]">
                       <div>{c.vessel_type || '—'}</div>
-                      <div className="text-[10px] text-slate-500">{c.cargo_type || '—'}</div>
+                      <div className="text-[10px] text-[var(--color-text-tertiary)]">{c.cargo_type || '—'}</div>
                     </td>
 
                     {/* Quality Status Badge */}
-                    <td className="px-3 py-2 whitespace-nowrap">
+                    <td className="px-3 py-2.5 whitespace-nowrap">
                       {isQuarantined ? (
-                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-700 border border-red-200">
-                          <span>✕</span> QUARANTINED
-                        </span>
+                        <StatusBadge status="QUARANTINED" />
                       ) : isFlagged ? (
-                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
-                          <span>⚠</span> FLAGGED ({c.issue_count})
-                        </span>
+                        <StatusBadge status="FLAGGED" label={`Flagged (${c.issue_count})`} />
                       ) : (
-                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                          <span>✓</span> CLEAN
-                        </span>
+                        <StatusBadge status="CLEAN" />
                       )}
                     </td>
 
                     {/* Journey Completeness */}
-                    <td className="px-3 py-2 whitespace-nowrap">
+                    <td className="px-3 py-2.5 whitespace-nowrap">
                       <div className="flex items-center gap-1.5">
-                        <div className="w-12 bg-slate-200 rounded-full h-1.5 overflow-hidden">
+                        <div className="w-12 bg-[var(--color-surface-muted)] border border-[var(--color-border)] rounded-full h-1.5 overflow-hidden">
                           <div
-                            className="bg-emerald-600 h-1.5 rounded-full"
+                            className="bg-[var(--color-good)] h-1.5 rounded-full"
                             style={{ width: `${c.journey_completeness_pct}%` }}
                           />
                         </div>
-                        <span className="text-[10px] font-mono text-slate-600">
+                        <span className="text-[10px] font-mono text-[var(--color-text-secondary)]">
                           {c.stages_available}/{c.stages_total}
                         </span>
                       </div>
                       {c.shifting_occurrences > 0 && (
-                        <div className="text-[9px] text-amber-700 font-semibold mt-0.5">
+                        <div className="text-[9px] text-[var(--color-warning)] font-semibold mt-0.5">
                           ⇄ {c.shifting_occurrences} shift
                         </div>
                       )}
                     </td>
 
                     {/* Arrival (ATA) */}
-                    <td className="px-3 py-2 font-mono text-[11px] text-slate-700 whitespace-nowrap">
+                    <td className="px-3 py-2.5 font-mono text-[11px] text-[var(--color-text-secondary)] whitespace-nowrap">
                       {fmtTimestamp(c.ata)}
                     </td>
 
                     {/* Departure (ATD) */}
-                    <td className="px-3 py-2 font-mono text-[11px] text-slate-700 whitespace-nowrap">
+                    <td className="px-3 py-2.5 font-mono text-[11px] text-[var(--color-text-secondary)] whitespace-nowrap">
                       {fmtTimestamp(c.atd)}
                     </td>
 
                     {/* Turnaround Duration (Clickable for Traceability) */}
-                    <td className="px-3 py-2 text-right font-mono whitespace-nowrap">
+                    <td className="px-3 py-2.5 text-right font-mono whitespace-nowrap">
                       {c.turnaround_status === 'AVAILABLE' && c.turnaround_hours !== null ? (
                         <button
                           onClick={() =>
@@ -503,7 +458,7 @@ function VesselCallsContent() {
                               traceability: c.durations_traceability['Turnaround'],
                             })
                           }
-                          className="font-bold text-slate-900 hover:text-cyan-700 hover:underline cursor-pointer"
+                          className="font-semibold text-[var(--color-text-primary)] hover:text-[var(--color-accent)] hover:underline cursor-pointer"
                           title="Click to view formula and data lineage"
                         >
                           {fmtHours(c.turnaround_hours)}
@@ -517,16 +472,16 @@ function VesselCallsContent() {
                               traceability: c.durations_traceability['Turnaround'],
                             })
                           }
-                          className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-500 border border-slate-200 hover:bg-slate-200 cursor-pointer"
+                          className="cursor-pointer"
                           title={c.turnaround_unavailable_reason || 'Metric unavailable'}
                         >
-                          ⊘ UNAVAILABLE
+                          <StatusBadge label="Unavailable" tone="neutral" />
                         </button>
                       )}
                     </td>
 
                     {/* Anchorage Wait */}
-                    <td className="px-3 py-2 text-right font-mono whitespace-nowrap">
+                    <td className="px-3 py-2.5 text-right font-mono whitespace-nowrap">
                       {c.anchorage_wait_hours !== null ? (
                         <button
                           onClick={() =>
@@ -536,17 +491,17 @@ function VesselCallsContent() {
                               traceability: c.durations_traceability['Anchorage Wait'],
                             })
                           }
-                          className="text-slate-800 hover:text-cyan-700 hover:underline cursor-pointer"
+                          className="text-[var(--color-text-primary)] hover:text-[var(--color-accent)] hover:underline cursor-pointer"
                         >
                           {fmtHours(c.anchorage_wait_hours)}
                         </button>
                       ) : (
-                        <span className="text-[10px] text-slate-400">⊘ UNAVAIL</span>
+                        <span className="text-[10px] text-[var(--color-text-tertiary)]">⊘ UNAVAIL</span>
                       )}
                     </td>
 
                     {/* Berth Stay */}
-                    <td className="px-3 py-2 text-right font-mono whitespace-nowrap">
+                    <td className="px-3 py-2.5 text-right font-mono whitespace-nowrap">
                       {c.berth_stay_hours !== null ? (
                         <button
                           onClick={() =>
@@ -556,17 +511,17 @@ function VesselCallsContent() {
                               traceability: c.durations_traceability['Berth Stay'],
                             })
                           }
-                          className="text-slate-800 hover:text-cyan-700 hover:underline cursor-pointer"
+                          className="text-[var(--color-text-primary)] hover:text-[var(--color-accent)] hover:underline cursor-pointer"
                         >
                           {fmtHours(c.berth_stay_hours)}
                         </button>
                       ) : (
-                        <span className="text-[10px] text-slate-400">—</span>
+                        <span className="text-[10px] text-[var(--color-text-tertiary)]">—</span>
                       )}
                     </td>
 
                     {/* Inward Movement */}
-                    <td className="px-3 py-2 text-right font-mono whitespace-nowrap">
+                    <td className="px-3 py-2.5 text-right font-mono whitespace-nowrap">
                       {c.inward_movement_hours !== null ? (
                         <button
                           onClick={() =>
@@ -576,31 +531,31 @@ function VesselCallsContent() {
                               traceability: c.durations_traceability['Inward Movement'],
                             })
                           }
-                          className="text-slate-800 hover:text-cyan-700 hover:underline cursor-pointer"
+                          className="text-[var(--color-text-primary)] hover:text-[var(--color-accent)] hover:underline cursor-pointer"
                         >
                           {fmtHours(c.inward_movement_hours)}
                         </button>
                       ) : (
-                        <span className="text-[10px] text-slate-400">⊘ UNAVAIL</span>
+                        <span className="text-[10px] text-[var(--color-text-tertiary)]">⊘ UNAVAIL</span>
                       )}
                     </td>
 
                     {/* Delays Count & Hours */}
-                    <td className="px-3 py-2 text-right font-mono whitespace-nowrap">
+                    <td className="px-3 py-2.5 text-right font-mono whitespace-nowrap">
                       {c.delays_count > 0 ? (
-                        <span className="text-amber-800 font-semibold" title={`${c.delays_count} recorded delays`}>
+                        <span className="text-[var(--color-warning)] font-semibold" title={`${c.delays_count} recorded delays`}>
                           {fmtHours(c.total_delay_hours)} ({c.delays_count})
                         </span>
                       ) : (
-                        <span className="text-slate-400">0h</span>
+                        <span className="text-[var(--color-text-tertiary)]">0h</span>
                       )}
                     </td>
 
                     {/* Action Button: Drill-down to Journey */}
-                    <td className="px-3 py-2 text-center whitespace-nowrap">
+                    <td className="px-3 py-2.5 text-center whitespace-nowrap">
                       <Link
                         href={`/vessel-journey?vcn=${c.vcn}`}
-                        className="px-2 py-1 bg-slate-800 text-white rounded text-[11px] font-semibold hover:bg-cyan-700 transition-colors cursor-pointer"
+                        className="px-2.5 py-1 bg-[var(--color-accent)] text-white rounded-md text-[11px] font-medium hover:bg-[var(--color-accent-hover)] transition-colors cursor-pointer"
                       >
                         Journey →
                       </Link>
@@ -614,34 +569,34 @@ function VesselCallsContent() {
       </div>
 
       {/* 4. Footer Pagination Controls */}
-      <div className="bg-white border-t border-slate-200 px-6 py-2.5 flex items-center justify-between gap-4 flex-wrap flex-shrink-0 text-xs text-slate-600">
+      <div className="bg-[var(--color-surface)] border-t border-[var(--color-border)] px-6 py-2.5 flex items-center justify-between gap-4 flex-wrap flex-shrink-0 text-xs text-[var(--color-text-secondary)]">
         <div>
           Showing{' '}
-          <span className="font-semibold text-slate-900">
+          <span className="font-semibold text-[var(--color-text-primary)]">
             {filteredCalls.length === 0 ? 0 : (page - 1) * pageSize + 1}
           </span>{' '}
           to{' '}
-          <span className="font-semibold text-slate-900">
+          <span className="font-semibold text-[var(--color-text-primary)]">
             {Math.min(page * pageSize, filteredCalls.length)}
           </span>{' '}
-          of <span className="font-semibold text-slate-900">{filteredCalls.length}</span> vessel calls
+          of <span className="font-semibold text-[var(--color-text-primary)]">{filteredCalls.length}</span> vessel calls
         </div>
 
         <div className="flex items-center gap-2">
           <button
             onClick={() => setPage((p) => Math.max(1, p - 1))}
             disabled={page <= 1}
-            className="px-2.5 py-1 rounded border border-slate-300 text-slate-700 bg-white hover:bg-slate-50 disabled:opacity-40 cursor-pointer"
+            className="px-2.5 py-1 rounded-md border border-[var(--color-border-strong)] text-[var(--color-text-primary)] bg-[var(--color-surface)] hover:bg-[var(--color-surface-muted)] disabled:opacity-40 cursor-pointer"
           >
             ← Previous
           </button>
-          <span className="font-mono text-slate-800">
+          <span className="font-mono text-[var(--color-text-primary)]">
             Page {page} of {totalPages}
           </span>
           <button
             onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
             disabled={page >= totalPages}
-            className="px-2.5 py-1 rounded border border-slate-300 text-slate-700 bg-white hover:bg-slate-50 disabled:opacity-40 cursor-pointer"
+            className="px-2.5 py-1 rounded-md border border-[var(--color-border-strong)] text-[var(--color-text-primary)] bg-[var(--color-surface)] hover:bg-[var(--color-surface-muted)] disabled:opacity-40 cursor-pointer"
           >
             Next →
           </button>
@@ -651,25 +606,25 @@ function VesselCallsContent() {
       {/* 5. Traceability Drawer (spec §2: formula + version + source records + filters + exclusions + DQ status) */}
       {traceabilityTarget && (
         <div
-          className="fixed inset-0 z-50 flex justify-end bg-slate-900/40 backdrop-blur-2xs"
+          className="fixed inset-0 z-50 flex justify-end bg-black/20 backdrop-blur-[1px]"
           role="dialog"
           aria-modal="true"
           aria-labelledby="drawer-title"
         >
-          <div className="w-full max-w-md bg-white h-full shadow-2xl flex flex-col border-l border-slate-200 animate-in slide-in-from-right duration-200">
+          <div className="w-full max-w-md bg-[var(--color-surface)] h-full shadow-[0_0_24px_rgba(15,23,42,0.12)] flex flex-col border-l border-[var(--color-border)] animate-in slide-in-from-right duration-200">
             {/* Drawer Header */}
-            <div className="bg-slate-900 text-white px-5 py-4 flex items-center justify-between flex-shrink-0">
+            <div className="bg-[var(--color-surface)] border-b border-[var(--color-border)] px-5 py-4 flex items-center justify-between flex-shrink-0">
               <div>
-                <div className="text-[10px] uppercase tracking-wider text-cyan-400 font-bold">
+                <div className="text-[10px] uppercase tracking-wider text-[var(--color-accent)] font-semibold">
                   Metric Traceability &amp; Lineage
                 </div>
-                <h2 id="drawer-title" className="text-sm font-bold mt-0.5">
+                <h2 id="drawer-title" className="text-sm font-semibold mt-0.5 text-[var(--color-text-primary)]">
                   {traceabilityTarget.metricName} — {traceabilityTarget.call.vcn}
                 </h2>
               </div>
               <button
                 onClick={() => setTraceabilityTarget(null)}
-                className="text-slate-400 hover:text-white text-lg font-bold p-1 cursor-pointer"
+                className="text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] text-lg font-bold p-1 cursor-pointer"
                 aria-label="Close Traceability Drawer"
               >
                 ✕
@@ -679,9 +634,9 @@ function VesselCallsContent() {
             {/* Drawer Content */}
             <div className="flex-1 overflow-y-auto p-5 space-y-4 text-xs">
               {/* Value Banner */}
-              <div className="p-3 bg-slate-50 border border-slate-200 rounded">
-                <div className="text-slate-500 text-[10px] uppercase font-semibold">Calculated Value</div>
-                <div className="text-xl font-bold font-mono text-slate-900 mt-0.5">
+              <div className="p-3 bg-[var(--color-surface-muted)] border border-[var(--color-border)] rounded-md">
+                <div className="text-[var(--color-text-tertiary)] text-[10px] uppercase font-semibold">Calculated Value</div>
+                <div className="text-xl font-semibold font-mono text-[var(--color-text-primary)] mt-0.5">
                   {traceabilityTarget.traceability.status === 'AVAILABLE' &&
                   traceabilityTarget.traceability.duration_hours !== null
                     ? `${traceabilityTarget.traceability.duration_hours.toFixed(2)} hours (${fmtHours(
@@ -690,16 +645,16 @@ function VesselCallsContent() {
                     : 'UNAVAILABLE'}
                 </div>
                 {traceabilityTarget.traceability.unavailable_reason && (
-                  <div className="mt-1 text-red-600 font-medium">
+                  <div className="mt-1 text-[var(--color-critical)] font-medium">
                     Reason: {traceabilityTarget.traceability.unavailable_reason}
                   </div>
                 )}
               </div>
 
               {/* Formula & Version */}
-              <div className="border border-slate-200 rounded p-3">
-                <div className="font-semibold text-slate-800 text-xs mb-1">Governed Formula</div>
-                <div className="font-mono bg-slate-100 p-2 rounded text-[11px] text-slate-700">
+              <div className="border border-[var(--color-border)] rounded-md p-3">
+                <div className="font-semibold text-[var(--color-text-primary)] text-xs mb-1">Governed Formula</div>
+                <div className="font-mono bg-[var(--color-surface-muted)] p-2 rounded text-[11px] text-[var(--color-text-secondary)]">
                   {traceabilityTarget.metricName === 'Turnaround'
                     ? 'ATD - ATA'
                     : traceabilityTarget.metricName === 'Anchorage Wait'
@@ -714,42 +669,42 @@ function VesselCallsContent() {
                     ? 'PILOT_ON_BOARD_SAILING → BREAKWATER_OUT'
                     : `${traceabilityTarget.metricName} (Governed Lead Time Catalogue)`}
                 </div>
-                <div className="flex justify-between text-[10px] text-slate-500 mt-2">
+                <div className="flex justify-between text-[10px] text-[var(--color-text-tertiary)] mt-2">
                   <span>Formula Version: <strong>{traceabilityTarget.traceability.formula_version}</strong></span>
                   <span>Unit: <strong>hours (decimal)</strong></span>
                 </div>
               </div>
 
               {/* Source Records */}
-              <div className="border border-slate-200 rounded p-3">
-                <div className="font-semibold text-slate-800 text-xs mb-1">Underlying Source Records</div>
+              <div className="border border-[var(--color-border)] rounded-md p-3">
+                <div className="font-semibold text-[var(--color-text-primary)] text-xs mb-1">Underlying Source Records</div>
                 {traceabilityTarget.traceability.source_records.length > 0 ? (
-                  <ul className="space-y-1 font-mono text-[10px] text-slate-600">
+                  <ul className="space-y-1 font-mono text-[10px] text-[var(--color-text-secondary)]">
                     {traceabilityTarget.traceability.source_records.map((recId) => (
-                      <li key={recId} className="bg-slate-50 p-1.5 rounded border border-slate-100 truncate">
+                      <li key={recId} className="bg-[var(--color-surface-muted)] p-1.5 rounded border border-[var(--color-border)] truncate">
                         UUID: {recId}
                       </li>
                     ))}
                   </ul>
                 ) : (
-                  <p className="text-slate-400 text-[11px]">No source records attached (Metric UNAVAILABLE)</p>
+                  <p className="text-[var(--color-text-tertiary)] text-[11px]">No source records attached (Metric UNAVAILABLE)</p>
                 )}
               </div>
 
               {/* Event Boundaries */}
               {(traceabilityTarget.traceability.start_time || traceabilityTarget.traceability.end_time) && (
-                <div className="border border-slate-200 rounded p-3">
-                  <div className="font-semibold text-slate-800 text-xs mb-1">Timestamp Envelope Boundaries</div>
+                <div className="border border-[var(--color-border)] rounded-md p-3">
+                  <div className="font-semibold text-[var(--color-text-primary)] text-xs mb-1">Timestamp Envelope Boundaries</div>
                   <div className="grid grid-cols-2 gap-2 text-[11px]">
                     <div>
-                      <span className="text-slate-400 block text-[10px]">Start Event:</span>
-                      <span className="font-mono text-slate-700">
+                      <span className="text-[var(--color-text-tertiary)] block text-[10px]">Start Event:</span>
+                      <span className="font-mono text-[var(--color-text-secondary)]">
                         {fmtTimestamp(traceabilityTarget.traceability.start_time)}
                       </span>
                     </div>
                     <div>
-                      <span className="text-slate-400 block text-[10px]">End Event:</span>
-                      <span className="font-mono text-slate-700">
+                      <span className="text-[var(--color-text-tertiary)] block text-[10px]">End Event:</span>
+                      <span className="font-mono text-[var(--color-text-secondary)]">
                         {fmtTimestamp(traceabilityTarget.traceability.end_time)}
                       </span>
                     </div>
@@ -758,9 +713,9 @@ function VesselCallsContent() {
               )}
 
               {/* Applied Filters & Exclusions */}
-              <div className="border border-slate-200 rounded p-3">
-                <div className="font-semibold text-slate-800 text-xs mb-1">Applied Filters &amp; Exclusions</div>
-                <div className="text-[11px] text-slate-600 space-y-1">
+              <div className="border border-[var(--color-border)] rounded-md p-3">
+                <div className="font-semibold text-[var(--color-text-primary)] text-xs mb-1">Applied Filters &amp; Exclusions</div>
+                <div className="text-[11px] text-[var(--color-text-secondary)] space-y-1">
                   <div>
                     Port: <strong>{traceabilityTarget.call.port_id || 'ZADUR'}</strong> | Terminal:{' '}
                     <strong>{traceabilityTarget.call.terminal_id || 'DCT'}</strong>
@@ -770,32 +725,22 @@ function VesselCallsContent() {
                   </div>
                   <div>
                     Exclusions: {traceabilityTarget.traceability.exclusions.length > 0 ? (
-                      <span className="text-red-600 font-semibold">
+                      <span className="text-[var(--color-critical)] font-semibold">
                         {traceabilityTarget.traceability.exclusions.join(', ')}
                       </span>
                     ) : (
-                      <span className="text-slate-500">None</span>
+                      <span className="text-[var(--color-text-secondary)]">None</span>
                     )}
                   </div>
                 </div>
               </div>
 
               {/* Data Quality Status */}
-              <div className="border border-slate-200 rounded p-3">
-                <div className="font-semibold text-slate-800 text-xs mb-1">Data Quality Validation State</div>
+              <div className="border border-[var(--color-border)] rounded-md p-3">
+                <div className="font-semibold text-[var(--color-text-primary)] text-xs mb-1">Data Quality Validation State</div>
                 <div className="flex items-center gap-2">
-                  <span
-                    className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                      traceabilityTarget.call.quality_status === 'CLEAN'
-                        ? 'bg-emerald-100 text-emerald-800'
-                        : traceabilityTarget.call.quality_status === 'FLAGGED'
-                        ? 'bg-amber-100 text-amber-800'
-                        : 'bg-red-100 text-red-800'
-                    }`}
-                  >
-                    {traceabilityTarget.call.quality_status}
-                  </span>
-                  <span className="text-slate-500 text-[11px]">
+                  <StatusBadge status={traceabilityTarget.call.quality_status} />
+                  <span className="text-[var(--color-text-secondary)] text-[11px]">
                     Quality Score: {traceabilityTarget.call.quality_score}/100
                   </span>
                 </div>
@@ -805,7 +750,7 @@ function VesselCallsContent() {
               <div className="pt-2">
                 <Link
                   href={`/vessel-journey?vcn=${traceabilityTarget.call.vcn}`}
-                  className="w-full py-2 bg-slate-900 text-white rounded text-center block text-xs font-semibold hover:bg-cyan-700 transition-colors"
+                  className="w-full py-2 bg-[var(--color-accent)] text-white rounded-md text-center block text-xs font-semibold hover:bg-[var(--color-accent-hover)] transition-colors"
                 >
                   Inspect Full Journey Swimlane →
                 </Link>
@@ -820,7 +765,7 @@ function VesselCallsContent() {
 
 export default function VesselCallsPage() {
   return (
-    <React.Suspense fallback={<div className="p-8 text-xs text-slate-500">Loading Vessel Calls...</div>}>
+    <React.Suspense fallback={<LoadingState label="Loading Vessel Calls…" />}>
       <VesselCallsContent />
     </React.Suspense>
   )

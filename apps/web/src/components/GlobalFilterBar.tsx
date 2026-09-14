@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react'
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
+import { FilterChip, FilterField } from './ui/FilterChip'
 
 export interface FilterState {
   startDate: string
@@ -100,84 +101,79 @@ export const GlobalFilterBar: React.FC = () => {
   const activeFilterCount = Object.values(filters).filter(Boolean).length
 
   return (
-    <div className="bg-slate-900 border-b border-slate-800 text-slate-300 text-xs px-4 py-2 flex-shrink-0">
+    <div className="bg-[var(--color-surface)] border-b border-[var(--color-border)] px-6 py-2.5 flex-shrink-0">
       <div className="flex items-center justify-between gap-2 flex-wrap">
         {/* Left: Quick Summary & Key Filters */}
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-            <span className="inline-block w-2 h-2 rounded-full bg-cyan-400"></span>
-            Scope:
+          <span className="text-xs font-semibold uppercase tracking-wide text-[var(--color-text-tertiary)] flex items-center gap-1.5 mr-1">
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-[var(--color-accent)]" aria-hidden="true" />
+            Scope
           </span>
 
-          {/* Port */}
-          <select
+          <FilterChip
+            ariaLabel="Filter by Port"
             value={filters.port}
-            onChange={(e) => handleChange('port', e.target.value)}
-            className="bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded px-2 py-1 focus:ring-1 focus:ring-cyan-500 focus:outline-none"
-            aria-label="Filter by Port"
-          >
-            <option value="">All Ports (ZADUR)</option>
-            <option value="ZADUR">Durban (ZADUR)</option>
-            <option value="ZACPT">Cape Town (ZACPT)</option>
-            <option value="ZAPLZ">Port Elizabeth (ZAPLZ)</option>
-          </select>
+            onChange={(v) => handleChange('port', v)}
+            allLabel="All Ports (ZADUR)"
+            options={[
+              { value: 'ZADUR', label: 'Durban (ZADUR)' },
+              { value: 'ZACPT', label: 'Cape Town (ZACPT)' },
+              { value: 'ZAPLZ', label: 'Port Elizabeth (ZAPLZ)' },
+            ]}
+          />
 
-          {/* Terminal */}
-          <select
+          <FilterChip
+            ariaLabel="Filter by Terminal"
             value={filters.terminal}
-            onChange={(e) => handleChange('terminal', e.target.value)}
-            className="bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded px-2 py-1 focus:ring-1 focus:ring-cyan-500 focus:outline-none"
-            aria-label="Filter by Terminal"
-          >
-            <option value="">All Terminals</option>
-            <option value="DCT">Durban Container Terminal (DCT)</option>
-            <option value="MPT">Multi-Purpose Terminal (MPT)</option>
-            <option value="PIER1">Pier 1 Container Terminal</option>
-            <option value="PIER2">Pier 2 Container Terminal</option>
-          </select>
+            onChange={(v) => handleChange('terminal', v)}
+            allLabel="All Terminals"
+            options={[
+              { value: 'DCT', label: 'Durban Container Terminal (DCT)' },
+              { value: 'MPT', label: 'Multi-Purpose Terminal (MPT)' },
+              { value: 'PIER1', label: 'Pier 1 Container Terminal' },
+              { value: 'PIER2', label: 'Pier 2 Container Terminal' },
+            ]}
+          />
 
-          {/* Vessel Type */}
-          <select
+          <FilterChip
+            ariaLabel="Filter by Vessel Type"
             value={filters.vesselType}
-            onChange={(e) => handleChange('vesselType', e.target.value)}
-            className="bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded px-2 py-1 focus:ring-1 focus:ring-cyan-500 focus:outline-none"
-            aria-label="Filter by Vessel Type"
-          >
-            <option value="">All Vessel Types</option>
-            <option value="Container">Container</option>
-            <option value="Bulker">Bulker</option>
-            <option value="Tanker">Tanker</option>
-            <option value="General Cargo">General Cargo</option>
-            <option value="Passenger (Cruise)">Passenger (Cruise)</option>
-          </select>
+            onChange={(v) => handleChange('vesselType', v)}
+            allLabel="All Vessel Types"
+            options={[
+              { value: 'Container', label: 'Container' },
+              { value: 'Bulker', label: 'Bulker' },
+              { value: 'Tanker', label: 'Tanker' },
+              { value: 'General Cargo', label: 'General Cargo' },
+              { value: 'Passenger (Cruise)', label: 'Passenger (Cruise)' },
+            ]}
+          />
 
-          {/* Cargo Type */}
-          <select
+          <FilterChip
+            ariaLabel="Filter by Cargo Type"
             value={filters.cargoType}
-            onChange={(e) => handleChange('cargoType', e.target.value)}
-            className="bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded px-2 py-1 focus:ring-1 focus:ring-cyan-500 focus:outline-none"
-            aria-label="Filter by Cargo Type"
-          >
-            <option value="">All Cargo Types</option>
-            <option value="Containers">Containers</option>
-            <option value="Bulk Minerals">Bulk Minerals</option>
-            <option value="Breakbulk">Breakbulk</option>
-            <option value="General">General</option>
-            <option value="Passengers">Passengers</option>
-          </select>
+            onChange={(v) => handleChange('cargoType', v)}
+            allLabel="All Cargo Types"
+            options={[
+              { value: 'Containers', label: 'Containers' },
+              { value: 'Bulk Minerals', label: 'Bulk Minerals' },
+              { value: 'Breakbulk', label: 'Breakbulk' },
+              { value: 'General', label: 'General' },
+              { value: 'Passengers', label: 'Passengers' },
+            ]}
+          />
 
-          {/* Data Quality Status */}
-          <select
+          <FilterChip
+            ariaLabel="Filter by Data Quality Status"
             value={filters.qualityStatus}
-            onChange={(e) => handleChange('qualityStatus', e.target.value)}
-            className="bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded px-2 py-1 focus:ring-1 focus:ring-cyan-500 focus:outline-none"
-            aria-label="Filter by Data Quality Status"
-          >
-            <option value="">All DQ Statuses</option>
-            <option value="CLEAN">Clean [✓]</option>
-            <option value="FLAGGED">Flagged [⚠]</option>
-            <option value="QUARANTINED">Quarantined [✕]</option>
-          </select>
+            onChange={(v) => handleChange('qualityStatus', v)}
+            allLabel="All DQ Statuses"
+            options={[
+              { value: 'CLEAN', label: 'Clean' },
+              { value: 'FLAGGED', label: 'Flagged' },
+              { value: 'QUARANTINED', label: 'Quarantined' },
+            ]}
+          />
         </div>
 
         {/* Right: Expand Toggle & Reset */}
@@ -185,7 +181,7 @@ export const GlobalFilterBar: React.FC = () => {
           {activeFilterCount > 0 && (
             <button
               onClick={handleReset}
-              className="text-[11px] text-slate-400 hover:text-white underline cursor-pointer"
+              className="text-xs text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] underline cursor-pointer"
             >
               Clear ({activeFilterCount})
             </button>
@@ -193,95 +189,80 @@ export const GlobalFilterBar: React.FC = () => {
 
           <button
             onClick={() => setIsExpanded(!isExpanded)}
-            className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded border border-slate-700 text-xs flex items-center gap-1 cursor-pointer"
+            aria-expanded={isExpanded}
+            className="px-2.5 py-1.5 bg-[var(--color-surface)] hover:bg-[var(--color-surface-muted)] text-[var(--color-text-secondary)] rounded-md border border-[var(--color-border)] text-xs flex items-center gap-1.5 cursor-pointer"
           >
-            <span>Filters</span>
+            <span>More filters</span>
             {activeFilterCount > 0 && (
-              <span className="px-1.5 py-0.2 rounded-full bg-cyan-600 text-white text-[10px] font-bold">
+              <span className="px-1.5 py-0.5 rounded-full bg-[var(--color-accent-soft)] text-[var(--color-accent)] text-[10px] font-semibold">
                 {activeFilterCount}
               </span>
             )}
-            <span className="text-[10px]">{isExpanded ? '▲' : '▼'}</span>
+            <span className="text-[10px]" aria-hidden="true">{isExpanded ? '▲' : '▼'}</span>
           </button>
         </div>
       </div>
 
       {/* Expanded Secondary Filters */}
       {isExpanded && (
-        <div className="mt-2 pt-2 border-t border-slate-800 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
-          {/* Date Range Start */}
-          <div>
-            <label className="block text-[10px] uppercase text-slate-400 font-semibold mb-0.5">
-              Start Date
-            </label>
+        <div className="mt-3 pt-3 border-t border-[var(--color-border)] grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+          <FilterField label="Start Date">
             <input
               type="date"
               value={filters.startDate}
               onChange={(e) => handleChange('startDate', e.target.value)}
-              className="w-full bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded px-2 py-1 focus:ring-1 focus:ring-cyan-500 focus:outline-none"
+              className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-primary)] text-xs rounded-md px-2.5 py-1.5 focus:ring-2 focus:ring-[var(--color-accent)] focus:outline-none"
             />
-          </div>
+          </FilterField>
 
-          {/* Date Range End */}
-          <div>
-            <label className="block text-[10px] uppercase text-slate-400 font-semibold mb-0.5">
-              End Date
-            </label>
+          <FilterField label="End Date">
             <input
               type="date"
               value={filters.endDate}
               onChange={(e) => handleChange('endDate', e.target.value)}
-              className="w-full bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded px-2 py-1 focus:ring-1 focus:ring-cyan-500 focus:outline-none"
+              className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-primary)] text-xs rounded-md px-2.5 py-1.5 focus:ring-2 focus:ring-[var(--color-accent)] focus:outline-none"
             />
-          </div>
+          </FilterField>
 
-          {/* Berth */}
-          <div>
-            <label className="block text-[10px] uppercase text-slate-400 font-semibold mb-0.5">
-              Berth
-            </label>
+          <FilterField label="Berth">
             <input
               type="text"
               placeholder="e.g. Berth 101"
               value={filters.berth}
               onChange={(e) => handleChange('berth', e.target.value)}
-              className="w-full bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded px-2 py-1 focus:ring-1 focus:ring-cyan-500 focus:outline-none"
+              className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-primary)] text-xs rounded-md px-2.5 py-1.5 focus:ring-2 focus:ring-[var(--color-accent)] focus:outline-none placeholder:text-[var(--color-text-tertiary)]"
             />
-          </div>
+          </FilterField>
 
-          {/* Movement Type */}
-          <div>
-            <label className="block text-[10px] uppercase text-slate-400 font-semibold mb-0.5">
-              Movement Type
-            </label>
-            <select
+          <FilterField label="Movement Type">
+            <FilterChip
+              ariaLabel="Movement Type"
               value={filters.movementType}
-              onChange={(e) => handleChange('movementType', e.target.value)}
-              className="w-full bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded px-2 py-1 focus:ring-1 focus:ring-cyan-500 focus:outline-none"
-            >
-              <option value="">All Movements</option>
-              <option value="Arrival">Arrival</option>
-              <option value="Shifting">Shifting</option>
-              <option value="Sailing">Sailing</option>
-            </select>
-          </div>
+              onChange={(v) => handleChange('movementType', v)}
+              allLabel="All Movements"
+              className="w-full"
+              options={[
+                { value: 'Arrival', label: 'Arrival' },
+                { value: 'Shifting', label: 'Shifting' },
+                { value: 'Sailing', label: 'Sailing' },
+              ]}
+            />
+          </FilterField>
 
-          {/* Vessel Size Range */}
-          <div>
-            <label className="block text-[10px] uppercase text-slate-400 font-semibold mb-0.5">
-              Vessel Size (TEU)
-            </label>
-            <select
+          <FilterField label="Vessel Size (TEU)">
+            <FilterChip
+              ariaLabel="Vessel Size"
               value={filters.vesselSize}
-              onChange={(e) => handleChange('vesselSize', e.target.value)}
-              className="w-full bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded px-2 py-1 focus:ring-1 focus:ring-cyan-500 focus:outline-none"
-            >
-              <option value="">All Sizes</option>
-              <option value="feeder">Feeder (&lt;3,000 TEU)</option>
-              <option value="panamax">Panamax (3,000 - 8,000 TEU)</option>
-              <option value="postpanamax">Post-Panamax (&gt;8,000 TEU)</option>
-            </select>
-          </div>
+              onChange={(v) => handleChange('vesselSize', v)}
+              allLabel="All Sizes"
+              className="w-full"
+              options={[
+                { value: 'feeder', label: 'Feeder (<3,000 TEU)' },
+                { value: 'panamax', label: 'Panamax (3,000 - 8,000 TEU)' },
+                { value: 'postpanamax', label: 'Post-Panamax (>8,000 TEU)' },
+              ]}
+            />
+          </FilterField>
         </div>
       )}
     </div>
