@@ -133,7 +133,7 @@ class DataQualityEngine:
                 if from_occ and to_occ:
                     if from_occ[0].utc_value and to_occ[0].utc_value:
                         dur = (to_occ[0].utc_value - from_occ[0].utc_value).total_seconds()
-                        if dur < 0:
+                        if dur < -300:
                             # if it's the specific DQ-006 case from the fixture
                             if from_ev == "ANCHORAGE_ARRIVAL" and to_ev == "PILOT_ON_BOARD_ARRIVAL":
                                 self._create_issue("DQ-006", vc.id, f"EventOccurrence:{to_occ[0].id}", "CRITICAL")

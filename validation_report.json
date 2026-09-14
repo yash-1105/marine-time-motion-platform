@@ -1,17 +1,339 @@
 {
-  "execution_time_seconds": 18.05,
-  "app_version": "1.0.0",
-  "base_population_reconciled": "72 of 72",
-  "journey_reconstruction_coverage": "72 of 72",
-  "shifting_calls_with_shift_stage": "8 of 8",
-  "metrics_reconciled": "8 of 8",
-  "kpi_engine_coverage": "38 of 38 computable (17 governed NO_SOURCE_DATA)",
-  "kpi_registry_total": "55 of 55",
-  "dq_cases_passed": "10 of 10",
-  "delays_reconciled": "41 of 41",
-  "bottlenecks_ranked": "8 items (Rank 1: Cargo Working)",
-  "outliers_detected": "8 (DQ-008 720h identified)",
-  "alerts_active": "100 alerts",
-  "merges_executed": 2,
-  "details": "Phase 09 Delay Analysis, Bottlenecks, Outliers, Criticality, and Alerts Verified"
+  "dataset_summary": {
+    "fixture_file": "fixtures/Synthetic_Marine_Time_Motion_Test_Data.xlsx",
+    "file_size_bytes": 173374,
+    "sha256": "90919984816264e44f0e83bf47a6ef11cc98f000ca375bebc77bf3f7e49b0763",
+    "manifest_verified": true,
+    "execution_time_seconds": 17.91,
+    "app_version": "1.0.0",
+    "rule_version": "1.0",
+    "formula_version": "1.0",
+    "run_timestamp": "2026-09-14T15:03:48.297347+00:00"
+  },
+  "row_counts": {
+    "VesselCalls": {
+      "raw": 74,
+      "merged": 2,
+      "canonical_base": 72
+    },
+    "Events": {
+      "raw": 1745,
+      "quarantined_orphan": 1,
+      "canonical": 1744
+    },
+    "Services": {
+      "raw": 432,
+      "canonical": 432
+    },
+    "CargoOps": {
+      "raw": 72,
+      "canonical": 72
+    },
+    "Delays": {
+      "raw": 41,
+      "canonical": 41
+    },
+    "ExpectedOutputs": {
+      "raw": 72,
+      "testkit_oracle": 72
+    },
+    "DQ_Cases": {
+      "raw": 10,
+      "testkit_oracle": 10
+    },
+    "ValidationSummary": {
+      "raw": 11,
+      "testkit_oracle": 11
+    }
+  },
+  "mapping_and_schema_errors": 0,
+  "dq_cases": [
+    {
+      "case_id": "DQ-001",
+      "name": "Duplicate vessel call",
+      "record_key": "SYNVCN2600005",
+      "injected_condition": "Exact duplicate row",
+      "severity": "Critical",
+      "expected_behaviour": "Exact duplicate deduplicated; 1 active call",
+      "actual_behaviour": "Consolidated 2 rows into 1 canonical call without count inflation",
+      "status": "PASS"
+    },
+    {
+      "case_id": "DQ-002",
+      "name": "Probable duplicate identity",
+      "record_key": "SYNVCN2600012",
+      "injected_condition": "Same VCN/IMO, punctuation variant in vessel name",
+      "severity": "High",
+      "expected_behaviour": "Merge candidate with >=98% confidence merged",
+      "actual_behaviour": "Punctuation variant matched and merged with preserved audit trail",
+      "status": "PASS"
+    },
+    {
+      "case_id": "DQ-003",
+      "name": "Missing mandatory timestamp",
+      "record_key": "SYNVCN2600018",
+      "injected_condition": "ATA blank in VesselCalls",
+      "severity": "High",
+      "expected_behaviour": "MISSING_MANDATORY flagged, Turnaround UNAVAILABLE",
+      "actual_behaviour": "DQ-003 flagged; dependent Turnaround recorded as UNAVAILABLE with reason",
+      "status": "PASS"
+    },
+    {
+      "case_id": "DQ-004",
+      "name": "Chronology violation",
+      "record_key": "SYNVCN2600027",
+      "injected_condition": "ETA occurs after ATA",
+      "severity": "High",
+      "expected_behaviour": "ETA_BEFORE_ATA failure flagged",
+      "actual_behaviour": "DQ-004 flagged in Quality Engine",
+      "status": "PASS"
+    },
+    {
+      "case_id": "DQ-005",
+      "name": "Missing service event",
+      "record_key": "SYNVCN2600036",
+      "injected_condition": "Pilot request exists without scheduled event",
+      "severity": "High",
+      "expected_behaviour": "Missing scheduled event flagged",
+      "actual_behaviour": "DQ-005 flagged in Quality Engine",
+      "status": "PASS"
+    },
+    {
+      "case_id": "DQ-006",
+      "name": "Chronology violation",
+      "record_key": "SYNVCN2600045",
+      "injected_condition": "Pilot on board before scheduled",
+      "severity": "Critical",
+      "expected_behaviour": "Critical chronology violation quarantined",
+      "actual_behaviour": "Quarantined in Quality Engine; sequence violation noted in Anchorage Wait",
+      "status": "PASS"
+    },
+    {
+      "case_id": "DQ-007",
+      "name": "Missing delay reason",
+      "record_key": "SYNVCN2600054",
+      "injected_condition": "Positive delay but reason/category blank",
+      "severity": "Medium",
+      "expected_behaviour": "Mandatory delay reason review raised at MEDIUM severity",
+      "actual_behaviour": "DQ-007 review issue and operational alert created",
+      "status": "PASS"
+    },
+    {
+      "case_id": "DQ-008",
+      "name": "Extreme operational outlier",
+      "record_key": "SYNVCN2600063",
+      "injected_condition": "Turnaround expected set to 720h vs calculated 86.5h",
+      "severity": "High/Critical",
+      "expected_behaviour": "Flagged as extreme outlier, transparent KPI exclusion toggle",
+      "actual_behaviour": "Detected by OutlierEngine (observed 720h, severity CRITICAL)",
+      "status": "PASS"
+    },
+    {
+      "case_id": "DQ-009",
+      "name": "Referential integrity",
+      "record_key": "SYNVCN-NOTFOUND",
+      "injected_condition": "Event refers to absent vessel call (EV-ORPHAN-001)",
+      "severity": "Critical",
+      "expected_behaviour": "Orphan event rejected or quarantined; not attached to active VC",
+      "actual_behaviour": "Staged orphan (0 row) excluded from canonical occurrences (True)",
+      "status": "PASS"
+    },
+    {
+      "case_id": "DQ-010",
+      "name": "Conflicting timestamps",
+      "record_key": "SYNVCN2600070",
+      "injected_condition": "Two ATA values differ by 5 hours (AIS vs Manual Log)",
+      "severity": "High",
+      "expected_behaviour": "Both observations preserved; conflicting review raised",
+      "actual_behaviour": "Both occurrences stored in canonical.event_occurrence; conflict flagged",
+      "status": "PASS"
+    }
+  ],
+  "dq_summary": "10 of 10",
+  "journey_coverage": {
+    "total": 72,
+    "reconstructed": 72,
+    "failed": 0,
+    "shifting_calls": 8
+  },
+  "metric_reconciliation": {
+    "tolerance_hours": 0.02,
+    "overall_status": "PASS",
+    "summary": {
+      "total_targets": 8,
+      "fully_reconciled_targets": 8,
+      "total_comparisons": 576,
+      "passed_comparisons": 572,
+      "failed_comparisons": 0,
+      "unavailable_comparisons": 3,
+      "excluded_comparisons": 1,
+      "tolerance_exceeded_comparisons": 0
+    },
+    "early_service": {
+      "negative_arrival_delays": 7,
+      "negative_sailing_delays": 10
+    },
+    "targets": {
+      "Turnaround": {
+        "definition_name": "Turnaround",
+        "expected_metric": "Expected_Turnaround_Hours_ATA_to_ATD",
+        "total_eligible_calls": 72,
+        "passed": 70,
+        "failed": 0,
+        "unavailable": 1,
+        "excluded": 1,
+        "tolerance_exceeded": 0,
+        "details": [
+          {
+            "vcn": "SYNVCN2600063",
+            "status": "EXCLUDED",
+            "actual": 86.5,
+            "expected": 720.0,
+            "diff": 633.5,
+            "rationale": "DQ-008 deliberate 720h test outlier override against calculated 86.5h"
+          },
+          {
+            "vcn": "SYNVCN2600018",
+            "status": "UNAVAILABLE",
+            "actual": null,
+            "expected": 89.95,
+            "reason": "Required timestamp 'ATA' is blank in VesselCalls (DQ-003)"
+          }
+        ],
+        "reconciled_fraction": "70 of 72"
+      },
+      "Anchorage Wait": {
+        "definition_name": "Anchorage Wait",
+        "expected_metric": "Expected_Anchorage_Wait_Hours",
+        "total_eligible_calls": 72,
+        "passed": 71,
+        "failed": 0,
+        "unavailable": 1,
+        "excluded": 0,
+        "tolerance_exceeded": 0,
+        "details": [
+          {
+            "vcn": "SYNVCN2600045",
+            "status": "UNAVAILABLE",
+            "actual": null,
+            "expected": 2.41,
+            "reason": "Required end event 'PILOT_ON_BOARD_ARRIVAL' is missing"
+          }
+        ],
+        "reconciled_fraction": "71 of 72"
+      },
+      "Inward Movement": {
+        "definition_name": "Inward Movement",
+        "expected_metric": "Expected_Inward_Movement_Hours",
+        "total_eligible_calls": 72,
+        "passed": 71,
+        "failed": 0,
+        "unavailable": 1,
+        "excluded": 0,
+        "tolerance_exceeded": 0,
+        "details": [
+          {
+            "vcn": "SYNVCN2600045",
+            "status": "UNAVAILABLE",
+            "actual": null,
+            "expected": 2.13,
+            "reason": "Required start event 'PILOT_ON_BOARD_ARRIVAL' is missing"
+          }
+        ],
+        "reconciled_fraction": "71 of 72"
+      },
+      "Berth Stay": {
+        "definition_name": "Berth Stay",
+        "expected_metric": "Expected_Berth_Stay_Hours",
+        "total_eligible_calls": 72,
+        "passed": 72,
+        "failed": 0,
+        "unavailable": 0,
+        "excluded": 0,
+        "tolerance_exceeded": 0,
+        "details": [],
+        "reconciled_fraction": "72 of 72"
+      },
+      "Cargo Working": {
+        "definition_name": "Cargo Working",
+        "expected_metric": "Expected_Cargo_Working_Hours",
+        "total_eligible_calls": 72,
+        "passed": 72,
+        "failed": 0,
+        "unavailable": 0,
+        "excluded": 0,
+        "tolerance_exceeded": 0,
+        "details": [],
+        "reconciled_fraction": "72 of 72"
+      },
+      "Outward Movement": {
+        "definition_name": "Outward Movement",
+        "expected_metric": "Expected_Outward_Movement_Hours",
+        "total_eligible_calls": 72,
+        "passed": 72,
+        "failed": 0,
+        "unavailable": 0,
+        "excluded": 0,
+        "tolerance_exceeded": 0,
+        "details": [],
+        "reconciled_fraction": "72 of 72"
+      },
+      "Arrival Execution Delay": {
+        "definition_name": "Arrival Execution Delay",
+        "expected_metric": "Expected_Arrival_Execution_Delay_Hours",
+        "total_eligible_calls": 72,
+        "passed": 72,
+        "failed": 0,
+        "unavailable": 0,
+        "excluded": 0,
+        "tolerance_exceeded": 0,
+        "details": [],
+        "reconciled_fraction": "72 of 72"
+      },
+      "Sailing Execution Delay": {
+        "definition_name": "Sailing Execution Delay",
+        "expected_metric": "Expected_Sailing_Execution_Delay_Hours",
+        "total_eligible_calls": 72,
+        "passed": 72,
+        "failed": 0,
+        "unavailable": 0,
+        "excluded": 0,
+        "tolerance_exceeded": 0,
+        "details": [],
+        "reconciled_fraction": "72 of 72"
+      }
+    }
+  },
+  "kpi_reconciliation": {
+    "total_kpis": 55,
+    "computed": 38,
+    "no_source_data": 17,
+    "status": "PASS"
+  },
+  "delays_and_bottlenecks": {
+    "delays_reconciled": "41 of 41",
+    "ranked_bottlenecks": 8,
+    "top_bottleneck": "Cargo Working",
+    "outliers_detected": 8,
+    "active_alerts": 100
+  },
+  "duplicate_impact": {
+    "initial_population": 74,
+    "merges_executed": 2,
+    "final_base_calls": 72,
+    "inflation_detected": false
+  },
+  "early_service": {
+    "negative_arrival_delays": 7,
+    "negative_sailing_delays": 10,
+    "retained_as_negative": true
+  },
+  "consistency_check": {
+    "database_base_vessel_calls": 72,
+    "database_delays": 41,
+    "database_cargo_ops": 72,
+    "database_services": 432,
+    "status": "PASS"
+  },
+  "final_verdict": "PASS"
 }

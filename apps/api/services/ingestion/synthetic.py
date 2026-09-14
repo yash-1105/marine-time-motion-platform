@@ -61,7 +61,21 @@ def load_testkit_oracles(db: Session, file_path: str):
         ))
     db.execute(text("TRUNCATE TABLE testkit.dq_case CASCADE"))
     db.add_all(dq_records)
-    
+
+    # 3. ValidationSummary
+    from apps.api.models.testkit import ValidationSummary
+    if "ValidationSummary" in workbook.keys():
+        df_vs = workbook["ValidationSummary"]
+        vs_records = []
+        for row in df_vs.iter_rows(named=True):
+            vs_records.append(ValidationSummary(
+                metric_name=str(row.get("Validation Metric") or ""),
+                expected_value=str(row.get("Expected Value") or ""),
+                interpretation=str(row.get("Interpretation") or ""),
+            ))
+        db.execute(text("TRUNCATE TABLE testkit.validation_summary CASCADE"))
+        db.add_all(vs_records)
+
     db.commit()
 
 

@@ -1,4 +1,5 @@
-from sqlalchemy import Column, Float, String
+from sqlalchemy import Column, DateTime, Float, String
+from sqlalchemy.dialects.postgresql import JSONB
 
 from .base import BaseModel
 
@@ -17,3 +18,24 @@ class DQCase(BaseModel):
     case_id = Column(String, nullable=False)
     description = Column(String, nullable=True)
     expected_outcome = Column(String, nullable=False)
+
+
+class ValidationSummary(BaseModel):
+    __tablename__ = "validation_summary"
+    __table_args__ = {"schema": "testkit"}
+    metric_name = Column(String, nullable=False)
+    expected_value = Column(String, nullable=False)
+    interpretation = Column(String, nullable=True)
+
+
+class ValidationRunHistory(BaseModel):
+    __tablename__ = "validation_run_history"
+    __table_args__ = {"schema": "testkit"}
+    run_timestamp = Column(DateTime(timezone=True), nullable=False)
+    execution_time_seconds = Column(Float, nullable=False)
+    app_version = Column(String, nullable=False)
+    rule_version = Column(String, nullable=False)
+    formula_version = Column(String, nullable=False)
+    dataset_checksum = Column(String, nullable=False)
+    overall_status = Column(String, nullable=False)
+    report_json = Column(JSONB, nullable=False)
