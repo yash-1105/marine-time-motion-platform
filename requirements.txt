@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+pydantic
+pydantic-settings
+dramatiq
+redis
+psycopg2-binary
+alembic
+polars
+pandas
+openpyxl
