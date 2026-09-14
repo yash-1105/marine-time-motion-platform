@@ -11,7 +11,7 @@ const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 type UploadState = 'idle' | 'processing' | 'success' | 'error'
 
 export default function IngestionPage() {
-  const { can, roles, token } = useAuth()
+  const { can, token } = useAuth()
   const { refresh: refreshDataset } = useDatasetStatus()
   const [file, setFile] = useState<File | null>(null)
   const [state, setState] = useState<UploadState>('idle')
@@ -72,25 +72,6 @@ export default function IngestionPage() {
     }
   }
 
-  const loadSynthetic = async () => {
-    setState('processing')
-    setMessage('')
-    try {
-      const res = await fetch(`${API}/api/v1/ingestion/synthetic`, { method: 'POST', headers: authHeaders })
-      if (!res.ok) {
-        const err = await res.json().catch(() => null)
-        throw new Error(err?.detail || `Synthetic load failed (HTTP ${res.status})`)
-      }
-      setState('success')
-      setMessage('Synthetic benchmark dataset')
-      await refreshDataset()
-    } catch (error) {
-      const e = error as Error
-      setState('error')
-      setMessage(e.message)
-    }
-  }
-
   const reset = () => {
     setState('idle')
     setMessage('')
@@ -134,49 +115,31 @@ export default function IngestionPage() {
         )}
 
         {(state === 'idle' || state === 'processing') && (
-          <>
-            <Card>
-              <SectionHeader title="Upload vessel operations dataset" description="Supported format: Excel (.xlsx)" />
-              <div className="space-y-4">
-                <input
-                  type="file"
-                  accept=".xlsx"
-                  onChange={(e) => setFile(e.target.files?.[0] || null)}
-                  disabled={state === 'processing'}
-                  className="block w-full text-sm text-[var(--color-text-secondary)] border border-[var(--color-border)] rounded-md p-2 file:mr-3 file:px-3 file:py-1.5 file:rounded-md file:border-0 file:text-xs file:font-medium file:bg-[var(--color-accent-soft)] file:text-[var(--color-accent)] cursor-pointer disabled:opacity-60"
-                />
-                <button
-                  onClick={handleUpload}
-                  disabled={!file || state === 'processing'}
-                  className="px-4 py-1.5 bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-white rounded-md text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex items-center gap-2"
-                >
-                  {state === 'processing' && (
-                    <span
-                      className="h-3.5 w-3.5 rounded-full border-2 border-white/40 border-t-white animate-spin"
-                      aria-hidden="true"
-                    />
-                  )}
-                  {state === 'processing' ? 'Uploading and processing…' : 'Upload & Process'}
-                </button>
-              </div>
-            </Card>
-
-            {(roles.includes('Platform Administrator') || roles.includes('Developer')) && (
-              <Card className="border-[var(--color-warning-border)] bg-[var(--color-warning-bg)]">
-                <SectionHeader
-                  title="Synthetic Test Dataset"
-                  description="Resets the synthetic tenant and loads the fixture data through the standard ingestion pipeline."
-                />
-                <button
-                  onClick={loadSynthetic}
-                  disabled={state === 'processing'}
-                  className="px-4 py-1.5 bg-[var(--color-warning)] hover:opacity-90 text-white rounded-md text-sm font-medium cursor-pointer disabled:opacity-50"
-                >
-                  Load Synthetic Dataset
-                </button>
-              </Card>
-            )}
-          </>
+          <Card>
+            <SectionHeader title="Upload vessel operations dataset" description="Supported format: Excel (.xlsx)" />
+            <div className="space-y-4">
+              <input
+                type="file"
+                accept=".xlsx"
+                onChange={(e) => setFile(e.target.files?.[0] || null)}
+                disabled={state === 'processing'}
+                className="block w-full text-sm text-[var(--color-text-secondary)] border border-[var(--color-border)] rounded-md p-2 file:mr-3 file:px-3 file:py-1.5 file:rounded-md file:border-0 file:text-xs file:font-medium file:bg-[var(--color-accent-soft)] file:text-[var(--color-accent)] cursor-pointer disabled:opacity-60"
+              />
+              <button
+                onClick={handleUpload}
+                disabled={!file || state === 'processing'}
+                className="px-4 py-1.5 bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-white rounded-md text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex items-center gap-2"
+              >
+                {state === 'processing' && (
+                  <span
+                    className="h-3.5 w-3.5 rounded-full border-2 border-white/40 border-t-white animate-spin"
+                    aria-hidden="true"
+                  />
+                )}
+                {state === 'processing' ? 'Uploading and processing…' : 'Upload & Process'}
+              </button>
+            </div>
+          </Card>
         )}
       </div>
     </div>

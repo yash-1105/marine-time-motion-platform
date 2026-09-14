@@ -33,7 +33,7 @@ def upload_file(
     with open(temp_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
         
-    pipeline = IngestionPipeline(db, tenant_id=principal.data_scope.tenant_id)
+    pipeline = IngestionPipeline(db, tenant_id=_resolve_tenant(principal))
     
     # Normally we would queue this using Dramatiq, but for synchronous return we do it here or via background task
     try:

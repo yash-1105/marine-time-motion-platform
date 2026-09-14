@@ -190,13 +190,13 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
               ) : (
                 <EmptyState
                   title="No dataset loaded"
-                  description="Upload a vessel operations dataset to begin analysis."
+                  description="Upload a vessel operations dataset to view operational analytics."
                   action={
                     <Link
                       href="/ingestion"
                       className="inline-flex items-center px-4 py-1.5 bg-[var(--color-accent)] hover:opacity-90 text-white rounded-md text-sm font-medium"
                     >
-                      Go to Data Ingestion
+                      Upload Dataset
                     </Link>
                   }
                 />
