@@ -143,10 +143,11 @@ function fmtNum(n?: number | null, decimals = 1): string {
 
 function ExecutiveDashboardContent() {
   const searchParams = useSearchParams()
-  const { token } = useAuth()
+  const { token, isLoading: authLoading } = useAuth()
 
   const [data, setData] = useState<DashboardData | null>(null)
   const [recon, setRecon] = useState<ReconciliationResult | null>(null)
+  const [reconLoading, setReconLoading] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showReconModal, setShowReconModal] = useState(false)
@@ -176,37 +177,13 @@ function ExecutiveDashboardContent() {
     setLoading(true)
     setError(null)
 
-    let activeToken = token
-    if (!activeToken) {
-      try {
-        const authRes = await fetch(`${API}/api/v1/auth/dev/login`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ role_or_email: 'Platform Administrator' }),
-        })
-        if (authRes.ok) {
-          const authData = await authRes.json()
-          activeToken = authData.access_token
-        }
-      } catch {
-        // Fall back to token
-      }
-    }
-
-    const headers = { Authorization: `Bearer ${activeToken || 'dev-token'}` }
+    const headers = { Authorization: `Bearer ${token || 'dev-token'}` }
 
     fetch(`${API}/api/v1/dashboard/executive?${queryParams}`, { headers })
       .then((r) => (r.ok ? r.json() : Promise.reject(`Failed to load executive metrics: ${r.statusText}`)))
       .then((dashData) => {
         setData(dashData)
         setLoading(false)
-        // Background fetch 3-way reconciliation without blocking initial dashboard load
-        fetch(`${API}/api/v1/dashboard/reconciliation`, { headers })
-          .then((r) => (r.ok ? r.json() : null))
-          .then((reconData) => {
-            if (reconData) setRecon(reconData)
-          })
-          .catch(() => {})
       })
       .catch((err) => {
         setError(String(err))
@@ -215,8 +192,29 @@ function ExecutiveDashboardContent() {
   }, [token, queryParams])
 
   useEffect(() => {
+    if (authLoading) return
     fetchDashboard()
-  }, [fetchDashboard])
+  }, [authLoading, fetchDashboard])
+
+  // 3-way reconciliation is expensive (recomputes the executive summary across 7 filter
+  // combinations) — only run it on demand when the user opens the verification modal,
+  // not automatically on every dashboard load.
+  const fetchReconciliation = useCallback(() => {
+    if (recon || reconLoading) {
+      setShowReconModal(true)
+      return
+    }
+    setReconLoading(true)
+    const headers = { Authorization: `Bearer ${token || 'dev-token'}` }
+    fetch(`${API}/api/v1/dashboard/reconciliation`, { headers })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((reconData) => {
+        if (reconData) setRecon(reconData)
+        setShowReconModal(true)
+      })
+      .catch(() => {})
+      .finally(() => setReconLoading(false))
+  }, [token, recon, reconLoading])
 
   if (loading && !data) {
     return (
@@ -265,19 +263,26 @@ function ExecutiveDashboardContent() {
         </div>
 
         <div className="flex items-center gap-2.5">
-          {recon && (
-            <button
-              onClick={() => setShowReconModal(true)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border cursor-pointer transition-colors ${
-                recon.all_combinations_reconciled
+          <button
+            onClick={fetchReconciliation}
+            disabled={reconLoading}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border cursor-pointer transition-colors disabled:opacity-60 disabled:cursor-wait ${
+              recon
+                ? recon.all_combinations_reconciled
                   ? 'bg-[var(--color-good-bg)] border-[var(--color-good-border)] text-[var(--color-good)] hover:opacity-90'
                   : 'bg-[var(--color-critical-bg)] border-[var(--color-critical-border)] text-[var(--color-critical)] hover:opacity-90'
-              }`}
-            >
-              <span aria-hidden="true">{recon.all_combinations_reconciled ? '✓' : '⚠'}</span>
-              <span>Reconciliation: {recon.total_combinations_tested}/{recon.total_combinations_tested} matched</span>
-            </button>
-          )}
+                : 'bg-[var(--color-surface)] hover:bg-[var(--color-surface-muted)] text-[var(--color-text-secondary)] border-[var(--color-border)]'
+            }`}
+          >
+            {recon ? (
+              <>
+                <span aria-hidden="true">{recon.all_combinations_reconciled ? '✓' : '⚠'}</span>
+                <span>Reconciliation: {recon.total_combinations_tested}/{recon.total_combinations_tested} matched</span>
+              </>
+            ) : (
+              <span>{reconLoading ? 'Running 3-way reconciliation…' : 'Run 3-way reconciliation'}</span>
+            )}
+          </button>
 
           <button
             onClick={fetchDashboard}

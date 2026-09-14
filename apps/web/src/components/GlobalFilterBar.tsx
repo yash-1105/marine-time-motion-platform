@@ -141,10 +141,11 @@ export const GlobalFilterBar: React.FC = () => {
             onChange={(v) => handleChange('vesselType', v)}
             allLabel="All Vessel Types"
             options={[
-              { value: 'Container', label: 'Container' },
-              { value: 'Bulker', label: 'Bulker' },
-              { value: 'Tanker', label: 'Tanker' },
+              { value: 'Fully Cellular Containership', label: 'Fully Cellular Containership' },
+              { value: 'Bulk Carrier', label: 'Bulk Carrier' },
+              { value: 'Product Tanker', label: 'Product Tanker' },
               { value: 'General Cargo', label: 'General Cargo' },
+              { value: 'Vehicle Carrier', label: 'Vehicle Carrier' },
               { value: 'Passenger (Cruise)', label: 'Passenger (Cruise)' },
             ]}
           />
@@ -155,10 +156,11 @@ export const GlobalFilterBar: React.FC = () => {
             onChange={(v) => handleChange('cargoType', v)}
             allLabel="All Cargo Types"
             options={[
-              { value: 'Containers', label: 'Containers' },
-              { value: 'Bulk Minerals', label: 'Bulk Minerals' },
-              { value: 'Breakbulk', label: 'Breakbulk' },
-              { value: 'General', label: 'General' },
+              { value: 'Container', label: 'Container' },
+              { value: 'Bulk', label: 'Bulk' },
+              { value: 'Break Bulk', label: 'Break Bulk' },
+              { value: 'Liquid Bulk', label: 'Liquid Bulk' },
+              { value: 'RoRo', label: 'RoRo' },
               { value: 'Passengers', label: 'Passengers' },
             ]}
           />

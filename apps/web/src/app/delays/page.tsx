@@ -10,6 +10,7 @@ import {
   StatusBadge,
   EmptyState,
   LoadingState,
+  ErrorState,
 } from '@/components/ui'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
@@ -185,7 +186,7 @@ function severityTone(severity: string): 'good' | 'warning' | 'critical' | 'neut
 }
 
 export default function DelaysAndBottlenecksPage() {
-  const { token } = useAuth()
+  const { token, isLoading: authLoading } = useAuth()
   const [activeTab, setActiveTab] = useState<TabType>('delays')
 
   // Summary & Delays state
@@ -193,6 +194,7 @@ export default function DelaysAndBottlenecksPage() {
   const [delays, setDelays] = useState<DelayItem[]>([])
   const [delaysTotal, setDelaysTotal] = useState(0)
   const [delaysLoading, setDelaysLoading] = useState(false)
+  const [delaysError, setDelaysError] = useState<string | null>(null)
   const [stageFilter, setStageFilter] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
   const [causeStatusFilter, setCauseStatusFilter] = useState('')
@@ -245,23 +247,25 @@ export default function DelaysAndBottlenecksPage() {
 
   // 1. Fetch Summary
   const fetchSummary = useCallback(async () => {
-    if (!token) return
     try {
       const res = await fetch(`${API}/api/v1/delays/summary`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${token || 'dev-token'}` },
       })
       if (res.ok) {
         const data = await res.json()
         setSummary(data)
+        setDelaysError(null)
+      } else {
+        setDelaysError(`Failed to load delay summary: HTTP ${res.status}`)
       }
     } catch (e) {
       console.error('Failed to load delays summary', e)
+      setDelaysError('Network error while loading delay summary')
     }
   }, [token])
 
   // 2. Fetch Delays List
   const fetchDelays = useCallback(async () => {
-    if (!token) return
     setDelaysLoading(true)
     try {
       const params = new URLSearchParams()
@@ -273,15 +277,19 @@ export default function DelaysAndBottlenecksPage() {
       params.append('limit', '100')
 
       const res = await fetch(`${API}/api/v1/delays?${params.toString()}`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${token || 'dev-token'}` },
       })
       if (res.ok) {
         const data = await res.json()
         setDelays(data.items || [])
         setDelaysTotal(data.total || 0)
+        setDelaysError(null)
+      } else {
+        setDelaysError(`Failed to load delays: HTTP ${res.status}`)
       }
     } catch (e) {
       console.error('Failed to load delays', e)
+      setDelaysError('Network error while loading delays')
     } finally {
       setDelaysLoading(false)
     }
@@ -378,16 +386,18 @@ export default function DelaysAndBottlenecksPage() {
   }, [token])
 
   useEffect(() => {
+    if (authLoading) return
     fetchSummary()
     fetchDelays()
-  }, [fetchSummary, fetchDelays])
+  }, [authLoading, fetchSummary, fetchDelays])
 
   useEffect(() => {
+    if (authLoading) return
     if (activeTab === 'bottlenecks') fetchBottlenecks()
     if (activeTab === 'outliers') fetchOutliers()
     if (activeTab === 'criticality') fetchCriticality()
     if (activeTab === 'alerts') fetchAlertsAndActions()
-  }, [activeTab, fetchBottlenecks, fetchOutliers, fetchCriticality, fetchAlertsAndActions])
+  }, [authLoading, activeTab, fetchBottlenecks, fetchOutliers, fetchCriticality, fetchAlertsAndActions])
 
   // Actions
   const handleOpenDetail = async (delayId: string) => {
@@ -597,6 +607,19 @@ export default function DelaysAndBottlenecksPage() {
             context="Requires reason"
           />
         </div>
+
+        {delaysError && !summary && (
+          <Card>
+            <ErrorState
+              title="Failed to load delay data"
+              description={delaysError}
+              onRetry={() => {
+                fetchSummary()
+                fetchDelays()
+              }}
+            />
+          </Card>
+        )}
 
         {/* Navigation Tabs */}
         <div className="flex border-b border-[var(--color-border)] gap-1 text-sm font-medium overflow-x-auto">

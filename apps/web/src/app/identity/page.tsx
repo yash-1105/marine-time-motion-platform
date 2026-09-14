@@ -73,7 +73,7 @@ interface PopulationSummary {
 }
 
 export default function IdentityPage() {
-  const { can } = useAuth()
+  const { can, token: authToken, isLoading: authLoading } = useAuth()
   const [population, setPopulation] = useState<PopulationSummary | null>(null)
   const [candidates, setCandidates] = useState<Candidate[]>([])
   const [decisions, setDecisions] = useState<MergeDecisionItem[]>([])
@@ -90,10 +90,9 @@ export default function IdentityPage() {
   const fetchData = React.useCallback(async () => {
     try {
       setLoading(true)
-      const token = localStorage.getItem('token') || ''
       const headers = {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
+        Authorization: `Bearer ${authToken || 'dev-token'}`,
       }
 
       // 1. Population summary
@@ -122,17 +121,17 @@ export default function IdentityPage() {
       setLoading(false)
       setInitialLoad(false)
     }
-  }, [API_URL])
+  }, [API_URL, authToken])
 
   useEffect(() => {
+    if (authLoading) return
     fetchData()
-  }, [fetchData])
+  }, [authLoading, fetchData])
 
   const handleSelectCandidate = async (id: string) => {
     setSelectedCandidateId(id)
     try {
-      const token = localStorage.getItem('token') || ''
-      const headers = { Authorization: `Bearer ${token}` }
+      const headers = { Authorization: `Bearer ${authToken || 'dev-token'}` }
 
       const detailRes = await fetch(`${API_URL}/identity/candidates/${id}`, { headers })
       if (detailRes.ok) {
@@ -154,12 +153,11 @@ export default function IdentityPage() {
     try {
       setLoading(true)
       setMessage(null)
-      const token = localStorage.getItem('token') || ''
       const res = await fetch(`${API_URL}/identity/resolve?auto_merge=true`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${authToken || 'dev-token'}`,
         },
       })
       if (res.ok) {
@@ -184,12 +182,11 @@ export default function IdentityPage() {
   const handleMerge = async (candidateId: string) => {
     try {
       setLoading(true)
-      const token = localStorage.getItem('token') || ''
       const res = await fetch(`${API_URL}/identity/merge`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${authToken || 'dev-token'}`,
         },
         body: JSON.stringify({ candidate_id: candidateId }),
       })
@@ -214,12 +211,11 @@ export default function IdentityPage() {
   const handleUnmerge = async (decisionId: string) => {
     try {
       setLoading(true)
-      const token = localStorage.getItem('token') || ''
       const res = await fetch(`${API_URL}/identity/unmerge/${decisionId}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${authToken || 'dev-token'}`,
         },
         body: JSON.stringify({ notes: 'Manual steward unmerge' }),
       })

@@ -48,7 +48,7 @@ interface QualitySummary {
 }
 
 function DataQualityContent() {
-  const { token } = useAuth()
+  const { token, isLoading: authLoading } = useAuth()
   const searchParams = useSearchParams()
 
   const [summary, setSummary] = useState<QualitySummary | null>(null)
@@ -96,8 +96,9 @@ function DataQualityContent() {
   }, [headers])
 
   useEffect(() => {
+    if (authLoading) return
     fetchQualityData()
-  }, [fetchQualityData])
+  }, [authLoading, fetchQualityData])
 
   const handleResolveIssue = async (e: React.FormEvent) => {
     e.preventDefault()

@@ -50,7 +50,6 @@ const NAV_GROUPS: NavGroup[] = [
       { label: 'Time & Motion Explorer', path: '/time-and-motion', requiredAction: 'view', glyph: '◰' },
       { label: 'Governed KPIs', path: '/kpis', requiredAction: 'view', glyph: '◎' },
       { label: 'Delays & Bottlenecks', path: '/delays', requiredAction: 'view', glyph: '⏳' },
-      { label: 'Alerts & Actions', path: '/alerts', requiredAction: 'view', glyph: '☢' },
     ],
   },
   {

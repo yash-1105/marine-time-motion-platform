@@ -109,7 +109,7 @@ function fmtValue(val?: number | null, unit?: string) {
 }
 
 export default function KPIDashboardPage() {
-  const { token, can } = useAuth()
+  const { token, can, isLoading: authLoading } = useAuth()
   const headers = { Authorization: `Bearer ${token || 'dev-token'}` }
 
   // State
@@ -143,8 +143,9 @@ export default function KPIDashboardPage() {
   }, [includeAliases, token])
 
   useEffect(() => {
+    if (authLoading) return
     fetchScorecard()
-  }, [fetchScorecard])
+  }, [authLoading, fetchScorecard])
 
   // Select KPI for detail drawer
   const handleSelectKPI = async (item: ScorecardItem) => {
