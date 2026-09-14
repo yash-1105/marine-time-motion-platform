@@ -161,3 +161,92 @@ class KPIBenchmark(BaseModel):
     source = Column(String(255), nullable=True)
     period = Column(String(50), nullable=True)
     notes = Column(Text, nullable=True)
+
+
+class BottleneckRecord(BaseModel):
+    __tablename__ = "bottleneck_record"
+    __table_args__ = {"schema": "analytics"}
+
+    stage_or_resource = Column(String(100), nullable=False)
+    bottleneck_type = Column(String(50), nullable=False)  # RESOURCE_BOTTLENECK | PROCESS_BOTTLENECK
+    duration_score = Column(Float, nullable=False)
+    frequency_score = Column(Float, nullable=False)
+    variability_score = Column(Float, nullable=False)
+    tail_risk_score = Column(Float, nullable=False)
+    turnaround_contribution = Column(Float, nullable=False)
+    repeated_target_breach_rate = Column(Float, nullable=False)
+    business_criticality_score = Column(Float, nullable=False)
+    overall_bottleneck_score = Column(Float, nullable=False)
+    rank = Column(Integer, nullable=False)
+    details = Column(JSON, nullable=True)
+
+
+class OutlierRecord(BaseModel):
+    __tablename__ = "outlier_record"
+    __table_args__ = {"schema": "analytics"}
+
+    vessel_call_id = Column(ForeignKey("canonical.vessel_call.id", ondelete="CASCADE"), nullable=False)
+    vcn = Column(String(100), nullable=False)
+    outlier_type = Column(String(100), nullable=False)  # OPERATIONAL_OUTLIER | DATA_QUALITY_OUTLIER | PROCESS_VIOLATION | EXTREME_DELAY_CASE | HIGH_CRITICALITY_CASE
+    metric_name = Column(String(100), nullable=False)
+    observed_value = Column(Float, nullable=False)
+    benchmark_or_p90 = Column(Float, nullable=True)
+    divergence = Column(Float, nullable=True)
+    is_excluded_from_kpi = Column(Boolean, default=False)
+    exclusion_rationale = Column(Text, nullable=True)
+    severity = Column(String(20), default="MEDIUM")
+    evidence = Column(JSON, nullable=True)
+    detected_at = Column(DateTime(timezone=True), nullable=True)
+
+
+class AlertRule(BaseModel):
+    __tablename__ = "alert_rule"
+    __table_args__ = {"schema": "analytics"}
+
+    rule_code = Column(String(100), unique=True, nullable=False)
+    name = Column(String(255), nullable=False)
+    category = Column(String(100), nullable=False)  # SLA | BOTTLENECK | OUTLIER | RESOURCE | QUALITY
+    severity = Column(String(20), nullable=False)  # INFO | LOW | MEDIUM | HIGH | CRITICAL
+    description = Column(Text, nullable=True)
+    threshold_config = Column(JSON, nullable=True)
+    is_active = Column(Boolean, default=True)
+    suppression_window_minutes = Column(Integer, default=60)
+
+
+class OperationalAlert(BaseModel):
+    __tablename__ = "operational_alert"
+    __table_args__ = {"schema": "analytics"}
+
+    alert_rule_id = Column(ForeignKey("analytics.alert_rule.id", ondelete="SET NULL"), nullable=True)
+    rule_code = Column(String(100), nullable=False)
+    severity = Column(String(20), nullable=False)
+    title = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    vessel_call_id = Column(ForeignKey("canonical.vessel_call.id", ondelete="SET NULL"), nullable=True)
+    vcn = Column(String(100), nullable=True)
+    status = Column(String(50), default="NEW")  # NEW | ACKNOWLEDGED | RESOLVED | SUPPRESSED
+    acknowledged_at = Column(DateTime(timezone=True), nullable=True)
+    acknowledged_by = Column(String(100), nullable=True)
+    resolved_at = Column(DateTime(timezone=True), nullable=True)
+    resolved_by = Column(String(100), nullable=True)
+    resolution_notes = Column(Text, nullable=True)
+    linked_entity_type = Column(String(100), nullable=True)
+    linked_entity_id = Column(String(100), nullable=True)
+    evidence = Column(JSON, nullable=True)
+
+
+class ActionItem(BaseModel):
+    __tablename__ = "action_item"
+    __table_args__ = {"schema": "analytics"}
+
+    alert_id = Column(ForeignKey("analytics.operational_alert.id", ondelete="SET NULL"), nullable=True)
+    vessel_call_id = Column(ForeignKey("canonical.vessel_call.id", ondelete="SET NULL"), nullable=True)
+    title = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    assigned_to = Column(String(100), nullable=True)
+    due_date = Column(DateTime(timezone=True), nullable=True)
+    status = Column(String(50), default="OPEN")  # OPEN | IN_PROGRESS | COMPLETED | CANCELLED
+    priority = Column(String(20), default="MEDIUM")
+    comments = Column(JSON, default=list)
+    created_by = Column(String(100), nullable=True)
+

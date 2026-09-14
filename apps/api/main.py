@@ -15,6 +15,11 @@ from apps.api.routers.quality import router as quality_router
 from apps.api.routers.operations import router as operations_router
 from apps.api.routers.analytics import router as analytics_router
 from apps.api.routers.kpi import router as kpi_router
+from apps.api.routers.delays import router as delays_router
+from apps.api.routers.bottlenecks import router as bottlenecks_router
+from apps.api.routers.outliers import router as outliers_router
+from apps.api.routers.criticality import router as criticality_router
+from apps.api.routers.alerts import router as alerts_router
 
 app = FastAPI(
     title="Marine Time & Motion Platform",
@@ -76,6 +81,11 @@ v1_router.include_router(identity_router)
 v1_router.include_router(journey_router)
 v1_router.include_router(analytics_router)
 v1_router.include_router(kpi_router)
+v1_router.include_router(delays_router)
+v1_router.include_router(bottlenecks_router)
+v1_router.include_router(outliers_router)
+v1_router.include_router(criticality_router)
+v1_router.include_router(alerts_router)
 
 app.include_router(v1_router)
 

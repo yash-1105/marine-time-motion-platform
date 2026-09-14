@@ -7,6 +7,7 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     String,
+    Text,
     UniqueConstraint,
 )
 
@@ -118,21 +119,39 @@ class ServiceExecution(BaseModel):
 class Delay(BaseModel):
     __tablename__ = "delay"
     __table_args__ = {"schema": "canonical"}
-    vessel_call_id = Column(ForeignKey("canonical.vessel_call.id"), nullable=False)
+    vessel_call_id = Column(ForeignKey("canonical.vessel_call.id", ondelete="CASCADE"), nullable=False)
+    source_delay_id = Column(String(50), nullable=True)
     movement_stage = Column(String, nullable=False)
     total_duration_hours = Column(Float, nullable=False)
     is_early_service = Column(Boolean, default=False)
+    scheduled_time = Column(DateTime(timezone=True), nullable=True)
+    served_time = Column(DateTime(timezone=True), nullable=True)
+    delay_hours = Column(Float, nullable=True)
+    recalculated_delay_hours = Column(Float, nullable=True)
+    delay_reason = Column(String(255), nullable=True)
+    source_category = Column(String(100), nullable=True)
+    canonical_category = Column(String(100), nullable=True)
+    cause_status = Column(String(50), default="Confirmed")  # Confirmed | Inferred
+    confidence = Column(String(50), default="High")
+    resolution_status = Column(String(50), default="Open")  # Open | Closed | Under Review | Mitigated
+    has_reconciliation_mismatch = Column(Boolean, default=False)
+    reconciliation_notes = Column(Text, nullable=True)
+    requires_reason_review = Column(Boolean, default=False)
 
 
 class DelayAllocation(BaseModel):
     __tablename__ = "delay_allocation"
     __table_args__ = {"schema": "canonical"}
-    delay_id = Column(ForeignKey("canonical.delay.id"), nullable=False)
+    delay_id = Column(ForeignKey("canonical.delay.id", ondelete="CASCADE"), nullable=False)
     cause = Column(String, nullable=False)
+    canonical_category = Column(String(100), nullable=True)
+    reason = Column(String(255), nullable=True)
     duration_hours = Column(Float, nullable=False)
     is_primary = Column(Boolean, default=True)
-    cause_status = Column(String, nullable=True)  # CONFIRMED|INFERRED
+    cause_status = Column(String(50), default="CONFIRMED")  # CONFIRMED | INFERRED
+    confidence = Column(Float, nullable=True)
     inference_evidence = Column(JSON, nullable=True)
+    human_review_state = Column(String(50), default="APPROVED")  # APPROVED | PENDING_REVIEW | REJECTED
 
 
 class CargoOperation(BaseModel):

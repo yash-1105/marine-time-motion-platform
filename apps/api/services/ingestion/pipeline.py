@@ -7,11 +7,14 @@ from sqlalchemy.orm import Session
 
 from apps.api.models.canonical import (
     CargoOperation,
+    Delay,
+    DelayAllocation,
     EventOccurrence,
     VesselCall,
 )
 from apps.api.models.config import EventDefinition
 from apps.api.models.ingestion import IngestionBatch, RawRecord, StagingRecord
+from apps.api.services.delays.mapping import map_to_canonical_category
 
 
 class IngestionPipeline:
@@ -338,21 +341,77 @@ class IngestionPipeline:
             pd_data = r.parsed_data
             vcn = pd_data.get("VCN")
             vc_id = vcn_to_id.get(vcn)
-            if not vc_id: continue
-            
+            if not vc_id:
+                continue
+
             def float_val(val_str):
-                if not val_str: return None
-                try: return float(val_str)
-                except: return None
-                
+                if not val_str:
+                    return None
+                try:
+                    return float(val_str)
+                except Exception:
+                    return None
+
             val = float_val(pd_data.get("Duration_Hours") or pd_data.get("Delay_Hours"))
+            sched_dt = dt_parse(pd_data.get("Scheduled_Time"))
+            served_dt = dt_parse(pd_data.get("Served_Time"))
+            recalc_val = None
+            has_mismatch = False
+            reconcil_notes = None
+            if sched_dt and served_dt:
+                recalc_val = round((served_dt - sched_dt).total_seconds() / 3600.0, 4)
+                if val is not None and round(abs(recalc_val - val), 6) > 0.02:
+                    has_mismatch = True
+                    reconcil_notes = f"Stated: {val}h vs Recalculated: {recalc_val}h"
+
+            dur_val = val if val is not None else (recalc_val if recalc_val is not None else 0.0)
+            reason_str = str(pd_data.get("Delay_Reason") or "").strip()
+            cat_str = str(pd_data.get("Delay_Category") or "").strip()
+            canon_cat = map_to_canonical_category(cat_str, reason_str)
+            cause_status = str(pd_data.get("Cause_Status") or "Confirmed").strip()
+            confidence_str = str(pd_data.get("Confidence") or "High").strip()
+            resolution_status = str(pd_data.get("Resolution_Status") or "Open").strip()
+
+            requires_review = False
+            if dur_val > 0 and (not reason_str or not cat_str):
+                requires_review = True
+
             d = Delay(
                 vessel_call_id=vc_id,
+                source_delay_id=pd_data.get("Delay_ID"),
                 movement_stage=pd_data.get("Movement_Type", "Unknown"),
-                total_duration_hours=val if val is not None else 0.0,
-                is_early_service=False
+                total_duration_hours=dur_val,
+                is_early_service=(dur_val < 0),
+                scheduled_time=sched_dt,
+                served_time=served_dt,
+                delay_hours=val,
+                recalculated_delay_hours=recalc_val,
+                delay_reason=reason_str if reason_str else None,
+                source_category=cat_str if cat_str else None,
+                canonical_category=canon_cat,
+                cause_status=cause_status,
+                confidence=confidence_str,
+                resolution_status=resolution_status,
+                has_reconciliation_mismatch=has_mismatch,
+                reconciliation_notes=reconcil_notes,
+                requires_reason_review=requires_review,
             )
             self.db.add(d)
+            self.db.flush()
+
+            alloc = DelayAllocation(
+                delay_id=d.id,
+                cause=canon_cat,
+                canonical_category=canon_cat,
+                reason=reason_str if reason_str else None,
+                duration_hours=dur_val,
+                is_primary=True,
+                cause_status="CONFIRMED" if cause_status.lower() == "confirmed" else "INFERRED",
+                confidence=1.0 if confidence_str.lower() == "high" else (0.7 if confidence_str.lower() == "medium" else 0.5),
+                inference_evidence=None,
+                human_review_state="APPROVED" if cause_status.lower() == "confirmed" else "PENDING_REVIEW",
+            )
+            self.db.add(alloc)
 
         cargo_records = [r for r in batch_staging if r.canonical_table == 'cargo_ops']
         for r in cargo_records:
