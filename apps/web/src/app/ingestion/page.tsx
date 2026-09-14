@@ -4,11 +4,11 @@ import { useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 
 export default function IngestionPage() {
-  const { principal } = useAuth();
+  const { can, roles } = useAuth();
   const [file, setFile] = useState<File | null>(null);
   const [status, setStatus] = useState<string>("");
 
-  if (!principal?.permissions.includes("create:vessel_call")) {
+  if (!can("create:vessel_call")) {
     return <div className="p-8 text-red-500">Access Denied: Missing create:vessel_call permission</div>;
   }
 
@@ -30,7 +30,8 @@ export default function IngestionPage() {
       
       const data = await res.json();
       setStatus(`Success! Batch ID: ${data.batch_id}`);
-    } catch (e: any) {
+    } catch (error) {
+      const e = error as Error;
       setStatus(`Error: ${e.message}`);
     }
   };
@@ -42,7 +43,8 @@ export default function IngestionPage() {
       if (!res.ok) throw new Error("Synthetic load failed");
       const data = await res.json();
       setStatus(`Synthetic data loaded. Batch ID: ${data.batch_id}`);
-    } catch (e: any) {
+    } catch (error) {
+      const e = error as Error;
       setStatus(`Error: ${e.message}`);
     }
   };
@@ -67,7 +69,7 @@ export default function IngestionPage() {
         </button>
       </div>
 
-      {principal.roles.includes("Platform Administrator") || principal.roles.includes("Developer") ? (
+      {roles.includes("Platform Administrator") || roles.includes("Developer") ? (
         <div className="border p-6 rounded-lg space-y-4 bg-orange-50 border-orange-200">
           <h2 className="text-xl font-semibold text-orange-800">Synthetic Test Dataset</h2>
           <p className="text-sm text-orange-700">

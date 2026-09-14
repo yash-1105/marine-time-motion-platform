@@ -1,14 +1,17 @@
 import hashlib
-import json
 import uuid
-import polars as pl
-from datetime import datetime
-from sqlalchemy.orm import Session
-from sqlalchemy import select
 
-from apps.api.models.ingestion import RawRecord, StagingRecord, IngestionBatch
-from apps.api.models.canonical import VesselCall, EventOccurrence, ServiceRequest, ServiceAssignment, ServiceExecution, Delay, DelayAllocation
+import polars as pl
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from apps.api.models.canonical import (
+    EventOccurrence,
+    VesselCall,
+)
 from apps.api.models.config import EventDefinition
+from apps.api.models.ingestion import IngestionBatch, RawRecord, StagingRecord
+
 
 class IngestionPipeline:
     def __init__(self, db: Session, tenant_id: str = "default-tenant"):
@@ -31,7 +34,7 @@ class IngestionPipeline:
         ).scalar_one_or_none()
         
         if existing and existing.status == "COMMITTED":
-            return existing.batch_id
+            return str(existing.batch_id)
 
         batch = IngestionBatch(
             batch_id=batch_id,
@@ -48,9 +51,21 @@ class IngestionPipeline:
             self._parse_to_raw(file_path, batch)
             self._map_to_staging(batch)
             self._validate_staging(batch)
-            if not dry_run:
+            
+            if dry_run:
+                try:
+                    self.db.begin_nested()
+                    self._commit_to_canonical(batch)
+                    self.db.rollback()
+                except Exception:
+                    self.db.rollback()
+                # Status for dry run
+                batch.status = "DRY_RUN_COMPLETED"
+                self.db.commit()
+            else:
                 self._commit_to_canonical(batch)
-            return batch.batch_id
+                
+            return str(batch.batch_id)
         except Exception as e:
             batch.status = "FAILED"
             batch.error_message = str(e)
@@ -106,17 +121,23 @@ class IngestionPipeline:
             for r in raw_records:
                 if r.row_number not in row_map:
                     row_map[r.row_number] = {"data": {}, "source_record_id": r.source_record_id}
-                row_map[r.row_number]["data"][r.column_name] = r.original_value
+                if isinstance(row_map[r.row_number], dict) and isinstance(row_map[r.row_number].get("data"), dict):
+                    row_map[r.row_number]["data"][str(r.column_name)] = r.original_value  # type: ignore
                 
             staging_records = []
             for row_idx, row_info in row_map.items():
                 parsed_data = row_info["data"]
                 canonical_table = ""
-                if sheet == "VesselCalls": canonical_table = "vessel_call"
-                elif sheet == "Events": canonical_table = "event_occurrence"
-                elif sheet == "Services": canonical_table = "service_request"
-                elif sheet == "CargoOps": canonical_table = "cargo_ops"
-                elif sheet == "Delays": canonical_table = "delay"
+                if sheet == "VesselCalls":
+                    canonical_table = "vessel_call"
+                elif sheet == "Events":
+                    canonical_table = "event_occurrence"
+                elif sheet == "Services":
+                    canonical_table = "service_request"
+                elif sheet == "CargoOps":
+                    canonical_table = "cargo_ops"
+                elif sheet == "Delays":
+                    canonical_table = "delay"
                 
                 staging_record = StagingRecord(
                     file_checksum=batch.file_checksum,
@@ -151,33 +172,35 @@ class IngestionPipeline:
             pd = r.parsed_data
             vcn = pd.get("VCN")
             
-            def get_val(key):
-                val = pd.get(key)
+            def get_val(pd_dict, key):
+                val = pd_dict.get(key)
                 return val if val != "" else None
                 
-            def get_float(key):
-                val = get_val(key)
+            def get_float(pd_dict, key):
+                val = get_val(pd_dict, key)
                 if val:
-                    try: return float(val)
-                    except: return None
+                    try:
+                        return float(val)
+                    except Exception:
+                        return None
                 return None
                 
             vc = VesselCall(
                 tenant_id=batch.tenant_id,
-                vessel_name=get_val("Vessel_Name") or "UNKNOWN",
-                imo_number=get_val("IMO_Number"),
+                vessel_name=get_val(pd, "Vessel_Name") or "UNKNOWN",
+                imo_number=get_val(pd, "IMO_Number"),
                 vcn=vcn,
-                vessel_type=get_val("Vessel_Type"),
-                vessel_size_teu=get_float("Vessel_Size_TEU"),
-                flag=get_val("Flag"),
-                last_port_of_call=get_val("Last_Port_Of_Call"),
-                next_port_of_call=get_val("Next_Port_Of_Call"),
-                reason_for_visit=get_val("Reason_For_Visit"),
-                cargo_type=get_val("Cargo_Type"),
-                quantity_value=get_float("Planned_Quantity"),
-                grt=get_float("GRT"),
-                loa_value=get_float("LOA_Value"),
-                dwt=get_float("DWT")
+                vessel_type=get_val(pd, "Vessel_Type"),
+                vessel_size_teu=get_float(pd, "Vessel_Size_TEU"),
+                flag=get_val(pd, "Flag"),
+                last_port_of_call=get_val(pd, "Last_Port_Of_Call"),
+                next_port_of_call=get_val(pd, "Next_Port_Of_Call"),
+                reason_for_visit=get_val(pd, "Reason_For_Visit"),
+                cargo_type=get_val(pd, "Cargo_Type"),
+                quantity_value=get_float(pd, "Planned_Quantity"),
+                grt=get_float(pd, "GRT"),
+                loa_value=get_float(pd, "LOA_Value"),
+                dwt=get_float(pd, "DWT")
             )
             self.db.add(vc)
             vessels_to_add.append((vcn, vc))
@@ -195,8 +218,8 @@ class IngestionPipeline:
         event_defs = self.db.execute(select(EventDefinition)).scalars().all()
         event_def_map = {e.name: e.id for e in event_defs}
         
-        from dateutil import parser
         import pytz
+        from dateutil import parser
         
         event_counters = {}
         for r in event_records:
@@ -225,7 +248,7 @@ class IngestionPipeline:
                         dt = tz.localize(dt)
                     utc_val = dt.astimezone(pytz.utc)
                     parsed_tz = dt
-                except:
+                except Exception:
                     pass
             
             scope = "ARRIVAL"
@@ -237,7 +260,7 @@ class IngestionPipeline:
             confidence_str = pd.get("Confidence_Score")
             try:
                 confidence = float(confidence_str) if confidence_str and confidence_str != "" else None
-            except:
+            except Exception:
                 confidence = None
                 
             if utc_val and event_def_id:
@@ -259,5 +282,74 @@ class IngestionPipeline:
                 )
                 self.db.add(ev)
                 
+
+        batch_staging = self.db.execute(select(StagingRecord).where(StagingRecord.ingestion_batch_id == batch.batch_id)).scalars().all()
+        from apps.api.models.canonical import ServiceRequest, ServiceAssignment, ServiceExecution, Delay
+        
+        service_records = [r for r in batch_staging if r.canonical_table == 'service_request']
+        for r in service_records:
+            pd_data = r.parsed_data
+            vcn = pd_data.get("VCN")
+            vc_id = vcn_to_id.get(vcn)
+            if not vc_id: continue
+            
+            def dt_parse(dt_str):
+                from dateutil import parser
+                import pytz
+                if not dt_str: return None
+                try:
+                    dt = parser.parse(dt_str)
+                    if dt.tzinfo is None:
+                        dt = pytz.timezone("Africa/Johannesburg").localize(dt)
+                    return dt.astimezone(pytz.utc)
+                except:
+                    return None
+                    
+            req = ServiceRequest(
+                vessel_call_id=vc_id,
+                service_type=pd_data.get("Service_Type", "Unknown"),
+                requested_time=dt_parse(pd_data.get("Requested_Time"))
+            )
+            self.db.add(req)
+            self.db.flush()
+            
+            ass = ServiceAssignment(
+                service_request_id=req.id,
+                scheduled_time=dt_parse(pd_data.get("Scheduled_Time")),
+                assigned_resource_id=pd_data.get("Resource_Assigned"),
+                resource_type=pd_data.get("Service_Type")
+            )
+            self.db.add(ass)
+            self.db.flush()
+            
+            exe = ServiceExecution(
+                service_assignment_id=ass.id,
+                served_time=dt_parse(pd_data.get("Served_Time")),
+                execution_status=pd_data.get("Data_Status")
+            )
+            self.db.add(exe)
+
+        delay_records = [r for r in batch_staging if r.canonical_table == 'delay']
+        for r in delay_records:
+            pd_data = r.parsed_data
+            vcn = pd_data.get("VCN")
+            vc_id = vcn_to_id.get(vcn)
+            if not vc_id: continue
+            
+            def float_val(val_str):
+                if not val_str: return None
+                try: return float(val_str)
+                except: return None
+                
+            val = float_val(pd_data.get("Duration_Hours") or pd_data.get("Delay_Hours"))
+            d = Delay(
+                vessel_call_id=vc_id,
+                movement_stage=pd_data.get("Movement_Type", "Unknown"),
+                total_duration_hours=val if val is not None else 0.0,
+                is_early_service=False
+            )
+            self.db.add(d)
+        
         batch.status = "COMMITTED"
         self.db.commit()
+

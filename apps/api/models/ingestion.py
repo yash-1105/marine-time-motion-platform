@@ -1,5 +1,7 @@
-from sqlalchemy import Column, String, Integer, JSON, Boolean
+from sqlalchemy import JSON, Boolean, Column, Integer, String
+
 from .base import BaseModel
+
 
 class RawRecord(BaseModel):
     __tablename__ = "record"

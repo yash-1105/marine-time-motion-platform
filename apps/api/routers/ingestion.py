@@ -1,13 +1,14 @@
-from fastapi import APIRouter, Depends, UploadFile, File, BackgroundTasks, HTTPException, Request
-from sqlalchemy.orm import Session
-from sqlalchemy import select, desc
-import shutil
 import os
+import shutil
 import uuid
 
-from apps.api.core.database import get_db
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
+from sqlalchemy import desc, select
+from sqlalchemy.orm import Session
+
 from apps.api.auth.dependencies import require
-from apps.api.models.ingestion import IngestionBatch, RawRecord, StagingRecord
+from apps.api.core.database import get_db
+from apps.api.models.ingestion import IngestionBatch
 from apps.api.services.ingestion.pipeline import IngestionPipeline
 from apps.api.services.ingestion.synthetic import load_synthetic_dataset
 

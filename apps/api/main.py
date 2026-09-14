@@ -8,8 +8,9 @@ from apps.api.auth.dependencies import require
 from apps.api.core.config import settings
 from apps.api.routers.audit import router as audit_router
 from apps.api.routers.auth import router as auth_router
-from apps.api.routers.operations import router as operations_router
 from apps.api.routers.ingestion import router as ingestion_router
+from apps.api.routers.quality import router as quality_router
+from apps.api.routers.operations import router as operations_router
 
 app = FastAPI(
     title="Marine Time & Motion Platform",
@@ -66,6 +67,7 @@ v1_router.include_router(auth_router)
 v1_router.include_router(audit_router)
 v1_router.include_router(operations_router)
 v1_router.include_router(ingestion_router)
+v1_router.include_router(quality_router)
 
 app.include_router(v1_router)
 

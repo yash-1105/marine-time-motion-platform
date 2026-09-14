@@ -1,8 +1,13 @@
+from datetime import datetime
+
 import polars as pl
-from datetime import datetime, timedelta
-from sqlalchemy.orm import Session
 from sqlalchemy import text
-from apps.api.models.testkit import ExpectedOutput, DQCase
+from sqlalchemy.orm import Session
+
+from apps.api.models.testkit import DQCase, ExpectedOutput
+
+from .pipeline import IngestionPipeline
+
 
 def load_testkit_oracles(db: Session, file_path: str):
     workbook = pl.read_excel(file_path, sheet_id=0)
@@ -27,12 +32,12 @@ def load_testkit_oracles(db: Session, file_path: str):
                 else:
                     try:
                         val = float(val)
-                    except:
+                    except Exception:
                         val = None
             elif val is not None:
                  try:
                      val = float(val)
-                 except:
+                 except Exception:
                      val = None
                      
             if val is not None:
@@ -60,7 +65,7 @@ def load_testkit_oracles(db: Session, file_path: str):
     db.commit()
 
 
-from .pipeline import IngestionPipeline
+
 
 def load_synthetic_dataset(db: Session, file_path: str):
     # Reset synthetic tenant
@@ -70,7 +75,25 @@ def load_synthetic_dataset(db: Session, file_path: str):
     db.execute(text("DELETE FROM raw.batch WHERE tenant_id = 'synthetic-tenant'"))
 
     
+
+
+
+    db.execute(text("DELETE FROM quality.quality_issue WHERE vessel_call_id IN (SELECT id FROM canonical.vessel_call WHERE tenant_id = 'synthetic-tenant')"))
     db.execute(text("DELETE FROM canonical.event_occurrence WHERE vessel_call_id IN (SELECT id FROM canonical.vessel_call WHERE tenant_id = 'synthetic-tenant')"))
+    db.execute(text("DELETE FROM canonical.service_execution WHERE service_assignment_id IN (SELECT id FROM canonical.service_assignment WHERE service_request_id IN (SELECT id FROM canonical.service_request WHERE vessel_call_id IN (SELECT id FROM canonical.vessel_call WHERE tenant_id = 'synthetic-tenant')))"))
+    db.execute(text("DELETE FROM canonical.service_assignment WHERE service_request_id IN (SELECT id FROM canonical.service_request WHERE vessel_call_id IN (SELECT id FROM canonical.vessel_call WHERE tenant_id = 'synthetic-tenant'))"))
+    db.execute(text("DELETE FROM canonical.service_request WHERE vessel_call_id IN (SELECT id FROM canonical.vessel_call WHERE tenant_id = 'synthetic-tenant')"))
+    db.execute(text("DELETE FROM canonical.delay WHERE vessel_call_id IN (SELECT id FROM canonical.vessel_call WHERE tenant_id = 'synthetic-tenant')"))
+    db.execute(text("DELETE FROM canonical.vessel_call WHERE tenant_id = 'synthetic-tenant'"))
+
+    db.execute(text("DELETE FROM canonical.event_occurrence WHERE vessel_call_id IN (SELECT id FROM canonical.vessel_call WHERE tenant_id = 'synthetic-tenant')"))
+
+    db.execute(text("DELETE FROM canonical.service_execution WHERE service_assignment_id IN (SELECT id FROM canonical.service_assignment WHERE service_request_id IN (SELECT id FROM canonical.service_request WHERE vessel_call_id IN (SELECT id FROM canonical.vessel_call WHERE tenant_id = 'synthetic-tenant')))"))
+    db.execute(text("DELETE FROM canonical.service_assignment WHERE service_request_id IN (SELECT id FROM canonical.service_request WHERE vessel_call_id IN (SELECT id FROM canonical.vessel_call WHERE tenant_id = 'synthetic-tenant'))"))
+    db.execute(text("DELETE FROM canonical.service_request WHERE vessel_call_id IN (SELECT id FROM canonical.vessel_call WHERE tenant_id = 'synthetic-tenant')"))
+    db.execute(text("DELETE FROM canonical.delay WHERE vessel_call_id IN (SELECT id FROM canonical.vessel_call WHERE tenant_id = 'synthetic-tenant')"))
+    db.execute(text("DELETE FROM canonical.vessel_call WHERE tenant_id = 'synthetic-tenant'"))
+
     db.execute(text("DELETE FROM canonical.service_request WHERE vessel_call_id IN (SELECT id FROM canonical.vessel_call WHERE tenant_id = 'synthetic-tenant')"))
     db.execute(text("DELETE FROM canonical.delay WHERE vessel_call_id IN (SELECT id FROM canonical.vessel_call WHERE tenant_id = 'synthetic-tenant')"))
     db.execute(text("DELETE FROM canonical.vessel_call WHERE tenant_id = 'synthetic-tenant'"))

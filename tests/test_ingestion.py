@@ -1,7 +1,5 @@
 import pytest
-from fastapi.testclient import TestClient
-from apps.api.main import app
-from apps.api.core.database import get_db
+
 
 @pytest.fixture
 def client():
