@@ -309,7 +309,9 @@ class IngestionPipeline:
             req = ServiceRequest(
                 vessel_call_id=vc_id,
                 service_type=pd_data.get("Service_Type", "Unknown"),
-                requested_time=dt_parse(pd_data.get("Requested_Time"))
+                requested_time=dt_parse(pd_data.get("Requested_Time")),
+                movement_type=pd_data.get("Movement_Type"),        # Phase 07
+                submission_time=dt_parse(pd_data.get("Submission_Time")),  # Phase 07
             )
             self.db.add(req)
             self.db.flush()

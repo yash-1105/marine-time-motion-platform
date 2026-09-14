@@ -13,6 +13,7 @@ from apps.api.routers.ingestion import router as ingestion_router
 from apps.api.routers.journey import router as journey_router
 from apps.api.routers.quality import router as quality_router
 from apps.api.routers.operations import router as operations_router
+from apps.api.routers.analytics import router as analytics_router
 
 app = FastAPI(
     title="Marine Time & Motion Platform",
@@ -72,6 +73,7 @@ v1_router.include_router(ingestion_router)
 v1_router.include_router(quality_router)
 v1_router.include_router(identity_router)
 v1_router.include_router(journey_router)
+v1_router.include_router(analytics_router)
 
 app.include_router(v1_router)
 

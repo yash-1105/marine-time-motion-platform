@@ -93,6 +93,9 @@ class ServiceRequest(BaseModel):
     vessel_call_id = Column(ForeignKey("canonical.vessel_call.id"), nullable=False)
     service_type = Column(String, nullable=False)
     requested_time = Column(DateTime(timezone=True), nullable=True)
+    # Added Phase 07: movement context for execution delay computation
+    movement_type = Column(String, nullable=True)    # Arrival | Sailing | Shifting
+    submission_time = Column(DateTime(timezone=True), nullable=True)  # Planning Lead Time numerator
 
 
 class ServiceAssignment(BaseModel):

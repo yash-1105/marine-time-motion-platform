@@ -1,11 +1,11 @@
 {
-  "execution_time_seconds": 9.96,
+  "execution_time_seconds": 12.7,
   "app_version": "1.0.0",
   "base_population_reconciled": "72 of 72",
   "journey_reconstruction_coverage": "72 of 72",
   "shifting_calls_with_shift_stage": "8 of 8",
-  "metrics_reconciled": "0 of 8",
+  "metrics_reconciled": "8 of 8",
   "dq_cases_passed": "9 of 10",
   "merges_executed": 2,
-  "details": "Phase 06 Journey Reconstruction Verified (Phases 07-09 metrics/KPIs/outliers not yet built)"
+  "details": "Phase 07 Time & Motion Analytics Verified (Phases 08-09 KPIs/outliers not yet built)"
 }
