@@ -90,14 +90,39 @@ class StatisticalAggregate(BaseModel):
 class KPI(BaseModel):
     __tablename__ = "kpi"
     __table_args__ = {"schema": "analytics"}
+
     name = Column(String, nullable=False, unique=True)
     description = Column(String, nullable=True)
+    kpi_number = Column(Integer, nullable=True)
+    code = Column(String(50), nullable=True, index=True)
+    category = Column(String(100), nullable=True)
+    formula = Column(Text, nullable=True)
+    numerator = Column(Text, nullable=True)
+    denominator = Column(Text, nullable=True)
+    unit = Column(String(50), nullable=True)
+    eligible_population = Column(Text, nullable=True)
+    required_events = Column(JSON, nullable=True)
+    required_fields = Column(JSON, nullable=True)
+    exclusions = Column(JSON, nullable=True)
+    aggregation_method = Column(String(50), nullable=False, default="AVG")
+    vessel_applicability = Column(String(100), nullable=False, default="All")
+    target = Column(Float, nullable=True)
+    target_direction = Column(String(20), nullable=True, default="LOWER_IS_BETTER")
+    thresholds = Column(JSON, nullable=True)
+    owner = Column(String(100), nullable=True)
+    effective_from = Column(DateTime(timezone=True), nullable=True)
+    effective_to = Column(DateTime(timezone=True), nullable=True)
+    is_primary = Column(Boolean, nullable=False, default=True)
+    alias_of_id = Column(ForeignKey("analytics.kpi.id", ondelete="SET NULL"), nullable=True)
+    availability_status = Column(String(50), nullable=False, default="COMPUTED")
+    required_source_systems = Column(JSON, nullable=True)
 
 
 class KPIFormulaVersion(BaseModel):
     __tablename__ = "kpi_formula_version"
     __table_args__ = {"schema": "analytics"}
-    kpi_id = Column(ForeignKey("analytics.kpi.id"), nullable=False)
+
+    kpi_id = Column(ForeignKey("analytics.kpi.id", ondelete="CASCADE"), nullable=False)
     version = Column(String, nullable=False)
     expression = Column(String, nullable=False)
 
@@ -105,7 +130,34 @@ class KPIFormulaVersion(BaseModel):
 class KPIResult(BaseModel):
     __tablename__ = "kpi_result"
     __table_args__ = {"schema": "analytics"}
-    kpi_id = Column(ForeignKey("analytics.kpi.id"), nullable=False)
-    vessel_call_id = Column(ForeignKey("canonical.vessel_call.id"), nullable=True)
+
+    kpi_id = Column(ForeignKey("analytics.kpi.id", ondelete="CASCADE"), nullable=False)
+    vessel_call_id = Column(ForeignKey("canonical.vessel_call.id", ondelete="CASCADE"), nullable=True)
     value = Column(Float, nullable=True)
-    status = Column(String, nullable=False)  # OK|UNAVAILABLE|NO_SOURCE_DATA
+    status = Column(String, nullable=False)  # COMPUTED | UNAVAILABLE | NO_SOURCE_DATA
+    period_start = Column(DateTime(timezone=True), nullable=True)
+    period_end = Column(DateTime(timezone=True), nullable=True)
+    grain = Column(String(20), nullable=True, default="ALL")
+    cohort_key = Column(String(100), nullable=True, default="all")
+    cohort_filters = Column(JSON, nullable=True)
+    numerator_value = Column(Float, nullable=True)
+    denominator_value = Column(Float, nullable=True)
+    target_value = Column(Float, nullable=True)
+    band = Column(String(20), nullable=True)  # GREEN | AMBER | RED | GRAY
+    unavailable_reason = Column(Text, nullable=True)
+    formula_version = Column(String(50), nullable=True, default="1.0")
+    data_quality_summary = Column(JSON, nullable=True)
+    calculated_at = Column(DateTime(timezone=True), nullable=True)
+    is_recalculation = Column(Boolean, nullable=False, default=False)
+
+
+class KPIBenchmark(BaseModel):
+    __tablename__ = "kpi_benchmark"
+    __table_args__ = {"schema": "analytics"}
+
+    kpi_id = Column(ForeignKey("analytics.kpi.id", ondelete="CASCADE"), nullable=False)
+    peer_port = Column(String(100), nullable=False)
+    benchmark_value = Column(Float, nullable=False)
+    source = Column(String(255), nullable=True)
+    period = Column(String(50), nullable=True)
+    notes = Column(Text, nullable=True)

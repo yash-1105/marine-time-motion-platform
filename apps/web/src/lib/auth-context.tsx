@@ -25,6 +25,7 @@ interface AuthContextType {
   dataScope: DataScope | null
   isSynthetic: boolean
   isLoading: boolean
+  token?: string
   can: (action: string) => boolean
   switchRole: (roleName: string) => Promise<void>
   logout: () => Promise<void>
@@ -37,6 +38,7 @@ const AuthContext = createContext<AuthContextType>({
   dataScope: null,
   isSynthetic: true,
   isLoading: true,
+  token: undefined,
   can: () => false,
   switchRole: async () => {},
   logout: async () => {},
@@ -46,6 +48,7 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<UserProfile | null>(null)
+  const [token, setToken] = useState<string | undefined>(undefined)
   const [isLoading, setIsLoading] = useState<boolean>(true)
 
   const fetchCurrentUser = async () => {
@@ -89,6 +92,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       })
       if (res.ok) {
         const data = await res.json()
+        setToken(data.access_token)
         setUser({
           user_id: data.session_id,
           email: `${roleName.toLowerCase().replace(/ /g, '_')}@port.local`,
@@ -129,6 +133,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       })
     } finally {
       setUser(null)
+      setToken(undefined)
     }
   }
 
@@ -141,6 +146,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         dataScope: user?.data_scope || null,
         isSynthetic: user?.is_synthetic ?? true,
         isLoading,
+        token,
         can,
         switchRole,
         logout,

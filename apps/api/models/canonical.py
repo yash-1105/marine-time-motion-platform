@@ -133,3 +133,22 @@ class DelayAllocation(BaseModel):
     is_primary = Column(Boolean, default=True)
     cause_status = Column(String, nullable=True)  # CONFIRMED|INFERRED
     inference_evidence = Column(JSON, nullable=True)
+
+
+class CargoOperation(BaseModel):
+    __tablename__ = "cargo_operation"
+    __table_args__ = {"schema": "canonical"}
+
+    vessel_call_id = Column(ForeignKey("canonical.vessel_call.id", ondelete="CASCADE"), nullable=False)
+    operation_id = Column(String, nullable=True)
+    cargo_type = Column(String, nullable=True)
+    operation_type = Column(String, nullable=True)
+    planned_quantity = Column(Float, nullable=True)
+    unit = Column(String, nullable=True)
+    cargo_start = Column(DateTime(timezone=True), nullable=True)
+    cargo_end = Column(DateTime(timezone=True), nullable=True)
+    working_hours = Column(Float, nullable=True)
+    resources_deployed = Column(Integer, nullable=True)
+    downtime_hours = Column(Float, nullable=True)
+    actual_quantity = Column(Float, nullable=True)
+    data_status = Column(String, nullable=True)

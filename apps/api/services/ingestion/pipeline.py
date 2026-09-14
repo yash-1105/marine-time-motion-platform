@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from apps.api.models.canonical import (
+    CargoOperation,
     EventOccurrence,
     VesselCall,
 )
@@ -287,24 +288,24 @@ class IngestionPipeline:
         batch_staging = self.db.execute(select(StagingRecord).where(StagingRecord.ingestion_batch_id == batch.batch_id)).scalars().all()
         from apps.api.models.canonical import ServiceRequest, ServiceAssignment, ServiceExecution, Delay
         
+        def dt_parse(dt_str):
+            from dateutil import parser
+            import pytz
+            if not dt_str: return None
+            try:
+                dt = parser.parse(dt_str)
+                if dt.tzinfo is None:
+                    dt = pytz.timezone("Africa/Johannesburg").localize(dt)
+                return dt.astimezone(pytz.utc)
+            except:
+                return None
+
         service_records = [r for r in batch_staging if r.canonical_table == 'service_request']
         for r in service_records:
             pd_data = r.parsed_data
             vcn = pd_data.get("VCN")
             vc_id = vcn_to_id.get(vcn)
             if not vc_id: continue
-            
-            def dt_parse(dt_str):
-                from dateutil import parser
-                import pytz
-                if not dt_str: return None
-                try:
-                    dt = parser.parse(dt_str)
-                    if dt.tzinfo is None:
-                        dt = pytz.timezone("Africa/Johannesburg").localize(dt)
-                    return dt.astimezone(pytz.utc)
-                except:
-                    return None
                     
             req = ServiceRequest(
                 vessel_call_id=vc_id,
@@ -352,6 +353,55 @@ class IngestionPipeline:
                 is_early_service=False
             )
             self.db.add(d)
+
+        cargo_records = [r for r in batch_staging if r.canonical_table == 'cargo_ops']
+        for r in cargo_records:
+            pd_data = r.parsed_data
+            vcn = pd_data.get("VCN")
+            vc_id = vcn_to_id.get(vcn)
+            if not vc_id:
+                continue
+
+            def parse_flt(val_str):
+                if not val_str:
+                    return None
+                try:
+                    return float(val_str)
+                except:
+                    return None
+
+            def parse_int(val_str):
+                if not val_str:
+                    return None
+                try:
+                    return int(float(val_str))
+                except:
+                    return None
+
+            cg = CargoOperation(
+                vessel_call_id=vc_id,
+                operation_id=pd_data.get("Cargo_Operation_ID"),
+                cargo_type=pd_data.get("Cargo_Type"),
+                operation_type=pd_data.get("Operation_Type"),
+                planned_quantity=parse_flt(pd_data.get("Planned_Quantity")),
+                unit=pd_data.get("Unit"),
+                cargo_start=dt_parse(pd_data.get("Cargo_Start")),
+                cargo_end=dt_parse(pd_data.get("Cargo_End")),
+                working_hours=parse_flt(pd_data.get("Working_Hours")),
+                resources_deployed=parse_int(pd_data.get("Resources_Deployed")),
+                downtime_hours=parse_flt(pd_data.get("Downtime_Hours")),
+                actual_quantity=parse_flt(pd_data.get("Actual_Quantity")),
+                data_status=pd_data.get("Data_Status"),
+            )
+            self.db.add(cg)
+
+            # Update vessel_call quantity_unit and quantity_value from cargo ops
+            vc = self.db.query(VesselCall).filter_by(id=vc_id).first()
+            if vc:
+                if pd_data.get("Unit"):
+                    vc.quantity_unit = pd_data.get("Unit")
+                if parse_flt(pd_data.get("Actual_Quantity")) is not None:
+                    vc.quantity_value = parse_flt(pd_data.get("Actual_Quantity"))
         
         batch.status = "COMMITTED"
         self.db.commit()

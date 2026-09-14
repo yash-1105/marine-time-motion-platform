@@ -167,7 +167,17 @@ export default function TimeAndMotionPage() {
   const [customScope, setCustomScope] = useState('')
   const [customSaveName, setCustomSaveName] = useState('')
   const [customRunning, setCustomRunning] = useState(false)
-  const [customOutput, setCustomOutput] = useState<any>(null)
+  const [customOutput, setCustomOutput] = useState<{
+    formula?: string
+    aggregate?: {
+      observation_count?: number
+      mean_hours?: number
+      median_hours?: number
+      p90_hours?: number
+      percentile_method?: string
+    }
+    results?: Array<{ vcn?: string; vessel_name?: string; status?: string; duration_hours?: number }>
+  } | null>(null)
   const [customError, setCustomError] = useState<string | null>(null)
 
   // 1. Fetch Lead Time Definitions
@@ -342,7 +352,7 @@ export default function TimeAndMotionPage() {
         ].map((t) => (
           <button
             key={t.id}
-            onClick={() => setActiveTab(t.id as any)}
+            onClick={() => setActiveTab(t.id as 'catalogue' | 'reconciliation' | 'explorer' | 'custom')}
             className={`py-3 px-3 text-xs font-medium border-b-2 transition-colors ${
               activeTab === t.id
                 ? 'border-emerald-600 text-emerald-700 font-semibold'
@@ -891,7 +901,7 @@ export default function TimeAndMotionPage() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                          {customOutput.results?.map((r: any, idx: number) => (
+                          {customOutput.results?.map((r, idx: number) => (
                             <tr key={idx} className="hover:bg-slate-50">
                               <td className="py-1.5 px-3 font-semibold text-slate-800">{r.vcn}</td>
                               <td className="py-1.5 px-3 text-slate-600">{r.vessel_name || '—'}</td>

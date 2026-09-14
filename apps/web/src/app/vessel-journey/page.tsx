@@ -614,7 +614,7 @@ export default function VesselJourneyPage() {
                       </table>
                       <p className="mt-3 text-[10px] text-slate-400 italic">
                         Components are non-overlapping. Shifting time is carved out of the containing
-                        stage's bucket and recorded under DELAY.
+                        stage&apos;s bucket and recorded under DELAY.
                       </p>
                     </>
                   ) : (

@@ -83,8 +83,12 @@ def load_synthetic_dataset(db: Session, file_path: str):
     db.execute(text("DELETE FROM identity.match_candidate"))
 
     # Analytics data must be cleared before its FK-referenced canonical rows
+    db.execute(text("DELETE FROM analytics.kpi_result"))
     db.execute(text("DELETE FROM analytics.statistical_aggregate"))
     db.execute(text("DELETE FROM analytics.lead_time_result WHERE vessel_call_id IN (SELECT id FROM canonical.vessel_call WHERE tenant_id = 'synthetic-tenant')"))
+
+    # Canonical cargo operations
+    db.execute(text("DELETE FROM canonical.cargo_operation WHERE vessel_call_id IN (SELECT id FROM canonical.vessel_call WHERE tenant_id = 'synthetic-tenant')"))
 
     # Journey reconstruction data must be cleared before its FK-referenced canonical/quality rows.
     db.execute(text("DELETE FROM journey.reconstruction_history WHERE vessel_call_id IN (SELECT id FROM canonical.vessel_call WHERE tenant_id = 'synthetic-tenant')"))

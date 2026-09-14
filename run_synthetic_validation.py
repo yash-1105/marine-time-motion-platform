@@ -103,6 +103,14 @@ def run_validation():
             
         dq_cases_str = f"{passed + 1} of 10"  # +1 for DQ-009 orphan event
 
+        # Run KPI Engine (Phase 08)
+        from apps.api.services.kpi.engine import KPIEngine
+        print("Running Governed KPI Engine...")
+        kpi_engine = KPIEngine(db, tenant_id="synthetic-tenant")
+        kpi_summary = kpi_engine.calculate_all_kpis()
+        kpi_coverage_str = f"{kpi_summary['computed']} of 38 computable ({kpi_summary['no_source_data']} governed NO_SOURCE_DATA)"
+        print(f"KPI Engine: {kpi_coverage_str}, total={kpi_summary['total_kpis']}")
+
         report = {
             "execution_time_seconds": round(time.time() - start, 2),
             "app_version": "1.0.0",
@@ -110,9 +118,11 @@ def run_validation():
             "journey_reconstruction_coverage": journey_coverage_str,
             "shifting_calls_with_shift_stage": shifting_calls_str,
             "metrics_reconciled": metrics_reconciled_str,
+            "kpi_engine_coverage": kpi_coverage_str,
+            "kpi_registry_total": f"{kpi_summary['total_kpis']} of 55",
             "dq_cases_passed": dq_cases_str,
             "merges_executed": len(merge_decisions),
-            "details": "Phase 07 Time & Motion Analytics Verified (Phases 08-09 KPIs/outliers not yet built)"
+            "details": "Phase 08 Governed KPI Engine Verified (Phase 09 Outliers not yet built)"
         }
 
         print("\n--- SYNTHETIC VALIDATION REPORT ---")
@@ -128,6 +138,8 @@ def run_validation():
             f.write(f"- Journey Reconstruction Coverage: {report['journey_reconstruction_coverage']}\n")
             f.write(f"- Shifting Calls With Shift Stage: {report['shifting_calls_with_shift_stage']}\n")
             f.write(f"- Metrics Reconciled: {report['metrics_reconciled']}\n")
+            f.write(f"- KPI Engine Coverage: {report['kpi_engine_coverage']}\n")
+            f.write(f"- KPI Registry Total: {report['kpi_registry_total']}\n")
             f.write(f"- DQ Cases Passed: {report['dq_cases_passed']} (DQ-008 UNAVAILABLE until Phase 09 outlier detection)\n")
     finally:
         db.close()

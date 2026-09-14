@@ -1,11 +1,13 @@
 {
-  "execution_time_seconds": 12.7,
+  "execution_time_seconds": 17.38,
   "app_version": "1.0.0",
   "base_population_reconciled": "72 of 72",
   "journey_reconstruction_coverage": "72 of 72",
   "shifting_calls_with_shift_stage": "8 of 8",
   "metrics_reconciled": "8 of 8",
+  "kpi_engine_coverage": "38 of 38 computable (17 governed NO_SOURCE_DATA)",
+  "kpi_registry_total": "55 of 55",
   "dq_cases_passed": "9 of 10",
   "merges_executed": 2,
-  "details": "Phase 07 Time & Motion Analytics Verified (Phases 08-09 KPIs/outliers not yet built)"
+  "details": "Phase 08 Governed KPI Engine Verified (Phase 09 Outliers not yet built)"
 }
