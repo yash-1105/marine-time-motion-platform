@@ -48,12 +48,23 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<UserProfile | null>(null)
-  const [token, setToken] = useState<string | undefined>(undefined)
+  const [token, setToken] = useState<string | undefined>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('auth_token') || 'dev-token'
+    }
+    return 'dev-token'
+  })
   const [isLoading, setIsLoading] = useState<boolean>(true)
 
   const fetchCurrentUser = async () => {
     try {
+      const storedToken = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
+      const headers: Record<string, string> = {}
+      if (storedToken) {
+        headers['Authorization'] = `Bearer ${storedToken}`
+      }
       const res = await fetch(`${API_BASE}/api/v1/auth/me`, {
+        headers,
         credentials: 'include',
       })
       if (res.ok) {
@@ -93,6 +104,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (res.ok) {
         const data = await res.json()
         setToken(data.access_token)
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('auth_token', data.access_token)
+        }
         setUser({
           user_id: data.session_id,
           email: `${roleName.toLowerCase().replace(/ /g, '_')}@port.local`,
@@ -133,7 +147,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       })
     } finally {
       setUser(null)
-      setToken(undefined)
+      setToken('dev-token')
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('auth_token')
+      }
     }
   }
 

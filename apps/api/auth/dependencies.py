@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from apps.api.auth.principal import UserPrincipal
 from apps.api.auth.scope import DataScope
+from apps.api.core.config import settings
 from apps.api.core.database import get_db
 from apps.api.core.security import decode_token
 from apps.api.services.audit import log_audit_event
@@ -35,6 +36,21 @@ def get_current_principal(
                 "message": "Missing authentication credentials",
                 "correlation_id": getattr(request.state, "correlation_id", "unknown"),
             },
+        )
+
+    # In local development mode, allow the frontend dev-token fallback
+    if token == "dev-token" and settings.environment == "development":
+        return UserPrincipal(
+            user_id="dev-user-admin",
+            email="admin@port.local",
+            roles=["Platform Administrator"],
+            permissions=[
+                "view", "create", "edit", "approve", "reject", "merge", "unmerge",
+                "recalculate", "publish", "export", "configure", "administer", "audit"
+            ],
+            data_scope=DataScope(tenant_id="synthetic-tenant", port_id="*", terminal_id="*"),
+            is_service_account=False,
+            is_synthetic=True,
         )
 
     try:

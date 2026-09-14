@@ -195,18 +195,23 @@ function ExecutiveDashboardContent() {
 
     const headers = { Authorization: `Bearer ${activeToken || 'dev-token'}` }
 
-    Promise.all([
-      fetch(`${API}/api/v1/dashboard/executive?${queryParams}`, { headers }).then((r) =>
-        r.ok ? r.json() : Promise.reject(`Failed to load executive metrics: ${r.statusText}`)
-      ),
-      fetch(`${API}/api/v1/dashboard/reconciliation`, { headers }).then((r) => (r.ok ? r.json() : null)),
-    ])
-      .then(([dashData, reconData]) => {
+    fetch(`${API}/api/v1/dashboard/executive?${queryParams}`, { headers })
+      .then((r) => (r.ok ? r.json() : Promise.reject(`Failed to load executive metrics: ${r.statusText}`)))
+      .then((dashData) => {
         setData(dashData)
-        if (reconData) setRecon(reconData)
+        setLoading(false)
+        // Background fetch 3-way reconciliation without blocking initial dashboard load
+        fetch(`${API}/api/v1/dashboard/reconciliation`, { headers })
+          .then((r) => (r.ok ? r.json() : null))
+          .then((reconData) => {
+            if (reconData) setRecon(reconData)
+          })
+          .catch(() => {})
       })
-      .catch((err) => setError(String(err)))
-      .finally(() => setLoading(false))
+      .catch((err) => {
+        setError(String(err))
+        setLoading(false)
+      })
   }, [token, queryParams])
 
   useEffect(() => {

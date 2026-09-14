@@ -218,14 +218,15 @@ function TimeAndMotionContent() {
   const fetchDefinitions = useCallback(() => {
     setLoadingDefs(true)
     fetch(`${API}/api/v1/analytics/metrics`, { headers })
-      .then((r) => r.json())
+      .then((r) => (r.ok ? r.json() : []))
       .then((data: LeadTimeDef[]) => {
+        if (!Array.isArray(data)) return
         setDefinitions(data)
         if (data.length > 0 && !selectedDefId) {
           setSelectedDefId(data[0].id)
         }
         // Fetch stats for computable definitions
-        data.filter((d) => d.availability_status === 'COMPUTABLE').forEach((d) => {
+        data.filter((d) => d && d.availability_status === 'COMPUTABLE').forEach((d) => {
           fetch(`${API}/api/v1/analytics/metrics/${d.id}/stats`, { headers })
             .then((r) => (r.ok ? r.json() : null))
             .then((stat: MetricStat | null) => {
@@ -244,8 +245,10 @@ function TimeAndMotionContent() {
   const fetchReconciliation = useCallback(() => {
     setLoadingRecon(true)
     fetch(`${API}/api/v1/analytics/reconciliation?tolerance=0.02`, { headers })
-      .then((r) => r.json())
-      .then(setReconciliation)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data) setReconciliation(data)
+      })
       .catch((err) => console.error('Error fetching reconciliation:', err))
       .finally(() => setLoadingRecon(false))
   }, [token]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -255,6 +258,7 @@ function TimeAndMotionContent() {
     fetch(`${API}/api/v1/analytics/events`, { headers })
       .then((r) => (r.ok ? r.json() : []))
       .then((data: EventDef[]) => {
+        if (!Array.isArray(data)) return
         setEvents(data)
         if (data.length > 1) {
           setCustomStart(data[0].name)
@@ -271,10 +275,15 @@ function TimeAndMotionContent() {
       setLoadingResults(true)
       setSelectedResult(null)
       fetch(`${API}/api/v1/analytics/metrics/${defId}/results?limit=100`, { headers })
-        .then((r) => r.json())
-        .then((data) => {
-          setResults(data.items || [])
-          setResultsTotal(data.total || 0)
+        .then((r) => (r.ok ? r.json() : {}))
+        .then((data: { items?: PerCallResult[]; total?: number } | PerCallResult[]) => {
+          if (Array.isArray(data)) {
+            setResults(data)
+            setResultsTotal(data.length)
+          } else {
+            setResults(data?.items || [])
+            setResultsTotal(data?.total || 0)
+          }
         })
         .catch(() => setResults([]))
         .finally(() => setLoadingResults(false))
