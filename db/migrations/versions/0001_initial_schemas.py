@@ -26,6 +26,9 @@ def upgrade() -> None:
     op.execute("CREATE SCHEMA IF NOT EXISTS audit;")
     op.execute("CREATE SCHEMA IF NOT EXISTS config;")
     op.execute("CREATE SCHEMA IF NOT EXISTS testkit;")
+    op.execute("CREATE SCHEMA IF NOT EXISTS identity;")
+    op.execute("CREATE SCHEMA IF NOT EXISTS quality;")
+    op.execute("CREATE SCHEMA IF NOT EXISTS journey;")
 
 
 def downgrade() -> None:

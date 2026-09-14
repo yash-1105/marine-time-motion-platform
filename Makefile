@@ -27,7 +27,7 @@ migrate:
 	source .venv/bin/activate && alembic upgrade head
 
 seed:
-	echo "Not implemented yet"
+	source .venv/bin/activate && python seed.py
 
 validate:
 	echo "Not implemented yet"

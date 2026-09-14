@@ -1,0 +1,955 @@
+kpis:
+- name: KPI_1
+  description: Description for KPI 1
+  formula: Numerator / Denominator
+  numerator: N
+  denominator: D
+  unit: hours
+  eligible_population: All
+  required_events: []
+  exclusions: []
+  aggregation_method: Average
+  vessel_applicability: All
+  target: 0
+  thresholds: {}
+  owner: Admin
+  effective_dates: '2026-01-01'
+  computable_from:
+  - canonical.vessel_call
+  status: OK
+- name: KPI_2
+  description: Description for KPI 2
+  formula: Numerator / Denominator
+  numerator: N
+  denominator: D
+  unit: hours
+  eligible_population: All
+  required_events: []
+  exclusions: []
+  aggregation_method: Average
+  vessel_applicability: All
+  target: 0
+  thresholds: {}
+  owner: Admin
+  effective_dates: '2026-01-01'
+  computable_from:
+  - canonical.vessel_call
+  status: OK
+- name: KPI_3
+  description: Description for KPI 3
+  formula: Numerator / Denominator
+  numerator: N
+  denominator: D
+  unit: hours
+  eligible_population: All
+  required_events: []
+  exclusions: []
+  aggregation_method: Average
+  vessel_applicability: All
+  target: 0
+  thresholds: {}
+  owner: Admin
+  effective_dates: '2026-01-01'
+  computable_from:
+  - canonical.vessel_call
+  status: OK
+- name: KPI_4
+  description: Description for KPI 4
+  formula: Numerator / Denominator
+  numerator: N
+  denominator: D
+  unit: hours
+  eligible_population: All
+  required_events: []
+  exclusions: []
+  aggregation_method: Average
+  vessel_applicability: All
+  target: 0
+  thresholds: {}
+  owner: Admin
+  effective_dates: '2026-01-01'
+  computable_from:
+  - canonical.vessel_call
+  status: OK
+- name: KPI_5
+  description: Description for KPI 5
+  formula: Numerator / Denominator
+  numerator: N
+  denominator: D
+  unit: hours
+  eligible_population: All
+  required_events: []
+  exclusions: []
+  aggregation_method: Average
+  vessel_applicability: All
+  target: 0
+  thresholds: {}
+  owner: Admin
+  effective_dates: '2026-01-01'
+  computable_from:
+  - canonical.vessel_call
+  status: OK
+- name: KPI_6
+  description: Description for KPI 6
+  formula: Numerator / Denominator
+  numerator: N
+  denominator: D
+  unit: hours
+  eligible_population: All
+  required_events: []
+  exclusions: []
+  aggregation_method: Average
+  vessel_applicability: All
+  target: 0
+  thresholds: {}
+  owner: Admin
+  effective_dates: '2026-01-01'
+  computable_from:
+  - canonical.vessel_call
+  status: OK
+- name: KPI_7
+  description: Description for KPI 7
+  formula: Numerator / Denominator
+  numerator: N
+  denominator: D
+  unit: hours
+  eligible_population: All
+  required_events: []
+  exclusions: []
+  aggregation_method: Average
+  vessel_applicability: All
+  target: 0
+  thresholds: {}
+  owner: Admin
+  effective_dates: '2026-01-01'
+  computable_from:
+  - canonical.vessel_call
+  status: OK
+- name: KPI_8
+  description: Description for KPI 8
+  formula: Numerator / Denominator
+  numerator: N
+  denominator: D
+  unit: hours
+  eligible_population: All
+  required_events: []
+  exclusions: []
+  aggregation_method: Average
+  vessel_applicability: All
+  target: 0
+  thresholds: {}
+  owner: Admin
+  effective_dates: '2026-01-01'
+  computable_from:
+  - canonical.vessel_call
+  status: OK
+- name: KPI_9
+  description: Description for KPI 9
+  formula: Numerator / Denominator
+  numerator: N
+  denominator: D
+  unit: hours
+  eligible_population: All
+  required_events: []
+  exclusions: []
+  aggregation_method: Average
+  vessel_applicability: All
+  target: 0
+  thresholds: {}
+  owner: Admin
+  effective_dates: '2026-01-01'
+  computable_from:
+  - canonical.vessel_call
+  status: OK
+- name: KPI_10
+  description: Description for KPI 10
+  formula: Numerator / Denominator
+  numerator: N
+  denominator: D
+  unit: hours
+  eligible_population: All
+  required_events: []
+  exclusions: []
+  aggregation_method: Average
+  vessel_applicability: All
+  target: 0
+  thresholds: {}
+  owner: Admin
+  effective_dates: '2026-01-01'
+  computable_from:
+  - canonical.vessel_call
+  status: OK
+- name: KPI_11
+  description: Description for KPI 11
+  formula: Numerator / Denominator
+  numerator: N
+  denominator: D
+  unit: hours
+  eligible_population: All
+  required_events: &id005 []
+  exclusions: &id006 []
+  aggregation_method: Average
+  vessel_applicability: All
+  target: 0
+  thresholds: &id007 {}
+  owner: Admin
+  effective_dates: '2026-01-01'
+  computable_from: &id008
+  - canonical.vessel_call
+  status: OK
+- name: KPI_12
+  description: Description for KPI 12
+  formula: Numerator / Denominator
+  numerator: N
+  denominator: D
+  unit: hours
+  eligible_population: All
+  required_events: []
+  exclusions: []
+  aggregation_method: Average
+  vessel_applicability: All
+  target: 0
+  thresholds: {}
+  owner: Admin
+  effective_dates: '2026-01-01'
+  computable_from:
+  - canonical.vessel_call
+  status: OK
+- name: KPI_13
+  description: Description for KPI 13
+  formula: Numerator / Denominator
+  numerator: N
+  denominator: D
+  unit: hours
+  eligible_population: All
+  required_events: []
+  exclusions: []
+  aggregation_method: Average
+  vessel_applicability: All
+  target: 0
+  thresholds: {}
+  owner: Admin
+  effective_dates: '2026-01-01'
+  computable_from:
+  - canonical.vessel_call
+  status: OK
+- name: KPI_14
+  description: Description for KPI 14
+  formula: Numerator / Denominator
+  numerator: N
+  denominator: D
+  unit: hours
+  eligible_population: All
+  required_events: &id001 []
+  exclusions: &id002 []
+  aggregation_method: Average
+  vessel_applicability: All
+  target: 0
+  thresholds: &id003 {}
+  owner: Admin
+  effective_dates: '2026-01-01'
+  computable_from: &id004
+  - canonical.vessel_call
+  status: OK
+- name: KPI_15
+  description: Description for KPI 15
+  formula: Numerator / Denominator
+  numerator: N
+  denominator: D
+  unit: hours
+  eligible_population: All
+  required_events: []
+  exclusions: []
+  aggregation_method: Average
+  vessel_applicability: All
+  target: 0
+  thresholds: {}
+  owner: Admin
+  effective_dates: '2026-01-01'
+  computable_from:
+  - canonical.vessel_call
+  status: OK
+- name: KPI_16
+  description: Description for KPI 16
+  formula: Numerator / Denominator
+  numerator: N
+  denominator: D
+  unit: hours
+  eligible_population: All
+  required_events: []
+  exclusions: []
+  aggregation_method: Average
+  vessel_applicability: All
+  target: 0
+  thresholds: {}
+  owner: Admin
+  effective_dates: '2026-01-01'
+  computable_from: []
+  status: NO_SOURCE_DATA
+- name: KPI_17
+  description: Description for KPI 17
+  formula: Numerator / Denominator
+  numerator: N
+  denominator: D
+  unit: hours
+  eligible_population: All
+  required_events: []
+  exclusions: []
+  aggregation_method: Average
+  vessel_applicability: All
+  target: 0
+  thresholds: {}
+  owner: Admin
+  effective_dates: '2026-01-01'
+  computable_from: []
+  status: NO_SOURCE_DATA
+- name: KPI_18
+  description: Description for KPI 18
+  formula: Numerator / Denominator
+  numerator: N
+  denominator: D
+  unit: hours
+  eligible_population: All
+  required_events: []
+  exclusions: []
+  aggregation_method: Average
+  vessel_applicability: All
+  target: 0
+  thresholds: {}
+  owner: Admin
+  effective_dates: '2026-01-01'
+  computable_from: []
+  status: NO_SOURCE_DATA
+- name: KPI_19
+  description: Description for KPI 19
+  formula: Numerator / Denominator
+  numerator: N
+  denominator: D
+  unit: hours
+  eligible_population: All
+  required_events: []
+  exclusions: []
+  aggregation_method: Average
+  vessel_applicability: All
+  target: 0
+  thresholds: {}
+  owner: Admin
+  effective_dates: '2026-01-01'
+  computable_from: []
+  status: NO_SOURCE_DATA
+- name: KPI_20
+  description: Description for KPI 20
+  formula: Numerator / Denominator
+  numerator: N
+  denominator: D
+  unit: hours
+  eligible_population: All
+  required_events: []
+  exclusions: []
+  aggregation_method: Average
+  vessel_applicability: All
+  target: 0
+  thresholds: {}
+  owner: Admin
+  effective_dates: '2026-01-01'
+  computable_from: []
+  status: NO_SOURCE_DATA
+- name: KPI_21
+  description: Description for KPI 21
+  formula: Numerator / Denominator
+  numerator: N
+  denominator: D
+  unit: hours
+  eligible_population: All
+  required_events: []
+  exclusions: []
+  aggregation_method: Average
+  vessel_applicability: All
+  target: 0
+  thresholds: {}
+  owner: Admin
+  effective_dates: '2026-01-01'
+  computable_from: []
+  status: NO_SOURCE_DATA
+- name: KPI_22
+  description: Description for KPI 22
+  formula: Numerator / Denominator
+  numerator: N
+  denominator: D
+  unit: hours
+  eligible_population: All
+  required_events: []
+  exclusions: []
+  aggregation_method: Average
+  vessel_applicability: All
+  target: 0
+  thresholds: {}
+  owner: Admin
+  effective_dates: '2026-01-01'
+  computable_from: []
+  status: NO_SOURCE_DATA
+- name: KPI_23
+  description: Description for KPI 23
+  formula: Numerator / Denominator
+  numerator: N
+  denominator: D
+  unit: hours
+  eligible_population: All
+  required_events: []
+  exclusions: []
+  aggregation_method: Average
+  vessel_applicability: All
+  target: 0
+  thresholds: {}
+  owner: Admin
+  effective_dates: '2026-01-01'
+  computable_from: []
+  status: NO_SOURCE_DATA
+- name: KPI_24
+  description: Description for KPI 24
+  formula: Numerator / Denominator
+  numerator: N
+  denominator: D
+  unit: hours
+  eligible_population: All
+  required_events: []
+  exclusions: []
+  aggregation_method: Average
+  vessel_applicability: All
+  target: 0
+  thresholds: {}
+  owner: Admin
+  effective_dates: '2026-01-01'
+  computable_from: []
+  status: NO_SOURCE_DATA
+- name: KPI_25
+  description: Description for KPI 25
+  formula: Numerator / Denominator
+  numerator: N
+  denominator: D
+  unit: hours
+  eligible_population: All
+  required_events: []
+  exclusions: []
+  aggregation_method: Average
+  vessel_applicability: All
+  target: 0
+  thresholds: {}
+  owner: Admin
+  effective_dates: '2026-01-01'
+  computable_from: []
+  status: NO_SOURCE_DATA
+- name: KPI_26
+  description: Description for KPI 26
+  formula: Numerator / Denominator
+  numerator: N
+  denominator: D
+  unit: hours
+  eligible_population: All
+  required_events: []
+  exclusions: []
+  aggregation_method: Average
+  vessel_applicability: All
+  target: 0
+  thresholds: {}
+  owner: Admin
+  effective_dates: '2026-01-01'
+  computable_from: []
+  status: NO_SOURCE_DATA
+- name: KPI_27
+  description: Description for KPI 27
+  formula: Numerator / Denominator
+  numerator: N
+  denominator: D
+  unit: hours
+  eligible_population: All
+  required_events: []
+  exclusions: []
+  aggregation_method: Average
+  vessel_applicability: All
+  target: 0
+  thresholds: {}
+  owner: Admin
+  effective_dates: '2026-01-01'
+  computable_from: []
+  status: NO_SOURCE_DATA
+- name: KPI_28
+  description: Description for KPI 28
+  formula: Numerator / Denominator
+  numerator: N
+  denominator: D
+  unit: hours
+  eligible_population: All
+  required_events: []
+  exclusions: []
+  aggregation_method: Average
+  vessel_applicability: All
+  target: 0
+  thresholds: {}
+  owner: Admin
+  effective_dates: '2026-01-01'
+  computable_from: []
+  status: NO_SOURCE_DATA
+- name: KPI_29
+  description: Description for KPI 29
+  formula: Numerator / Denominator
+  numerator: N
+  denominator: D
+  unit: hours
+  eligible_population: All
+  required_events: []
+  exclusions: []
+  aggregation_method: Average
+  vessel_applicability: All
+  target: 0
+  thresholds: {}
+  owner: Admin
+  effective_dates: '2026-01-01'
+  computable_from: []
+  status: NO_SOURCE_DATA
+- name: KPI_30
+  description: Description for KPI 30
+  formula: Numerator / Denominator
+  numerator: N
+  denominator: D
+  unit: hours
+  eligible_population: All
+  required_events: []
+  exclusions: []
+  aggregation_method: Average
+  vessel_applicability: All
+  target: 0
+  thresholds: {}
+  owner: Admin
+  effective_dates: '2026-01-01'
+  computable_from: []
+  status: NO_SOURCE_DATA
+- name: KPI_31
+  description: Description for KPI 31
+  formula: Numerator / Denominator
+  numerator: N
+  denominator: D
+  unit: hours
+  eligible_population: All
+  required_events: []
+  exclusions: []
+  aggregation_method: Average
+  vessel_applicability: All
+  target: 0
+  thresholds: {}
+  owner: Admin
+  effective_dates: '2026-01-01'
+  computable_from: []
+  status: NO_SOURCE_DATA
+- name: KPI_32
+  description: Description for KPI 32
+  formula: Numerator / Denominator
+  numerator: N
+  denominator: D
+  unit: hours
+  eligible_population: All
+  required_events: []
+  exclusions: []
+  aggregation_method: Average
+  vessel_applicability: All
+  target: 0
+  thresholds: {}
+  owner: Admin
+  effective_dates: '2026-01-01'
+  computable_from: []
+  status: NO_SOURCE_DATA
+- name: KPI_33
+  description: Description for KPI 33
+  formula: Numerator / Denominator
+  numerator: N
+  denominator: D
+  unit: hours
+  eligible_population: All
+  required_events: []
+  exclusions: []
+  aggregation_method: Average
+  vessel_applicability: All
+  target: 0
+  thresholds: {}
+  owner: Admin
+  effective_dates: '2026-01-01'
+  computable_from: []
+  status: NO_SOURCE_DATA
+- name: KPI_34
+  description: Description for KPI 34
+  formula: Numerator / Denominator
+  numerator: N
+  denominator: D
+  unit: hours
+  eligible_population: All
+  required_events: []
+  exclusions: []
+  aggregation_method: Average
+  vessel_applicability: All
+  target: 0
+  thresholds: {}
+  owner: Admin
+  effective_dates: '2026-01-01'
+  computable_from: []
+  status: NO_SOURCE_DATA
+- name: KPI_35
+  description: Description for KPI 35
+  formula: Numerator / Denominator
+  numerator: N
+  denominator: D
+  unit: hours
+  eligible_population: All
+  required_events: []
+  exclusions: []
+  aggregation_method: Average
+  vessel_applicability: All
+  target: 0
+  thresholds: {}
+  owner: Admin
+  effective_dates: '2026-01-01'
+  computable_from: []
+  status: NO_SOURCE_DATA
+- name: KPI_36
+  description: Description for KPI 36
+  formula: Numerator / Denominator
+  numerator: N
+  denominator: D
+  unit: hours
+  eligible_population: All
+  required_events: []
+  exclusions: []
+  aggregation_method: Average
+  vessel_applicability: All
+  target: 0
+  thresholds: {}
+  owner: Admin
+  effective_dates: '2026-01-01'
+  computable_from: []
+  status: NO_SOURCE_DATA
+- name: KPI_37
+  description: Description for KPI 37
+  formula: Numerator / Denominator
+  numerator: N
+  denominator: D
+  unit: hours
+  eligible_population: All
+  required_events: []
+  exclusions: []
+  aggregation_method: Average
+  vessel_applicability: All
+  target: 0
+  thresholds: {}
+  owner: Admin
+  effective_dates: '2026-01-01'
+  computable_from: []
+  status: NO_SOURCE_DATA
+- name: KPI_38
+  description: Description for KPI 38
+  formula: Numerator / Denominator
+  numerator: N
+  denominator: D
+  unit: hours
+  eligible_population: All
+  required_events: []
+  exclusions: []
+  aggregation_method: Average
+  vessel_applicability: All
+  target: 0
+  thresholds: {}
+  owner: Admin
+  effective_dates: '2026-01-01'
+  computable_from: []
+  status: NO_SOURCE_DATA
+- name: KPI_39
+  description: Description for KPI 39
+  formula: Numerator / Denominator
+  numerator: N
+  denominator: D
+  unit: hours
+  eligible_population: All
+  required_events: []
+  exclusions: []
+  aggregation_method: Average
+  vessel_applicability: All
+  target: 0
+  thresholds: {}
+  owner: Admin
+  effective_dates: '2026-01-01'
+  computable_from: []
+  status: NO_SOURCE_DATA
+- name: KPI_40
+  description: Description for KPI 40
+  formula: Numerator / Denominator
+  numerator: N
+  denominator: D
+  unit: hours
+  eligible_population: All
+  required_events: []
+  exclusions: []
+  aggregation_method: Average
+  vessel_applicability: All
+  target: 0
+  thresholds: {}
+  owner: Admin
+  effective_dates: '2026-01-01'
+  computable_from: []
+  status: NO_SOURCE_DATA
+- name: KPI_41
+  description: Description for KPI 41
+  formula: Numerator / Denominator
+  numerator: N
+  denominator: D
+  unit: hours
+  eligible_population: All
+  required_events: []
+  exclusions: []
+  aggregation_method: Average
+  vessel_applicability: All
+  target: 0
+  thresholds: {}
+  owner: Admin
+  effective_dates: '2026-01-01'
+  computable_from: []
+  status: NO_SOURCE_DATA
+- name: KPI_42
+  description: Description for KPI 42
+  formula: Numerator / Denominator
+  numerator: N
+  denominator: D
+  unit: hours
+  eligible_population: All
+  required_events: []
+  exclusions: []
+  aggregation_method: Average
+  vessel_applicability: All
+  target: 0
+  thresholds: {}
+  owner: Admin
+  effective_dates: '2026-01-01'
+  computable_from: []
+  status: NO_SOURCE_DATA
+- name: KPI_43
+  description: Description for KPI 43
+  formula: Numerator / Denominator
+  numerator: N
+  denominator: D
+  unit: hours
+  eligible_population: All
+  required_events: []
+  exclusions: []
+  aggregation_method: Average
+  vessel_applicability: All
+  target: 0
+  thresholds: {}
+  owner: Admin
+  effective_dates: '2026-01-01'
+  computable_from: []
+  status: NO_SOURCE_DATA
+- name: KPI_44
+  description: Description for KPI 44
+  formula: Numerator / Denominator
+  numerator: N
+  denominator: D
+  unit: hours
+  eligible_population: All
+  required_events: []
+  exclusions: []
+  aggregation_method: Average
+  vessel_applicability: All
+  target: 0
+  thresholds: {}
+  owner: Admin
+  effective_dates: '2026-01-01'
+  computable_from: []
+  status: NO_SOURCE_DATA
+- name: KPI_45
+  description: Description for KPI 45
+  formula: Numerator / Denominator
+  numerator: N
+  denominator: D
+  unit: hours
+  eligible_population: All
+  required_events: []
+  exclusions: []
+  aggregation_method: Average
+  vessel_applicability: All
+  target: 0
+  thresholds: {}
+  owner: Admin
+  effective_dates: '2026-01-01'
+  computable_from: []
+  status: NO_SOURCE_DATA
+- name: KPI_46
+  description: Description for KPI 46
+  formula: Numerator / Denominator
+  numerator: N
+  denominator: D
+  unit: hours
+  eligible_population: All
+  required_events: []
+  exclusions: []
+  aggregation_method: Average
+  vessel_applicability: All
+  target: 0
+  thresholds: {}
+  owner: Admin
+  effective_dates: '2026-01-01'
+  computable_from: []
+  status: NO_SOURCE_DATA
+- name: KPI_47
+  description: Description for KPI 47
+  formula: Numerator / Denominator
+  numerator: N
+  denominator: D
+  unit: hours
+  eligible_population: All
+  required_events: []
+  exclusions: []
+  aggregation_method: Average
+  vessel_applicability: All
+  target: 0
+  thresholds: {}
+  owner: Admin
+  effective_dates: '2026-01-01'
+  computable_from: []
+  status: NO_SOURCE_DATA
+- name: KPI_48
+  description: Description for KPI 48
+  formula: Numerator / Denominator
+  numerator: N
+  denominator: D
+  unit: hours
+  eligible_population: All
+  required_events: []
+  exclusions: []
+  aggregation_method: Average
+  vessel_applicability: All
+  target: 0
+  thresholds: {}
+  owner: Admin
+  effective_dates: '2026-01-01'
+  computable_from: []
+  status: NO_SOURCE_DATA
+- name: KPI_49
+  description: Description for KPI 49
+  formula: Numerator / Denominator
+  numerator: N
+  denominator: D
+  unit: hours
+  eligible_population: All
+  required_events: []
+  exclusions: []
+  aggregation_method: Average
+  vessel_applicability: All
+  target: 0
+  thresholds: {}
+  owner: Admin
+  effective_dates: '2026-01-01'
+  computable_from: []
+  status: NO_SOURCE_DATA
+- name: KPI_50
+  description: Description for KPI 50
+  formula: Numerator / Denominator
+  numerator: N
+  denominator: D
+  unit: hours
+  eligible_population: All
+  required_events: []
+  exclusions: []
+  aggregation_method: Average
+  vessel_applicability: All
+  target: 0
+  thresholds: {}
+  owner: Admin
+  effective_dates: '2026-01-01'
+  computable_from: []
+  status: NO_SOURCE_DATA
+- name: KPI_51_Berth_Occupancy
+  description: Description for KPI 14
+  formula: Numerator / Denominator
+  numerator: N
+  denominator: D
+  unit: hours
+  eligible_population: All
+  required_events: *id001
+  exclusions: *id002
+  aggregation_method: Average
+  vessel_applicability: All
+  target: 0
+  thresholds: *id003
+  owner: Admin
+  effective_dates: '2026-01-01'
+  computable_from: *id004
+  status: OK
+  primary_kpi_id: KPI_14
+  alias_of: KPI_14
+- name: KPI_52
+  description: Description for KPI 52
+  formula: Numerator / Denominator
+  numerator: N
+  denominator: D
+  unit: hours
+  eligible_population: All
+  required_events: []
+  exclusions: []
+  aggregation_method: Average
+  vessel_applicability: All
+  target: 0
+  thresholds: {}
+  owner: Admin
+  effective_dates: '2026-01-01'
+  computable_from: []
+  status: NO_SOURCE_DATA
+- name: KPI_53_Tug_Response
+  description: Description for KPI 11
+  formula: Numerator / Denominator
+  numerator: N
+  denominator: D
+  unit: hours
+  eligible_population: All
+  required_events: *id005
+  exclusions: *id006
+  aggregation_method: Average
+  vessel_applicability: All
+  target: 0
+  thresholds: *id007
+  owner: Admin
+  effective_dates: '2026-01-01'
+  computable_from: *id008
+  status: OK
+  primary_kpi_id: KPI_11
+  alias_of: KPI_11
+- name: KPI_54
+  description: Description for KPI 54
+  formula: Numerator / Denominator
+  numerator: N
+  denominator: D
+  unit: hours
+  eligible_population: All
+  required_events: []
+  exclusions: []
+  aggregation_method: Average
+  vessel_applicability: All
+  target: 0
+  thresholds: {}
+  owner: Admin
+  effective_dates: '2026-01-01'
+  computable_from: []
+  status: NO_SOURCE_DATA
+- name: KPI_55
+  description: Description for KPI 55
+  formula: Numerator / Denominator
+  numerator: N
+  denominator: D
+  unit: hours
+  eligible_population: All
+  required_events: []
+  exclusions: []
+  aggregation_method: Average
+  vessel_applicability: All
+  target: 0
+  thresholds: {}
+  owner: Admin
+  effective_dates: '2026-01-01'
+  computable_from: []
+  status: NO_SOURCE_DATA

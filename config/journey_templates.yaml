@@ -1,0 +1,10 @@
+# Journey Templates
+templates:
+  - name: "Standard Arrival"
+    dag:
+      start: "Pre-arrival"
+      nodes:
+        - "Pre-arrival"
+        - "Pilotage"
+        - "Towage"
+        - "Berthing"

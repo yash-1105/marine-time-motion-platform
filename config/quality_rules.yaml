@@ -1,0 +1,7 @@
+# Quality rules
+rules:
+  - id: "DQ-001"
+    scope: "Timestamp"
+    severity: "Critical"
+    pass_fail_expression: "event_time <= current_time"
+    remediation_guidance: "Future timestamps are not allowed."

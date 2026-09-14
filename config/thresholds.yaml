@@ -1,0 +1,4 @@
+# Thresholds
+thresholds:
+  auto_merge: 0.98
+  outlier_sigma: 3
