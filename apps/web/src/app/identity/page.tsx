@@ -245,8 +245,7 @@ export default function IdentityPage() {
     return (
       <div className="space-y-6">
         <PageHeader
-          title="Identity Resolution & Merge"
-          description="Deterministic and probabilistic matching, explainable scoring evidence, survivorship preview, and safe unmerge."
+          title="Identity & Merges"
         />
         <LoadingState label="Loading identity resolution data…" />
       </div>
@@ -256,8 +255,7 @@ export default function IdentityPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Identity Resolution & Merge"
-        description="Deterministic and probabilistic matching, explainable scoring evidence, survivorship preview, and safe unmerge."
+        title="Identity & Merges"
         actions={
           can('merge') && (
             <button

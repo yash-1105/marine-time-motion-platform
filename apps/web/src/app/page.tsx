@@ -153,8 +153,6 @@ function ExecutiveDashboardContent() {
   const [showReconModal, setShowReconModal] = useState(false)
 
   // Sync with global filters
-  const port = searchParams.get('port') || ''
-  const terminal = searchParams.get('terminal') || ''
   const vesselType = searchParams.get('vesselType') || ''
   const cargoType = searchParams.get('cargoType') || ''
   const qualityStatus = searchParams.get('qualityStatus') || ''
@@ -163,15 +161,13 @@ function ExecutiveDashboardContent() {
 
   const queryParams = useMemo(() => {
     const p = new URLSearchParams()
-    if (port && port !== 'ALL') p.set('port_id', port)
-    if (terminal && terminal !== 'ALL') p.set('terminal_id', terminal)
     if (vesselType && vesselType !== 'ALL') p.set('vessel_type', vesselType)
     if (cargoType && cargoType !== 'ALL') p.set('cargo_type', cargoType)
     if (qualityStatus && qualityStatus !== 'ALL') p.set('quality_status', qualityStatus)
     if (startDate) p.set('start_date', startDate)
     if (endDate) p.set('end_date', endDate)
     return p.toString()
-  }, [port, terminal, vesselType, cargoType, qualityStatus, startDate, endDate])
+  }, [vesselType, cargoType, qualityStatus, startDate, endDate])
 
   const fetchDashboard = useCallback(async () => {
     setLoading(true)
@@ -254,12 +250,6 @@ function ExecutiveDashboardContent() {
       <div className="bg-[var(--color-surface)] border-b border-[var(--color-border)] px-6 py-5 flex flex-wrap items-start justify-between gap-4 flex-shrink-0">
         <div>
           <h1 className="text-xl font-semibold text-[var(--color-text-primary)] tracking-tight">Executive Dashboard</h1>
-          <p className="text-sm text-[var(--color-text-secondary)] mt-1 max-w-2xl">
-            Time &amp; motion performance, delays, bottlenecks, and KPI health for Transnet Durban Container Terminal (DCT).
-          </p>
-          <p className="text-xs text-[var(--color-text-tertiary)] mt-1.5">
-            Dataset: Synthetic historical benchmark
-          </p>
         </div>
 
         <div className="flex items-center gap-2.5">

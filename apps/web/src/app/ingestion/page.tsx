@@ -1,107 +1,184 @@
-"use client";
+'use client'
 
-import { useState } from "react";
-import { useAuth } from "@/lib/auth-context";
-import { PageHeader, Card, SectionHeader, StatusBadge } from "@/components/ui";
+import { useState } from 'react'
+import Link from 'next/link'
+import { useAuth } from '@/lib/auth-context'
+import { useDatasetStatus } from '@/lib/dataset-context'
+import { PageHeader, Card, SectionHeader, StatusBadge, ErrorState } from '@/components/ui'
+
+const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+
+type UploadState = 'idle' | 'processing' | 'success' | 'error'
 
 export default function IngestionPage() {
-  const { can, roles } = useAuth();
-  const [file, setFile] = useState<File | null>(null);
-  const [status, setStatus] = useState<string>("");
+  const { can, roles, token } = useAuth()
+  const { refresh: refreshDataset } = useDatasetStatus()
+  const [file, setFile] = useState<File | null>(null)
+  const [state, setState] = useState<UploadState>('idle')
+  const [message, setMessage] = useState<string>('')
 
-  if (!can("create:vessel_call")) {
+  if (!can('create:vessel_call')) {
     return (
       <div className="flex-1 flex items-center justify-center p-8">
         <StatusBadge label="Access Denied — missing create:vessel_call permission" tone="critical" />
       </div>
-    );
+    )
+  }
+
+  const authHeaders = { Authorization: `Bearer ${token || 'dev-token'}` }
+
+  // The ingestion pipeline runs synchronously on the server, so there is no real
+  // intermediate progress to poll — show an honest indeterminate state for the
+  // single request, then reflect the batch's actual final status.
+  const resolveBatchOutcome = async (batchId: string) => {
+    const res = await fetch(`${API}/api/v1/ingestion/batches`, { headers: authHeaders })
+    if (!res.ok) return null
+    const batches: Array<{ batch_id: string; status: string; error_message?: string | null }> = await res.json()
+    return batches.find((b) => b.batch_id === batchId) || null
   }
 
   const handleUpload = async () => {
-    if (!file) return;
-    setStatus("Uploading...");
+    if (!file) return
+    setState('processing')
+    setMessage('')
 
-    const formData = new FormData();
-    formData.append("file", file);
+    const formData = new FormData()
+    formData.append('file', file)
 
     try {
-      const res = await fetch("/api/v1/ingestion/upload", {
-        method: "POST",
+      const res = await fetch(`${API}/api/v1/ingestion/upload`, {
+        method: 'POST',
+        headers: authHeaders,
         body: formData,
-        // credentials: "omit", // in real, we pass token
-      });
-
-      if (!res.ok) throw new Error("Upload failed");
-
-      const data = await res.json();
-      setStatus(`Success! Batch ID: ${data.batch_id}`);
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => null)
+        throw new Error(err?.detail || `Upload failed (HTTP ${res.status})`)
+      }
+      const data = await res.json()
+      const outcome = await resolveBatchOutcome(data.batch_id)
+      if (outcome?.status === 'FAILED') {
+        setState('error')
+        setMessage(outcome.error_message || 'Dataset processing failed.')
+        return
+      }
+      setState('success')
+      setMessage(file.name)
+      await refreshDataset()
     } catch (error) {
-      const e = error as Error;
-      setStatus(`Error: ${e.message}`);
+      const e = error as Error
+      setState('error')
+      setMessage(e.message)
     }
-  };
+  }
 
   const loadSynthetic = async () => {
-    setStatus("Loading synthetic dataset...");
+    setState('processing')
+    setMessage('')
     try {
-      const res = await fetch("/api/v1/ingestion/synthetic", { method: "POST" });
-      if (!res.ok) throw new Error("Synthetic load failed");
-      const data = await res.json();
-      setStatus(`Synthetic data loaded. Batch ID: ${data.batch_id}`);
+      const res = await fetch(`${API}/api/v1/ingestion/synthetic`, { method: 'POST', headers: authHeaders })
+      if (!res.ok) {
+        const err = await res.json().catch(() => null)
+        throw new Error(err?.detail || `Synthetic load failed (HTTP ${res.status})`)
+      }
+      setState('success')
+      setMessage('Synthetic benchmark dataset')
+      await refreshDataset()
     } catch (error) {
-      const e = error as Error;
-      setStatus(`Error: ${e.message}`);
+      const e = error as Error
+      setState('error')
+      setMessage(e.message)
     }
-  };
+  }
+
+  const reset = () => {
+    setState('idle')
+    setMessage('')
+    setFile(null)
+  }
 
   return (
     <div className="flex-1 flex flex-col h-full bg-[var(--color-bg)] overflow-y-auto">
-      <PageHeader
-        title="Data Ingestion"
-        description="Upload source data files or load the governed synthetic benchmark dataset through the standard ingestion pipeline."
-      />
+      <PageHeader title="Data Ingestion" />
 
       <div className="p-6 max-w-3xl w-full mx-auto space-y-6">
-        <Card>
-          <SectionHeader title="Upload Data File" description="Accepted formats follow the standard ingestion contract." />
-          <div className="space-y-4">
-            <input
-              type="file"
-              onChange={(e) => setFile(e.target.files?.[0] || null)}
-              className="block w-full text-sm text-[var(--color-text-secondary)] border border-[var(--color-border)] rounded-md p-2 file:mr-3 file:px-3 file:py-1.5 file:rounded-md file:border-0 file:text-xs file:font-medium file:bg-[var(--color-accent-soft)] file:text-[var(--color-accent)] cursor-pointer"
-            />
-            <button
-              onClick={handleUpload}
-              disabled={!file}
-              className="px-4 py-1.5 bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-white rounded-md text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-            >
-              Upload &amp; Process
-            </button>
-          </div>
-        </Card>
-
-        {(roles.includes("Platform Administrator") || roles.includes("Developer")) && (
-          <Card className="border-[var(--color-warning-border)] bg-[var(--color-warning-bg)]">
-            <SectionHeader
-              title="Synthetic Test Dataset"
-              description="Resets the synthetic tenant and loads the fixture data through the standard ingestion pipeline."
-            />
-            <button
-              onClick={loadSynthetic}
-              className="px-4 py-1.5 bg-[var(--color-warning)] hover:opacity-90 text-white rounded-md text-sm font-medium cursor-pointer"
-            >
-              Load Synthetic Dataset
-            </button>
+        {state === 'success' && (
+          <Card className="border-[var(--color-good-border)] bg-[var(--color-good-bg)]">
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <div>
+                <p className="text-sm font-semibold text-[var(--color-text-primary)]">Dataset processed successfully</p>
+                <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">{message}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Link
+                  href="/"
+                  className="px-3.5 py-1.5 bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-white rounded-md text-sm font-medium"
+                >
+                  View Executive Dashboard
+                </Link>
+                <button
+                  onClick={reset}
+                  className="px-3.5 py-1.5 bg-[var(--color-surface)] hover:bg-[var(--color-surface-muted)] text-[var(--color-text-secondary)] rounded-md text-sm font-medium border border-[var(--color-border)] cursor-pointer"
+                >
+                  Upload another
+                </button>
+              </div>
+            </div>
           </Card>
         )}
 
-        {status && (
-          <Card className="text-sm text-[var(--color-text-secondary)]">
-            <span className="font-medium text-[var(--color-text-primary)]">Status: </span>
-            {status}
+        {state === 'error' && (
+          <Card>
+            <ErrorState title="Dataset processing failed" description={message} onRetry={reset} />
           </Card>
+        )}
+
+        {(state === 'idle' || state === 'processing') && (
+          <>
+            <Card>
+              <SectionHeader title="Upload vessel operations dataset" description="Supported format: Excel (.xlsx)" />
+              <div className="space-y-4">
+                <input
+                  type="file"
+                  accept=".xlsx"
+                  onChange={(e) => setFile(e.target.files?.[0] || null)}
+                  disabled={state === 'processing'}
+                  className="block w-full text-sm text-[var(--color-text-secondary)] border border-[var(--color-border)] rounded-md p-2 file:mr-3 file:px-3 file:py-1.5 file:rounded-md file:border-0 file:text-xs file:font-medium file:bg-[var(--color-accent-soft)] file:text-[var(--color-accent)] cursor-pointer disabled:opacity-60"
+                />
+                <button
+                  onClick={handleUpload}
+                  disabled={!file || state === 'processing'}
+                  className="px-4 py-1.5 bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-white rounded-md text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex items-center gap-2"
+                >
+                  {state === 'processing' && (
+                    <span
+                      className="h-3.5 w-3.5 rounded-full border-2 border-white/40 border-t-white animate-spin"
+                      aria-hidden="true"
+                    />
+                  )}
+                  {state === 'processing' ? 'Uploading and processing…' : 'Upload & Process'}
+                </button>
+              </div>
+            </Card>
+
+            {(roles.includes('Platform Administrator') || roles.includes('Developer')) && (
+              <Card className="border-[var(--color-warning-border)] bg-[var(--color-warning-bg)]">
+                <SectionHeader
+                  title="Synthetic Test Dataset"
+                  description="Resets the synthetic tenant and loads the fixture data through the standard ingestion pipeline."
+                />
+                <button
+                  onClick={loadSynthetic}
+                  disabled={state === 'processing'}
+                  className="px-4 py-1.5 bg-[var(--color-warning)] hover:opacity-90 text-white rounded-md text-sm font-medium cursor-pointer disabled:opacity-50"
+                >
+                  Load Synthetic Dataset
+                </button>
+              </Card>
+            )}
+          </>
         )}
       </div>
     </div>
-  );
+  )
 }

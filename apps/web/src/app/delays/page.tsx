@@ -566,11 +566,7 @@ export default function DelaysAndBottlenecksPage() {
 
   return (
     <div className="flex flex-col min-h-full">
-      <PageHeader
-        title="Delays, Bottlenecks & Operational Risk"
-        description="Governed delay cause attribution, non-duration bottleneck ranking, outlier detection (DQ-008), criticality component scoring, and alerts workflow."
-        actions={<StatusBadge label="Active Governed Engine" tone="good" />}
-      />
+      <PageHeader title="Delays & Bottlenecks" />
 
       <div className="px-6 py-6 space-y-6">
         {/* KPI Row */}

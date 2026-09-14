@@ -117,12 +117,6 @@ function VesselCallsContent() {
       params.set('limit', '250')
 
       // Inherit global scope filters if set in URL
-      const port = searchParams.get('port')
-      if (port && port !== '*') params.set('port_id', port)
-
-      const terminal = searchParams.get('terminal')
-      if (terminal && terminal !== '*') params.set('terminal_id', terminal)
-
       const vType = searchParams.get('vesselType')
       if (vType) params.set('vessel_type', vType)
 
@@ -228,8 +222,7 @@ function VesselCallsContent() {
     <div className="flex-1 flex flex-col h-full overflow-hidden bg-[var(--color-bg)] text-[var(--color-text-primary)]">
       {/* 1. Page Header & Real Operational KPI Pills */}
       <PageHeader
-        title="Consolidated Vessel Calls"
-        description="Real-time port calls reconciled across AIS, TOS, and Marine Services with deterministic lead times and full traceability."
+        title="Vessel Calls"
         meta={
           <div className="flex items-center gap-2 flex-wrap">
             <StatusBadge label={`${filteredCalls.length} calls`} tone="neutral" showGlyph={false} />

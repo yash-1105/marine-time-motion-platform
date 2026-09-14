@@ -167,8 +167,7 @@ function DataQualityContent() {
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden bg-[var(--color-bg)] text-[var(--color-text-primary)]">
       <PageHeader
-        title="Data Quality Governance"
-        description="Operational quality rules, chronology sequence assertions, quarantine enforcement, and steward remediation."
+        title="Data Quality"
         meta={`${filteredIssues.length} issue${filteredIssues.length === 1 ? '' : 's'} shown`}
         actions={
           <button

@@ -14,6 +14,12 @@ from apps.api.services.ingestion.synthetic import load_synthetic_dataset
 
 router = APIRouter(prefix="/ingestion", tags=["ingestion"])
 
+
+def _resolve_tenant(principal) -> str:
+    if principal.data_scope.tenant_id in ("*", "tenant-synthetic-01"):
+        return "synthetic-tenant"
+    return principal.data_scope.tenant_id
+
 @router.post("/upload")
 def upload_file(
     background_tasks: BackgroundTasks,
@@ -52,6 +58,14 @@ def list_batches(
     db: Session = Depends(get_db),
     principal = Depends(require("view", "vessel_call"))
 ):
-    batches = db.execute(select(IngestionBatch).order_by(desc(IngestionBatch.created_at))).scalars().all()
-    return [{"batch_id": b.batch_id, "file_name": b.file_name, "status": b.status} for b in batches]
+    tenant_id = _resolve_tenant(principal)
+    batches = db.execute(
+        select(IngestionBatch)
+        .where(IngestionBatch.tenant_id == tenant_id)
+        .order_by(desc(IngestionBatch.created_at))
+    ).scalars().all()
+    return [
+        {"batch_id": b.batch_id, "file_name": b.file_name, "status": b.status, "error_message": b.error_message}
+        for b in batches
+    ]
 

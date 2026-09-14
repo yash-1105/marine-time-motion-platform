@@ -367,8 +367,7 @@ function TimeAndMotionContent() {
     <div className="flex flex-col h-full bg-[var(--color-bg)] overflow-hidden">
       {/* ── Top Header ──────────────────────────────────────────────────────── */}
       <PageHeader
-        title="Time and Motion Analytics"
-        description="Governed lead-time catalogue, stage variability, tail risk, early service delivery, and golden reconciliation."
+        title="Time & Motion Explorer"
         meta={
           <StatusBadge label="Polars Engine · Linear Interpolation" tone="good" showGlyph={false} />
         }

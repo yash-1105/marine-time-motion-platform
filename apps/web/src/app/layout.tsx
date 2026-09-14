@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
 import { AuthProvider } from '../lib/auth-context'
+import { DatasetStatusProvider } from '../lib/dataset-context'
 import { AppShell } from '../components/AppShell'
 
 const inter = Inter({
@@ -24,7 +25,9 @@ export default function RootLayout({
     <html lang="en" className={inter.variable}>
       <body>
         <AuthProvider>
-          <AppShell>{children}</AppShell>
+          <DatasetStatusProvider>
+            <AppShell>{children}</AppShell>
+          </DatasetStatusProvider>
         </AuthProvider>
       </body>
     </html>

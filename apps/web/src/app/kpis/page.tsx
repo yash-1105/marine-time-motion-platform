@@ -206,8 +206,7 @@ export default function KPIDashboardPage() {
   return (
     <div className="min-h-full bg-[var(--color-bg)]">
       <PageHeader
-        title="Governed KPI Engine & Scorecard"
-        description="Complete catalogue of all 55 governed port operational KPIs (spec §11). Explicit status, lineage, and no fabricated values."
+        title="Governed KPIs"
         actions={
           <>
             <label className="flex items-center gap-2 text-xs font-medium text-[var(--color-text-secondary)] bg-[var(--color-surface)] px-3 py-1.5 rounded-md border border-[var(--color-border)] cursor-pointer">

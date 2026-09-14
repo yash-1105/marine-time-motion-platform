@@ -7,13 +7,7 @@ import { FilterChip, FilterField } from './ui/FilterChip'
 export interface FilterState {
   startDate: string
   endDate: string
-  port: string
-  terminal: string
-  berth: string
   vesselType: string
-  movementType: string
-  shippingLine: string
-  vesselSize: string
   cargoType: string
   qualityStatus: string
 }
@@ -21,15 +15,19 @@ export interface FilterState {
 const DEFAULT_FILTERS: FilterState = {
   startDate: '',
   endDate: '',
-  port: '',
-  terminal: '',
-  berth: '',
   vesselType: '',
-  movementType: '',
-  shippingLine: '',
-  vesselSize: '',
   cargoType: '',
   qualityStatus: '',
+}
+
+function readFiltersFromParams(searchParams: URLSearchParams): FilterState {
+  return {
+    startDate: searchParams.get('startDate') || '',
+    endDate: searchParams.get('endDate') || '',
+    vesselType: searchParams.get('vesselType') || '',
+    cargoType: searchParams.get('cargoType') || '',
+    qualityStatus: searchParams.get('qualityStatus') || '',
+  }
 }
 
 export const GlobalFilterBar: React.FC = () => {
@@ -37,39 +35,12 @@ export const GlobalFilterBar: React.FC = () => {
   const pathname = usePathname()
   const searchParams = useSearchParams()
 
-  const [filters, setFilters] = useState<FilterState>(() => {
-    return {
-      startDate: searchParams.get('startDate') || '',
-      endDate: searchParams.get('endDate') || '',
-      port: searchParams.get('port') || '',
-      terminal: searchParams.get('terminal') || '',
-      berth: searchParams.get('berth') || '',
-      vesselType: searchParams.get('vesselType') || '',
-      movementType: searchParams.get('movementType') || '',
-      shippingLine: searchParams.get('shippingLine') || '',
-      vesselSize: searchParams.get('vesselSize') || '',
-      cargoType: searchParams.get('cargoType') || '',
-      qualityStatus: searchParams.get('qualityStatus') || '',
-    }
-  })
-
+  const [filters, setFilters] = useState<FilterState>(() => readFiltersFromParams(searchParams))
   const [isExpanded, setIsExpanded] = useState(false)
 
   // Sync state when URL search parameters change externally
   useEffect(() => {
-    setFilters({
-      startDate: searchParams.get('startDate') || '',
-      endDate: searchParams.get('endDate') || '',
-      port: searchParams.get('port') || '',
-      terminal: searchParams.get('terminal') || '',
-      berth: searchParams.get('berth') || '',
-      vesselType: searchParams.get('vesselType') || '',
-      movementType: searchParams.get('movementType') || '',
-      shippingLine: searchParams.get('shippingLine') || '',
-      vesselSize: searchParams.get('vesselSize') || '',
-      cargoType: searchParams.get('cargoType') || '',
-      qualityStatus: searchParams.get('qualityStatus') || '',
-    })
+    setFilters(readFiltersFromParams(searchParams))
   }, [searchParams])
 
   const applyFilters = useCallback(
@@ -109,31 +80,6 @@ export const GlobalFilterBar: React.FC = () => {
             <span className="inline-block w-1.5 h-1.5 rounded-full bg-[var(--color-accent)]" aria-hidden="true" />
             Scope
           </span>
-
-          <FilterChip
-            ariaLabel="Filter by Port"
-            value={filters.port}
-            onChange={(v) => handleChange('port', v)}
-            allLabel="All Ports (ZADUR)"
-            options={[
-              { value: 'ZADUR', label: 'Durban (ZADUR)' },
-              { value: 'ZACPT', label: 'Cape Town (ZACPT)' },
-              { value: 'ZAPLZ', label: 'Port Elizabeth (ZAPLZ)' },
-            ]}
-          />
-
-          <FilterChip
-            ariaLabel="Filter by Terminal"
-            value={filters.terminal}
-            onChange={(v) => handleChange('terminal', v)}
-            allLabel="All Terminals"
-            options={[
-              { value: 'DCT', label: 'Durban Container Terminal (DCT)' },
-              { value: 'MPT', label: 'Multi-Purpose Terminal (MPT)' },
-              { value: 'PIER1', label: 'Pier 1 Container Terminal' },
-              { value: 'PIER2', label: 'Pier 2 Container Terminal' },
-            ]}
-          />
 
           <FilterChip
             ariaLabel="Filter by Vessel Type"
@@ -223,46 +169,6 @@ export const GlobalFilterBar: React.FC = () => {
               value={filters.endDate}
               onChange={(e) => handleChange('endDate', e.target.value)}
               className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-primary)] text-xs rounded-md px-2.5 py-1.5 focus:ring-2 focus:ring-[var(--color-accent)] focus:outline-none"
-            />
-          </FilterField>
-
-          <FilterField label="Berth">
-            <input
-              type="text"
-              placeholder="e.g. Berth 101"
-              value={filters.berth}
-              onChange={(e) => handleChange('berth', e.target.value)}
-              className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-primary)] text-xs rounded-md px-2.5 py-1.5 focus:ring-2 focus:ring-[var(--color-accent)] focus:outline-none placeholder:text-[var(--color-text-tertiary)]"
-            />
-          </FilterField>
-
-          <FilterField label="Movement Type">
-            <FilterChip
-              ariaLabel="Movement Type"
-              value={filters.movementType}
-              onChange={(v) => handleChange('movementType', v)}
-              allLabel="All Movements"
-              className="w-full"
-              options={[
-                { value: 'Arrival', label: 'Arrival' },
-                { value: 'Shifting', label: 'Shifting' },
-                { value: 'Sailing', label: 'Sailing' },
-              ]}
-            />
-          </FilterField>
-
-          <FilterField label="Vessel Size (TEU)">
-            <FilterChip
-              ariaLabel="Vessel Size"
-              value={filters.vesselSize}
-              onChange={(v) => handleChange('vesselSize', v)}
-              allLabel="All Sizes"
-              className="w-full"
-              options={[
-                { value: 'feeder', label: 'Feeder (<3,000 TEU)' },
-                { value: 'panamax', label: 'Panamax (3,000 - 8,000 TEU)' },
-                { value: 'postpanamax', label: 'Post-Panamax (>8,000 TEU)' },
-              ]}
             />
           </FilterField>
         </div>

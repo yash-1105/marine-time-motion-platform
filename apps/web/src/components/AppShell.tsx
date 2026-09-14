@@ -4,8 +4,14 @@ import React from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useAuth } from '../lib/auth-context'
-import { SyntheticBanner } from './SyntheticBanner'
+import { useDatasetStatus } from '../lib/dataset-context'
 import { GlobalFilterBar } from './GlobalFilterBar'
+import { EmptyState, LoadingState, ErrorState } from './ui'
+
+// Pages whose data is actually driven by the global Scope filter bar.
+// Other pages either use their own local filters or are record/detail-specific,
+// so showing the bar there would be inert noise.
+const SCOPE_FILTER_PATHS = new Set(['/', '/vessel-calls', '/time-and-motion'])
 
 interface NavItem {
   label: string
@@ -69,10 +75,14 @@ const PAGE_TITLES: Record<string, string> = Object.fromEntries(
 
 export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const pathname = usePathname()
-  const { user, roles, permissions, isSynthetic, can, switchRole, logout } = useAuth()
+  const { user, roles, permissions, can, switchRole, logout } = useAuth()
+  const { status: datasetStatus, errorMessage: datasetError, refresh: refreshDataset } = useDatasetStatus()
 
   const currentRole = roles[0] || 'Platform Administrator'
   const currentTitle = PAGE_TITLES[pathname] || 'Marine Time & Motion'
+  const showScopeFilter = SCOPE_FILTER_PATHS.has(pathname)
+  const isIngestionPage = pathname === '/ingestion'
+  const showDatasetGate = !isIngestionPage && datasetStatus !== 'ready' && datasetStatus !== 'loading'
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[var(--color-bg)] text-[var(--color-text-primary)]">
@@ -158,14 +168,44 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
         {/* Header */}
         <header className="h-14 flex-shrink-0 px-6 flex items-center justify-between border-b border-[var(--color-border)] bg-[var(--color-surface)]">
           <h1 className="text-sm font-semibold text-[var(--color-text-primary)]">{currentTitle}</h1>
-          <SyntheticBanner isSynthetic={isSynthetic} />
         </header>
 
-        <React.Suspense fallback={<div className="h-12 bg-[var(--color-surface)] border-b border-[var(--color-border)]" />}>
-          <GlobalFilterBar />
-        </React.Suspense>
+        {showScopeFilter && !showDatasetGate && (
+          <React.Suspense fallback={<div className="h-12 bg-[var(--color-surface)] border-b border-[var(--color-border)]" />}>
+            <GlobalFilterBar />
+          </React.Suspense>
+        )}
 
-        <main className="flex-1 overflow-y-auto min-w-0 flex flex-col">{children}</main>
+        <main className="flex-1 overflow-y-auto min-w-0 flex flex-col">
+          {showDatasetGate ? (
+            <div className="flex-1 flex items-center justify-center p-8">
+              {datasetStatus === 'processing' ? (
+                <LoadingState label="Processing dataset…" />
+              ) : datasetStatus === 'failed' ? (
+                <ErrorState
+                  title="Dataset processing failed"
+                  description={datasetError}
+                  onRetry={refreshDataset}
+                />
+              ) : (
+                <EmptyState
+                  title="No dataset loaded"
+                  description="Upload a vessel operations dataset to begin analysis."
+                  action={
+                    <Link
+                      href="/ingestion"
+                      className="inline-flex items-center px-4 py-1.5 bg-[var(--color-accent)] hover:opacity-90 text-white rounded-md text-sm font-medium"
+                    >
+                      Go to Data Ingestion
+                    </Link>
+                  }
+                />
+              )}
+            </div>
+          ) : (
+            children
+          )}
+        </main>
       </div>
     </div>
   )
