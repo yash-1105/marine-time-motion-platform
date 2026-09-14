@@ -162,7 +162,7 @@ class OutlierEngine:
                     LeadTimeDefinition.name == "Turnaround",
                     LeadTimeResult.vessel_call_id == vc_dq008.id,
                 )
-            ).scalar_one_or_none()
+            ).scalars().first()
 
             calc_val = calc_tr if calc_tr is not None else 86.5
             expected_override = 720.0  # Intentional oracle value from fixture

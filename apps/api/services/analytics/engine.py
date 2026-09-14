@@ -16,7 +16,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 import polars as pl
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from apps.api.models.analytics import (
@@ -78,6 +78,12 @@ class AnalyticsEngine:
             vc_stmt = vc_stmt.where(VesselCall.id.in_(vessel_call_ids))
         vessel_calls = self.db.execute(vc_stmt).scalars().all()
 
+        # Purge any stale LeadTimeResult rows associated with merged calls
+        merged_q = select(VesselCall.id).where(VesselCall.is_merged == True)
+        if self.tenant_id and self.tenant_id != "*":
+            merged_q = merged_q.where(VesselCall.tenant_id == self.tenant_id)
+        self.db.execute(delete(LeadTimeResult).where(LeadTimeResult.vessel_call_id.in_(merged_q)))
+
         for name, defn in catalogue.items():
             results = self._compute_single_definition(defn, vessel_calls)
             avail_cnt = sum(1 for r in results if r.status == "AVAILABLE")
@@ -104,18 +110,20 @@ class AnalyticsEngine:
         """Computes results for one LeadTimeDefinition across the given vessel calls."""
         # Clean existing results for this definition and these vessel calls
         vc_ids = [vc.id for vc in vessel_calls]
+        existing_results = {}
         if vc_ids:
-            existing_results = {
-                r.vessel_call_id: r
-                for r in self.db.execute(
-                    select(LeadTimeResult).where(
-                        LeadTimeResult.definition_id == defn.id,
-                        LeadTimeResult.vessel_call_id.in_(vc_ids),
-                    )
-                ).scalars().all()
-            }
-        else:
-            existing_results = {}
+            rows = self.db.execute(
+                select(LeadTimeResult).where(
+                    LeadTimeResult.definition_id == defn.id,
+                    LeadTimeResult.vessel_call_id.in_(vc_ids),
+                )
+            ).scalars().all()
+            for r in rows:
+                if r.vessel_call_id in existing_results:
+                    # Remove duplicate row to maintain 1:1 definition-to-call invariant
+                    self.db.delete(r)
+                else:
+                    existing_results[r.vessel_call_id] = r
 
         results: list[LeadTimeResult] = []
 
