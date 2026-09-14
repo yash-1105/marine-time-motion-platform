@@ -81,6 +81,16 @@ def load_synthetic_dataset(db: Session, file_path: str):
     db.execute(text("DELETE FROM identity.merge_decision"))
     db.execute(text("DELETE FROM identity.match_evidence"))
     db.execute(text("DELETE FROM identity.match_candidate"))
+
+    # Journey reconstruction data must be cleared before its FK-referenced canonical/quality rows.
+    db.execute(text("DELETE FROM journey.reconstruction_history WHERE vessel_call_id IN (SELECT id FROM canonical.vessel_call WHERE tenant_id = 'synthetic-tenant')"))
+    db.execute(text("DELETE FROM journey.journey_narrative WHERE vessel_call_id IN (SELECT id FROM canonical.vessel_call WHERE tenant_id = 'synthetic-tenant')"))
+    db.execute(text("DELETE FROM journey.observation_correction WHERE vessel_call_id IN (SELECT id FROM canonical.vessel_call WHERE tenant_id = 'synthetic-tenant')"))
+    db.execute(text("DELETE FROM journey.canonical_observation WHERE vessel_call_id IN (SELECT id FROM canonical.vessel_call WHERE tenant_id = 'synthetic-tenant')"))
+    db.execute(text("DELETE FROM journey.handover WHERE from_stage_occurrence_id IN (SELECT id FROM journey.stage_occurrence WHERE journey_instance_id IN (SELECT id FROM journey.journey_instance WHERE vessel_call_id IN (SELECT id FROM canonical.vessel_call WHERE tenant_id = 'synthetic-tenant')))"))
+    db.execute(text("DELETE FROM journey.stage_occurrence WHERE journey_instance_id IN (SELECT id FROM journey.journey_instance WHERE vessel_call_id IN (SELECT id FROM canonical.vessel_call WHERE tenant_id = 'synthetic-tenant'))"))
+    db.execute(text("DELETE FROM journey.journey_instance WHERE vessel_call_id IN (SELECT id FROM canonical.vessel_call WHERE tenant_id = 'synthetic-tenant')"))
+
     db.execute(text("DELETE FROM quality.quality_issue WHERE vessel_call_id IN (SELECT id FROM canonical.vessel_call WHERE tenant_id = 'synthetic-tenant')"))
     db.execute(text("DELETE FROM canonical.event_occurrence WHERE vessel_call_id IN (SELECT id FROM canonical.vessel_call WHERE tenant_id = 'synthetic-tenant')"))
     db.execute(text("DELETE FROM canonical.service_execution WHERE service_assignment_id IN (SELECT id FROM canonical.service_assignment WHERE service_request_id IN (SELECT id FROM canonical.service_request WHERE vessel_call_id IN (SELECT id FROM canonical.vessel_call WHERE tenant_id = 'synthetic-tenant')))"))

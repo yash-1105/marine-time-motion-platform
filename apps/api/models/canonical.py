@@ -72,6 +72,7 @@ class EventOccurrence(BaseModel):
     utc_value = Column(DateTime(timezone=True), nullable=False)
     capture_method = Column(String, nullable=True)
     confidence = Column(Float, nullable=True)
+    verification_status = Column(String, nullable=True)  # Verified|Conflicting|Unverified
     source_system = Column(String, nullable=True)
     source_record_id = Column(String, nullable=True)
     ingestion_batch_id = Column(String, nullable=True)
@@ -80,6 +81,10 @@ class EventOccurrence(BaseModel):
     inference_status = Column(String, nullable=True)
     human_review_state = Column(String, nullable=True)
     is_quarantined = Column(Boolean, default=False)
+
+    # Set when this observation was created by a steward correction (journey.observation_correction)
+    superseded_by_id = Column(ForeignKey("canonical.event_occurrence.id", ondelete="SET NULL"), nullable=True)
+    is_superseded = Column(Boolean, default=False, nullable=False)
 
 
 class ServiceRequest(BaseModel):

@@ -12,3 +12,22 @@ thresholds:
       - "AGENT"
       - "MANUAL"
       - "SYNTHETIC"
+  canonical_occurrence_selection:
+    # Order of precedence when multiple observations exist for the same logical event.
+    # 1. verification_status: Verified beats Conflicting beats Unverified/unknown
+    # 2. confidence: higher wins
+    # 3. source_system priority (below): earlier wins
+    verification_priority:
+      - "Verified"
+      - "Conflicting"
+    source_priority:
+      - "AIS"
+      - "VTS"
+      - "Pilot System"
+      - "Berthing Log"
+      - "Tug System"
+      - "PMS"
+      - "TOS"
+      - "Arrival Notification"
+      - "Agent Portal"
+      - "Manual Log"

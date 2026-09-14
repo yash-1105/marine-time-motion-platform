@@ -275,6 +275,7 @@ class IngestionPipeline:
                     utc_value=utc_val,
                     capture_method="SYSTEM",
                     confidence=confidence,
+                    verification_status=pd.get("Verification_Status") or None,
                     source_system=pd.get("Source_System"),
                     source_record_id=pd.get("Event_ID"),
                     ingestion_batch_id=batch.batch_id,

@@ -1,6 +1,17 @@
 # Journey Templates
+# Spec §9 reference flow: Pre-arrival -> Clearances -> ETA/ATA -> Anchorage -> Arrival Service
+# Request -> Pilot Boarding -> Breakwater In -> Towage -> Berthing -> Pilot Disembark ->
+# Health/Immigration/Customs -> Cargo Operations -> Lashing -> Optional Shifting -> Unberthing ->
+# Departure Service Request -> Departure Pilot Boarding -> Towage -> Pilot Disembark ->
+# Breakwater Out -> Port Limit Out -> ATD.
+#
+# `stages` defines a single, non-overlapping walk of the timeline (used for the active/wait/
+# hold/delay/unclassified decomposition, so components sum to the total without double counting).
+# Stages whose start_event/end_event are absent from a given call's data are reported UNAVAILABLE,
+# never as zero duration. `is_repeatable` stages (shifting) may occur zero, one or many times.
 templates:
-  - name: "Standard Arrival"
+  - name: "Standard Arrival-Departure"
+    rule_version: "1.0"
     dag:
       start: "Pre-arrival"
       nodes:
@@ -17,8 +28,136 @@ templates:
           events: ["FIRST_LINE_TIED_ARRIVAL", "LAST_LINE_TIED_ARRIVAL", "ALL_FAST_ARRIVAL"]
           next: []
       sequence_rules:
-        # these must happen in order
+        # these must happen in order; a violation is a sequence deviation, not a corrected value
         - from: "ANCHORAGE_ARRIVAL"
           to: "PILOT_ON_BOARD_ARRIVAL"
         - from: "PILOT_ON_BOARD_ARRIVAL"
           to: "PILOT_DISEMBARK_ARRIVAL"
+
+    stages:
+      - name: "Pre-Arrival"
+        sequence_index: 1
+        start_event: "NOMINATION_SUBMITTED"
+        end_event: "ATA"
+        time_category: "UNCLASSIFIED"
+        actor_from: "Vessel Agent"
+        actor_to: "TNPA Port Control"
+
+      - name: "Anchorage Wait"
+        sequence_index: 2
+        start_event: "ANCHORAGE_ARRIVAL"
+        end_event: "PILOT_ON_BOARD_ARRIVAL"
+        time_category: "PASSIVE_WAIT"
+        actor_from: "TNPA Port Control"
+        actor_to: "Pilots"
+
+      - name: "Inward Movement"
+        sequence_index: 3
+        start_event: "PILOT_ON_BOARD_ARRIVAL"
+        end_event: "ALL_FAST_ARRIVAL"
+        time_category: "ACTIVE_SERVICE"
+        actor_from: "Pilots"
+        actor_to: "Mooring Team"
+
+      - name: "Pilot Disembark Hold"
+        sequence_index: 4
+        start_event: "ALL_FAST_ARRIVAL"
+        end_event: "PILOT_DISEMBARK_ARRIVAL"
+        time_category: "HOLD"
+        actor_from: "Mooring Team"
+        actor_to: "Pilots"
+
+      - name: "Pre-Cargo Wait"
+        sequence_index: 5
+        start_event: "PILOT_DISEMBARK_ARRIVAL"
+        end_event: "CARGO_START"
+        time_category: "PASSIVE_WAIT"
+        actor_from: "Berthing Master"
+        actor_to: "Terminal Cargo Teams"
+
+      - name: "Cargo Operations"
+        sequence_index: 6
+        start_event: "CARGO_START"
+        end_event: "CARGO_END"
+        time_category: "ACTIVE_SERVICE"
+        actor_from: "Terminal Cargo Teams"
+        actor_to: "Terminal Cargo Teams"
+
+      - name: "Optional Shifting"
+        sequence_index: 7
+        start_event: "SHIFT_PILOT_ON_BOARD"
+        end_event: "SHIFT_ALL_FAST"
+        time_category: "DELAY"
+        actor_from: "Pilots"
+        actor_to: "Mooring Team"
+        is_optional: true
+        is_repeatable: true
+
+      - name: "Post-Cargo Wait"
+        sequence_index: 8
+        start_event: "CARGO_END"
+        end_event: "FIRST_LINE_UNTIED_SAILING"
+        time_category: "PASSIVE_WAIT"
+        actor_from: "Terminal Cargo Teams"
+        actor_to: "Mooring Team"
+
+      - name: "Unberthing"
+        sequence_index: 9
+        start_event: "FIRST_LINE_UNTIED_SAILING"
+        end_event: "LAST_LINE_UNTIED_SAILING"
+        time_category: "ACTIVE_SERVICE"
+        actor_from: "Mooring Team"
+        actor_to: "Pilots"
+
+      - name: "Departure Pilotage Wait"
+        sequence_index: 10
+        start_event: "LAST_LINE_UNTIED_SAILING"
+        end_event: "PILOT_ON_BOARD_SAILING"
+        time_category: "PASSIVE_WAIT"
+        actor_from: "Berthing Master"
+        actor_to: "Pilots"
+
+      - name: "Outward Movement"
+        sequence_index: 11
+        start_event: "PILOT_ON_BOARD_SAILING"
+        end_event: "BREAKWATER_OUT"
+        time_category: "ACTIVE_SERVICE"
+        actor_from: "Pilots"
+        actor_to: "Vessel"
+
+      - name: "Final Departure"
+        sequence_index: 12
+        start_event: "BREAKWATER_OUT"
+        end_event: "ATD"
+        time_category: "UNCLASSIFIED"
+        actor_from: "Vessel"
+        actor_to: "TNPA Port Control"
+
+      # Regulatory clearance branches: modeled but absent from the fixture, so they always
+      # report UNAVAILABLE (not zero duration) unless the source system supplies them.
+      - name: "ISPS Clearance"
+        sequence_index: 100
+        start_event: "ISPS Submission"
+        end_event: "ISPS Clearance"
+        time_category: "HOLD"
+        actor_from: "Police and Port Security"
+        actor_to: "TNPA Port Control"
+        is_optional: true
+
+      - name: "PHO Clearance"
+        sequence_index: 101
+        start_event: "PHO Submission"
+        end_event: "PHO Issuance"
+        time_category: "HOLD"
+        actor_from: "PHO"
+        actor_to: "TNPA Port Control"
+        is_optional: true
+
+      - name: "IMDG Clearance"
+        sequence_index: 102
+        start_event: "IMDG Submission"
+        end_event: "IMDG Issuance"
+        time_category: "HOLD"
+        actor_from: "Vessel Agent"
+        actor_to: "TNPA Port Control"
+        is_optional: true

@@ -30,5 +30,9 @@ class Settings(BaseSettings):
     cookie_secure: bool = False  # True in production HTTPS
     cookie_samesite: str = "lax"
 
+    # AI (Gemini API via Google AI/Vertex). Model name is config, never hard-coded in business logic.
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-2.0-flash"
+
 
 settings = Settings()
