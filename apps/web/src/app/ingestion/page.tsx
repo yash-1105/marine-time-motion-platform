@@ -4,18 +4,21 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useAuth } from '@/lib/auth-context'
 import { useDatasetStatus } from '@/lib/dataset-context'
-import { PageHeader, Card, SectionHeader, StatusBadge, ErrorState } from '@/components/ui'
+import { PageHeader, Card, SectionHeader, StatusBadge, ErrorState, LoadingState } from '@/components/ui'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
-type UploadState = 'idle' | 'processing' | 'success' | 'error'
+type UploadState = 'idle' | 'uploading' | 'error'
 
 export default function IngestionPage() {
   const { can, token } = useAuth()
-  const { refresh: refreshDataset } = useDatasetStatus()
+  const { status: datasetStatus, refresh: refreshDataset, clearDataset } = useDatasetStatus()
   const [file, setFile] = useState<File | null>(null)
-  const [state, setState] = useState<UploadState>('idle')
-  const [message, setMessage] = useState<string>('')
+  const [uploadState, setUploadState] = useState<UploadState>('idle')
+  const [uploadedName, setUploadedName] = useState<string>('')
+  const [errorMessage, setErrorMessage] = useState<string>('')
+  const [confirmingRemoval, setConfirmingRemoval] = useState(false)
+  const [removing, setRemoving] = useState(false)
 
   if (!can('create:vessel_call')) {
     return (
@@ -39,8 +42,8 @@ export default function IngestionPage() {
 
   const handleUpload = async () => {
     if (!file) return
-    setState('processing')
-    setMessage('')
+    setUploadState('uploading')
+    setErrorMessage('')
 
     const formData = new FormData()
     formData.append('file', file)
@@ -58,24 +61,39 @@ export default function IngestionPage() {
       const data = await res.json()
       const outcome = await resolveBatchOutcome(data.batch_id)
       if (outcome?.status === 'FAILED') {
-        setState('error')
-        setMessage(outcome.error_message || 'Dataset processing failed.')
+        setUploadState('error')
+        setErrorMessage(outcome.error_message || 'Dataset processing failed.')
         return
       }
-      setState('success')
-      setMessage(file.name)
+      setUploadedName(file.name)
+      setFile(null)
+      setUploadState('idle')
       await refreshDataset()
     } catch (error) {
       const e = error as Error
-      setState('error')
-      setMessage(e.message)
+      setUploadState('error')
+      setErrorMessage(e.message)
     }
   }
 
-  const reset = () => {
-    setState('idle')
-    setMessage('')
-    setFile(null)
+  const retry = () => {
+    setUploadState('idle')
+    setErrorMessage('')
+  }
+
+  const handleConfirmRemove = async () => {
+    setRemoving(true)
+    try {
+      await clearDataset()
+      setUploadedName('')
+      setFile(null)
+    } catch {
+      // Dataset context already reflects failure via its own state if the call fails;
+      // keep the confirmation dialog open-free and let the user retry the action.
+    } finally {
+      setRemoving(false)
+      setConfirmingRemoval(false)
+    }
   }
 
   return (
@@ -83,12 +101,24 @@ export default function IngestionPage() {
       <PageHeader title="Data Ingestion" />
 
       <div className="p-6 max-w-3xl w-full mx-auto space-y-6">
-        {state === 'success' && (
+        {uploadState === 'uploading' ? (
+          <Card>
+            <LoadingState label="Uploading and processing dataset…" />
+          </Card>
+        ) : uploadState === 'error' ? (
+          <Card>
+            <ErrorState title="Dataset processing failed" description={errorMessage} onRetry={retry} />
+          </Card>
+        ) : datasetStatus === 'loading' ? (
+          <Card>
+            <LoadingState label="Checking dataset status…" />
+          </Card>
+        ) : datasetStatus === 'ready' ? (
           <Card className="border-[var(--color-good-border)] bg-[var(--color-good-bg)]">
             <div className="flex items-center justify-between gap-4 flex-wrap">
               <div>
-                <p className="text-sm font-semibold text-[var(--color-text-primary)]">Dataset processed successfully</p>
-                <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">{message}</p>
+                <p className="text-sm font-semibold text-[var(--color-text-primary)]">Dataset loaded</p>
+                {uploadedName && <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">{uploadedName}</p>}
               </div>
               <div className="flex items-center gap-2">
                 <Link
@@ -98,23 +128,15 @@ export default function IngestionPage() {
                   View Executive Dashboard
                 </Link>
                 <button
-                  onClick={reset}
-                  className="px-3.5 py-1.5 bg-[var(--color-surface)] hover:bg-[var(--color-surface-muted)] text-[var(--color-text-secondary)] rounded-md text-sm font-medium border border-[var(--color-border)] cursor-pointer"
+                  onClick={() => setConfirmingRemoval(true)}
+                  className="px-3.5 py-1.5 bg-[var(--color-surface)] hover:bg-[var(--color-critical-bg)] hover:text-[var(--color-critical)] text-[var(--color-text-secondary)] rounded-md text-sm font-medium border border-[var(--color-border)] cursor-pointer"
                 >
-                  Upload another
+                  Remove Dataset
                 </button>
               </div>
             </div>
           </Card>
-        )}
-
-        {state === 'error' && (
-          <Card>
-            <ErrorState title="Dataset processing failed" description={message} onRetry={reset} />
-          </Card>
-        )}
-
-        {(state === 'idle' || state === 'processing') && (
+        ) : (
           <Card>
             <SectionHeader title="Upload vessel operations dataset" description="Supported format: Excel (.xlsx)" />
             <div className="space-y-4">
@@ -122,26 +144,52 @@ export default function IngestionPage() {
                 type="file"
                 accept=".xlsx"
                 onChange={(e) => setFile(e.target.files?.[0] || null)}
-                disabled={state === 'processing'}
-                className="block w-full text-sm text-[var(--color-text-secondary)] border border-[var(--color-border)] rounded-md p-2 file:mr-3 file:px-3 file:py-1.5 file:rounded-md file:border-0 file:text-xs file:font-medium file:bg-[var(--color-accent-soft)] file:text-[var(--color-accent)] cursor-pointer disabled:opacity-60"
+                className="block w-full text-sm text-[var(--color-text-secondary)] border border-[var(--color-border)] rounded-md p-2 file:mr-3 file:px-3 file:py-1.5 file:rounded-md file:border-0 file:text-xs file:font-medium file:bg-[var(--color-accent-soft)] file:text-[var(--color-accent)] cursor-pointer"
               />
               <button
                 onClick={handleUpload}
-                disabled={!file || state === 'processing'}
-                className="px-4 py-1.5 bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-white rounded-md text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex items-center gap-2"
+                disabled={!file}
+                className="px-4 py-1.5 bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-white rounded-md text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
               >
-                {state === 'processing' && (
-                  <span
-                    className="h-3.5 w-3.5 rounded-full border-2 border-white/40 border-t-white animate-spin"
-                    aria-hidden="true"
-                  />
-                )}
-                {state === 'processing' ? 'Uploading and processing…' : 'Upload & Process'}
+                Upload &amp; Process
               </button>
             </div>
           </Card>
         )}
       </div>
+
+      {confirmingRemoval && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="bg-[var(--color-surface)] rounded-lg shadow-xl max-w-sm w-full border border-[var(--color-border)] p-5 space-y-4">
+            <div>
+              <p className="text-sm font-semibold text-[var(--color-text-primary)]">Remove current dataset?</p>
+              <p className="text-xs text-[var(--color-text-secondary)] mt-1">
+                This will clear the active dataset and return you to the upload screen.
+              </p>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setConfirmingRemoval(false)}
+                disabled={removing}
+                className="px-3.5 py-1.5 border border-[var(--color-border)] text-[var(--color-text-primary)] rounded-md text-sm font-medium hover:bg-[var(--color-surface-muted)] cursor-pointer disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmRemove}
+                disabled={removing}
+                className="px-3.5 py-1.5 bg-[var(--color-critical)] hover:opacity-90 text-white rounded-md text-sm font-medium cursor-pointer disabled:opacity-50"
+              >
+                {removing ? 'Removing…' : 'Remove Dataset'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -10,7 +10,7 @@ from apps.api.auth.dependencies import require
 from apps.api.core.database import get_db
 from apps.api.models.ingestion import IngestionBatch
 from apps.api.services.ingestion.pipeline import IngestionPipeline
-from apps.api.services.ingestion.synthetic import load_synthetic_dataset
+from apps.api.services.ingestion.synthetic import load_synthetic_dataset, reset_tenant_dataset
 
 router = APIRouter(prefix="/ingestion", tags=["ingestion"])
 
@@ -51,6 +51,21 @@ def load_synthetic(
         batch_id = load_synthetic_dataset(db, "fixtures/Synthetic_Marine_Time_Motion_Test_Data.xlsx")
         return {"batch_id": batch_id, "status": "COMPLETED"}
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/dataset")
+def clear_dataset(
+    db: Session = Depends(get_db),
+    principal = Depends(require("create", "vessel_call"))
+):
+    """Removes the tenant's currently loaded dataset (all ingested and derived
+    data), returning it to a clean, no-dataset-loaded state."""
+    tenant_id = _resolve_tenant(principal)
+    try:
+        reset_tenant_dataset(db, tenant_id)
+        return {"status": "CLEARED", "tenant_id": tenant_id}
+    except Exception as e:
+        db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/batches")
