@@ -1,7 +1,9 @@
+"""ORM declarations for validation-only testkit schema tables."""
+
 from sqlalchemy import Column, DateTime, Float, String
 from sqlalchemy.dialects.postgresql import JSONB
 
-from .base import BaseModel
+from apps.api.models.base import BaseModel
 
 
 class ExpectedOutput(BaseModel):

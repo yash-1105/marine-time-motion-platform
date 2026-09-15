@@ -170,7 +170,7 @@ def test_repository_level_data_scope(db_session):
 
     # Scope for tenant-alpha, port ZADUR
     scope_alpha_durban = DataScope(tenant_id="tenant-alpha", port_id="ZADUR")
-    results = repo.list(scope=scope_alpha_durban)
+    results = repo.list(scope=scope_alpha_durban, search=uid)
     vcns = [c.vcn for c in results]
     assert vcn1 in vcns
     assert vcn2 not in vcns  # Different port
@@ -178,7 +178,7 @@ def test_repository_level_data_scope(db_session):
 
     # Scope with port wildcard for tenant-alpha
     scope_alpha_all = DataScope(tenant_id="tenant-alpha", port_id="*")
-    results_all = repo.list(scope=scope_alpha_all)
+    results_all = repo.list(scope=scope_alpha_all, search=uid)
     vcns_all = [c.vcn for c in results_all]
     assert vcn1 in vcns_all
     assert vcn2 in vcns_all

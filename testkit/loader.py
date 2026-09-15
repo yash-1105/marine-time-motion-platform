@@ -2,7 +2,7 @@
 from datetime import datetime
 import polars as pl
 from sqlalchemy import text
-from apps.api.models.testkit import DQCase, ExpectedOutput, ValidationSummary
+from testkit.models import DQCase, ExpectedOutput, ValidationSummary
 from apps.api.services.ingestion.pipeline import IngestionPipeline
 from apps.api.services.ingestion.synthetic import reset_tenant_dataset
 

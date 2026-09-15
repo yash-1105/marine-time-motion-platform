@@ -468,26 +468,6 @@ function VesselJourneyContent() {
               }
             />
 
-            {/* Intentional DQ Callout Banners */}
-            {journey.vcn === 'SYNVCN2600018' && (
-              <div className="bg-[var(--color-warning-bg)] border-b border-[var(--color-warning-border)] px-6 py-2.5 text-xs text-[var(--color-text-primary)] flex items-center gap-2 flex-shrink-0">
-                <StatusBadge label="DQ-003 Case" tone="warning" />
-                <span>Missing mandatory ATA in staging record. Dependent durations (Turnaround, Inward Movement) are formally preserved as <strong>UNAVAILABLE</strong> with explicit reason. No fake zeroes are fabricated.</span>
-              </div>
-            )}
-            {journey.vcn === 'SYNVCN2600070' && (
-              <div className="bg-[var(--color-accent-soft)] border-b border-[var(--color-accent-soft-border)] px-6 py-2.5 text-xs text-[var(--color-text-primary)] flex items-center gap-2 flex-shrink-0">
-                <StatusBadge label="DQ-010 Case" tone="neutral" />
-                <span>Two conflicting ATA timestamps received (AIS 15:22 vs Manual Log 20:22). Both observations are preserved in canonical storage; inspect the <strong>Conflicts</strong> tab for the winning selection.</span>
-              </div>
-            )}
-            {journey.vcn === 'SYNVCN2600045' && (
-              <div className="bg-[var(--color-critical-bg)] border-b border-[var(--color-critical-border)] px-6 py-2.5 text-xs text-[var(--color-text-primary)] flex items-center gap-2 flex-shrink-0">
-                <StatusBadge label="DQ-006 Case" tone="critical" />
-                <span>Chronology sequence violation detected (Pilot On Board before scheduled). Quarantined by Data Quality Engine without dropping the raw observation.</span>
-              </div>
-            )}
-
             {/* Tabs */}
             <div className="bg-[var(--color-surface)] border-b border-[var(--color-border)] px-6 flex gap-1 flex-shrink-0 overflow-x-auto">
               {TABS.map((t) => {

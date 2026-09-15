@@ -14,7 +14,7 @@ from apps.api.models.journey import (
     StageOccurrence,
 )
 from apps.api.services.identity.engine import IdentityEngine
-from apps.api.services.ingestion.synthetic import load_synthetic_dataset
+from testkit.loader import load_synthetic_dataset
 from apps.api.services.journey.corrections import JourneyCorrectionService
 from apps.api.services.journey.narrative import JourneyNarrativeService
 from apps.api.services.journey.reconstructor import JourneyReconstructionEngine

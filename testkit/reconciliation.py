@@ -1,7 +1,7 @@
 """Fixture-oracle reconciliation used only by tests and run_synthetic_validation.py."""
 from sqlalchemy import select
 from apps.api.models.analytics import LeadTimeDefinition, LeadTimeResult
-from apps.api.models.testkit import ExpectedOutput
+from testkit.models import ExpectedOutput
 from apps.api.services.analytics.catalogue import ensure_catalogue
 from apps.api.services.analytics.engine import within_tolerance
 

@@ -27,7 +27,7 @@ from apps.api.models.analytics import (
     StatisticalAggregate,
 )
 from apps.api.models.canonical import VesselCall
-from apps.api.models.testkit import ExpectedOutput
+from testkit.models import ExpectedOutput
 from apps.api.services.analytics.catalogue import ensure_catalogue
 from apps.api.services.analytics.custom_builder import CustomLeadTimeBuilder
 from apps.api.services.analytics.engine import AnalyticsEngine, within_tolerance

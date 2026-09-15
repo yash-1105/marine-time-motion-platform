@@ -54,7 +54,7 @@ def test_testkit_isolation():
         cls = mapper.class_
         schema = getattr(cls.__table__, "schema", None)
         if schema == "testkit":
-            assert cls.__module__ == "apps.api.models.testkit"
+            assert cls.__module__ == "testkit.models"
 
 
 def test_kpi_count(session):

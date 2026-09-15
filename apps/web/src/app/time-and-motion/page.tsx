@@ -85,41 +85,6 @@ interface PerCallResult {
   }
 }
 
-interface ReconciliationMetric {
-  definition_name: string
-  expected_metric: string
-  total_eligible_calls: number
-  passed: number
-  failed: number
-  unavailable_in_actual: number
-  reconciled_fraction: string
-  details: Array<{
-    vcn: string
-    status: string
-    actual?: number
-    expected?: number
-    diff?: number
-    reason?: string
-  }>
-}
-
-interface ReconciliationReport {
-  tolerance_hours: number
-  overall_status: string
-  summary: {
-    total_targets: number
-    fully_reconciled_targets: number
-    total_comparisons: number
-    passed_comparisons: number
-    failed_comparisons: number
-  }
-  early_service: {
-    negative_arrival_delays: number
-    negative_sailing_delays: number
-  }
-  metrics_reconciled: Record<string, ReconciliationMetric>
-}
-
 interface EventDef {
   id: string
   name: string
@@ -152,7 +117,7 @@ function TimeAndMotionContent() {
   const { token, can } = useAuth()
   const headers = { Authorization: `Bearer ${token || 'dev-token'}` }
 
-  const [activeTab, setActiveTab] = useState<'catalogue' | 'reconciliation' | 'explorer' | 'custom'>('catalogue')
+  const [activeTab, setActiveTab] = useState<'catalogue' | 'explorer' | 'custom'>('catalogue')
 
   // Data states
   const [definitions, setDefinitions] = useState<LeadTimeDef[]>([])
@@ -160,10 +125,6 @@ function TimeAndMotionContent() {
   const [loadingDefs, setLoadingDefs] = useState(true)
   const [recomputing, setRecomputing] = useState(false)
   const [computeMsg, setComputeMsg] = useState<string | null>(null)
-
-  // Reconciliation state
-  const [reconciliation, setReconciliation] = useState<ReconciliationReport | null>(null)
-  const [loadingRecon, setLoadingRecon] = useState(false)
 
   // Explorer state
   const [selectedDefId, setSelectedDefId] = useState<string>('')
@@ -252,19 +213,7 @@ function TimeAndMotionContent() {
       .finally(() => setLoadingDefs(false))
   }, [token]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 2. Fetch Reconciliation Report
-  const fetchReconciliation = useCallback(() => {
-    setLoadingRecon(true)
-    fetch(`${API}/api/v1/analytics/reconciliation?tolerance=0.02`, { headers })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        if (data) setReconciliation(data)
-      })
-      .catch((err) => console.error('Error fetching reconciliation:', err))
-      .finally(() => setLoadingRecon(false))
-  }, [token]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // 3. Fetch Events for Builder
+  // 2. Fetch Events for Builder
   const fetchEvents = useCallback(() => {
     fetch(`${API}/api/v1/analytics/events`, { headers })
       .then((r) => (r.ok ? r.json() : []))
@@ -279,7 +228,7 @@ function TimeAndMotionContent() {
       .catch(() => {})
   }, [token]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 4. Fetch Results for Explorer
+  // 3. Fetch Results for Explorer
   const fetchResults = useCallback(
     (defId: string) => {
       if (!defId) return
@@ -308,12 +257,10 @@ function TimeAndMotionContent() {
   }, [fetchDefinitions, fetchEvents])
 
   useEffect(() => {
-    if (activeTab === 'reconciliation') {
-      fetchReconciliation()
-    } else if (activeTab === 'explorer' && selectedDefId) {
+    if (activeTab === 'explorer' && selectedDefId) {
       fetchResults(selectedDefId)
     }
-  }, [activeTab, selectedDefId, fetchReconciliation, fetchResults])
+  }, [activeTab, selectedDefId, fetchResults])
 
   // Trigger Analytics Recalculation
   const handleCompute = () => {
@@ -324,7 +271,6 @@ function TimeAndMotionContent() {
       .then((data) => {
         setComputeMsg(`Calculation complete: ${data.available} available, ${data.unavailable} unavailable.`)
         fetchDefinitions()
-        if (activeTab === 'reconciliation') fetchReconciliation()
         if (selectedDefId) fetchResults(selectedDefId)
       })
       .catch(() => setComputeMsg('Calculation failed'))
@@ -398,13 +344,12 @@ function TimeAndMotionContent() {
       <div className="bg-[var(--color-surface)] border-b border-[var(--color-border)] px-6 flex gap-2 flex-shrink-0">
         {[
           { id: 'catalogue', label: 'Governed Catalogue & Stats' },
-          { id: 'reconciliation', label: 'Golden Reconciliation Scorecard' },
           { id: 'explorer', label: 'Per-Call Explorer & Lineage' },
           { id: 'custom', label: 'Custom Lead-Time Builder' },
         ].map((t) => (
           <button
             key={t.id}
-            onClick={() => setActiveTab(t.id as 'catalogue' | 'reconciliation' | 'explorer' | 'custom')}
+            onClick={() => setActiveTab(t.id as 'catalogue' | 'explorer' | 'custom')}
             className={`py-3 px-3 text-xs font-medium border-b-2 transition-colors cursor-pointer ${
               activeTab === t.id
                 ? 'border-[var(--color-accent)] text-[var(--color-accent)] font-semibold'
@@ -509,101 +454,7 @@ function TimeAndMotionContent() {
           </div>
         )}
 
-        {/* 2. Golden Reconciliation Scorecard */}
-        {activeTab === 'reconciliation' && (
-          <div className="space-y-4">
-            <SectionHeader
-              title="ExpectedOutputs Oracle Reconciliation (±0.02h Tolerance)"
-              description="Validates independently calculated vessel metrics against the governed fixture oracle (spec §21A.2, AGENTS.md §6)."
-              action={
-                reconciliation && (
-                  <div className="flex gap-2">
-                    <StatusBadge
-                      tone="inferred"
-                      showGlyph={false}
-                      label={`Early Arrival Delays: ${reconciliation.early_service.negative_arrival_delays}`}
-                    />
-                    <StatusBadge
-                      tone="inferred"
-                      showGlyph={false}
-                      label={`Early Sailing Delays: ${reconciliation.early_service.negative_sailing_delays}`}
-                    />
-                  </div>
-                )
-              }
-            />
-
-            <Card>
-              {loadingRecon ? (
-                <LoadingState label="Comparing with oracle…" />
-              ) : !reconciliation ? (
-                <EmptyState title="No reconciliation data available" />
-              ) : (
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    <KpiCard label="Target Metrics" value={reconciliation.summary.total_targets} />
-                    <KpiCard
-                      label="Fully Reconciled"
-                      value={`${reconciliation.summary.fully_reconciled_targets} / ${reconciliation.summary.total_targets}`}
-                      tone="good"
-                    />
-                    <KpiCard label="Total Comparisons" value={reconciliation.summary.total_comparisons} />
-                    <KpiCard
-                      label="Passed Comparisons"
-                      value={`${reconciliation.summary.passed_comparisons} / ${reconciliation.summary.total_comparisons}`}
-                      tone="good"
-                    />
-                  </div>
-
-                  <div className="overflow-x-auto border border-[var(--color-border)] rounded-lg">
-                    <table className="w-full text-xs text-left border-collapse">
-                      <thead>
-                        <tr className="border-b border-[var(--color-border)] bg-[var(--color-surface-muted)] text-[var(--color-text-secondary)] font-semibold">
-                          <th className="py-2 px-3">Reconciliation Target</th>
-                          <th className="py-2 px-3">Expected Column</th>
-                          <th className="py-2 px-3 text-right">Eligible Calls</th>
-                          <th className="py-2 px-3 text-right">Passed (±0.02h)</th>
-                          <th className="py-2 px-3 text-right">Failed / Excluded</th>
-                          <th className="py-2 px-3 text-center">Status</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-[var(--color-border)]">
-                        {Object.entries(reconciliation.metrics_reconciled).map(([name, m]) => {
-                          const isPass = m.failed === 0 && m.passed > 0
-                          return (
-                            <tr key={name} className="hover:bg-[var(--color-surface-muted)]">
-                              <td className="py-2 px-3 font-semibold text-[var(--color-text-primary)]">{name}</td>
-                              <td className="py-2 px-3 font-mono text-[11px] text-[var(--color-text-secondary)]">{m.expected_metric}</td>
-                              <td className="py-2 px-3 text-right text-[var(--color-text-primary)]">{m.total_eligible_calls}</td>
-                              <td className="py-2 px-3 text-right text-[var(--color-good)] font-semibold">{m.passed}</td>
-                              <td className="py-2 px-3 text-right text-[var(--color-text-secondary)]">
-                                {m.failed > 0 ? (
-                                  <span className="text-[var(--color-warning)] font-semibold">
-                                    {m.failed} ({m.unavailable_in_actual} unavailable)
-                                  </span>
-                                ) : (
-                                  '0'
-                                )}
-                              </td>
-                              <td className="py-2 px-3 text-center">
-                                <StatusBadge
-                                  tone={isPass ? 'good' : 'warning'}
-                                  label={isPass ? '100% Reconciled' : m.reconciled_fraction}
-                                />
-                              </td>
-                            </tr>
-                          )
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-            </Card>
-          </div>
-        )}
-
-        {/* 3. Per-Call Explorer & Lineage */}
+        {/* 2. Per-Call Explorer & Lineage */}
         {activeTab === 'explorer' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             {/* Results Table */}

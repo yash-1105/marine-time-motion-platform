@@ -559,7 +559,7 @@ export default function DelaysAndBottlenecksPage() {
   const TABS: Array<{ id: TabType; label: string }> = [
     { id: 'delays', label: 'Delay Causes & Pareto' },
     { id: 'bottlenecks', label: 'Bottleneck Scoring' },
-    { id: 'outliers', label: 'Outliers & DQ-008' },
+    { id: 'outliers', label: 'Outliers' },
     { id: 'criticality', label: 'Operational Criticality' },
     { id: 'alerts', label: 'Alerts & Actions' },
   ]
@@ -934,23 +934,9 @@ export default function DelaysAndBottlenecksPage() {
           </div>
         )}
 
-        {/* ── Tab 3: Outliers & DQ-008 ────────────────────────────────────────── */}
+        {/* ── Tab 3: Outliers ─────────────────────────────────────────────────── */}
         {activeTab === 'outliers' && (
           <div className="space-y-4">
-            <Card className="bg-[var(--color-warning-bg)] border-[var(--color-warning-border)]">
-              <h3 className="text-sm font-semibold text-[var(--color-text-primary)] mb-1">
-                Deliberate Oracle Case: DQ-008 (SYNVCN2600063)
-              </h3>
-              <p className="text-xs text-[var(--color-text-secondary)]">
-                Vessel call{' '}
-                <code className="bg-[var(--color-surface)] px-1 py-0.5 rounded border border-[var(--color-border)]">
-                  SYNVCN2600063
-                </code>{' '}
-                has an oracle turnaround of 720 hours against calculated 86.5h. The engine identifies this as an extreme
-                operational outlier and provides transparent exclusion toggle to safeguard KPI production baselines.
-              </p>
-            </Card>
-
             <Card padded={false}>
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs border-collapse">

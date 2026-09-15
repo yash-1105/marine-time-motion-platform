@@ -10,6 +10,7 @@ from apps.api.core.config import settings
 from apps.api.main import app
 from apps.api.models.analytics import DashboardSnapshot
 from apps.api.models.ingestion import IngestionBatch
+from testkit.loader import load_synthetic_dataset
 
 client = TestClient(app)
 
@@ -131,6 +132,9 @@ def test_dataset_removal_clears_active_state(auth_headers, db_session):
     assert dash_resp.status_code == 200
     assert dash_resp.json()["summary"]["total_vessel_calls"] == 0
 
-    # Restore synthetic dataset for other tests
-    synth_resp = client.post("/api/v1/ingestion/synthetic", headers=auth_headers)
-    assert synth_resp.status_code == 200
+    # Restore test state through the validation-only fixture loader.  Production
+    # routes never load governed test fixtures.
+    restored_batch = load_synthetic_dataset(
+        db_session, "fixtures/Synthetic_Marine_Time_Motion_Test_Data.xlsx"
+    )
+    assert restored_batch is not None

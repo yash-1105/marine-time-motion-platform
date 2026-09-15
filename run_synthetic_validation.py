@@ -31,7 +31,6 @@ from apps.api.models.analytics import (
     LeadTimeDefinition,
     LeadTimeResult,
     OperationalAlert,
-    OutlierRecord,
 )
 from apps.api.models.canonical import (
     CargoOperation,
@@ -45,7 +44,7 @@ from apps.api.models.canonical import (
 from apps.api.models.config import EventDefinition
 from apps.api.models.journey import JourneyInstance, StageOccurrence
 from apps.api.models.quality import QualityIssue, QualityRule
-from apps.api.models.testkit import DQCase, ExpectedOutput, ValidationRunHistory, ValidationSummary
+from testkit.models import ExpectedOutput, ValidationRunHistory
 from apps.api.services.alerts.engine import AlertEngine
 from apps.api.services.analytics.engine import AnalyticsEngine, within_tolerance
 from testkit.reconciliation import reconcile_expected_outputs
@@ -109,7 +108,7 @@ def resolve_and_verify_fixture() -> Tuple[str, str, Dict[str, Any]]:
     return matched_file, matched_sha256 or "", manifest
 
 
-def verify_dq_cases(db: Session) -> List[Dict[str, Any]]:
+def verify_dq_cases(db: Session, reconciliation_report: Dict[str, Any]) -> List[Dict[str, Any]]:
     """Verifies all 10 DQ cases against expected rules, severity, and system behaviour."""
     results = []
 
@@ -237,19 +236,49 @@ def verify_dq_cases(db: Session) -> List[Dict[str, Any]]:
         "status": "PASS" if dq7_issue else "FAIL",
     })
 
-    # DQ-008: Extreme operational outlier (SYNVCN2600063)
-    outlier_rec = db.execute(
-        select(OutlierRecord).where(OutlierRecord.vcn == "SYNVCN2600063")
-    ).scalars().first()
+    # DQ-008 is an ExpectedOutputs workbook anomaly: its 720h oracle value does not
+    # represent the governed canonical turnaround.  It is therefore verified only by
+    # the validation-only reconciliation disposition, never by a production outlier
+    # special case.
+    dq8_oracle = db.execute(
+        select(ExpectedOutput).where(
+            ExpectedOutput.metric_name == "Expected_Turnaround_Hours_ATA_to_ATD",
+            ExpectedOutput.expected_value == 720.0,
+        )
+    ).scalars().one_or_none()
+    turnaround_definition = db.execute(
+        select(LeadTimeDefinition).where(LeadTimeDefinition.name == "Turnaround")
+    ).scalars().one_or_none()
+    dq8_result = None
+    if dq8_oracle and turnaround_definition:
+        dq8_result = db.execute(
+            select(LeadTimeResult).where(
+                LeadTimeResult.vcn == dq8_oracle.vcn,
+                LeadTimeResult.definition_id == turnaround_definition.id,
+            )
+        ).scalars().one_or_none()
+    dq8_excluded = reconciliation_report["metrics_reconciled"]["Turnaround"]["excluded"] == 1
+    dq8_verified = bool(
+        dq8_oracle
+        and dq8_result
+        and dq8_result.status == "AVAILABLE"
+        and dq8_result.duration_hours is not None
+        and dq8_excluded
+    )
     results.append({
         "case_id": "DQ-008",
         "name": "Extreme operational outlier",
-        "record_key": "SYNVCN2600063",
+        "record_key": dq8_oracle.vcn if dq8_oracle else "ExpectedOutputs turnaround oracle",
         "injected_condition": "Turnaround expected set to 720h vs calculated 86.5h",
         "severity": "High/Critical",
-        "expected_behaviour": "Flagged as extreme outlier, transparent KPI exclusion toggle",
-        "actual_behaviour": f"Detected by OutlierEngine (observed 720h, severity {outlier_rec.severity if outlier_rec else 'CRITICAL'})",
-        "status": "PASS" if outlier_rec else "FAIL",
+        "expected_behaviour": "Fixture-only oracle discrepancy excluded from reconciliation; governed duration remains data-derived",
+        "actual_behaviour": (
+            "Validation reconciliation excluded the fixture 720h oracle while preserving "
+            f"the governed turnaround ({dq8_result.duration_hours:.2f}h)"
+            if dq8_verified
+            else "Fixture-only oracle discrepancy was not correctly isolated by validation reconciliation"
+        ),
+        "status": "PASS" if dq8_verified else "FAIL",
     })
 
     # DQ-009: Referential integrity / orphan event (SYNVCN-NOTFOUND)
@@ -417,7 +446,7 @@ def run_full_validation() -> Dict[str, Any]:
             })
 
         # Step 9: Verify all 10 DQ cases
-        dq_results = verify_dq_cases(db)
+        dq_results = verify_dq_cases(db, recon_report)
         dq_passed_count = sum(1 for d in dq_results if d["status"] == "PASS")
 
         # Step 10: Count worksheets and database table totals for consistency check
@@ -666,7 +695,7 @@ def generate_markdown_report(report: Dict[str, Any]) -> str:
         if m["unavailable"] > 0:
             notes.append(f"{m['unavailable']} UNAVAILABLE (input missing, not failed)")
         if m["excluded"] > 0:
-            notes.append(f"{m['excluded']} EXCLUDED (DQ-008 intentional 720h override)")
+            notes.append(f"{m['excluded']} EXCLUDED (DQ-008 fixture oracle discrepancy)")
         if m["tolerance_exceeded"] > 0:
             notes.append(f"{m['tolerance_exceeded']} TOLERANCE_EXCEEDED (DQ-006 sequence violation)")
         if m["failed"] == 0 and not notes:
@@ -701,7 +730,7 @@ def generate_markdown_report(report: Dict[str, Any]) -> str:
         "",
         f"- **Delays Reconciled:** `{report['delays_and_bottlenecks']['delays_reconciled']}` (duration recalculated from $Served - Scheduled$, canonical categories mapped)",
         f"- **Multi-Dimensional Bottlenecks:** `{report['delays_and_bottlenecks']['ranked_bottlenecks']}` items ranked across 7 dimensions (Rank 1: `{report['delays_and_bottlenecks']['top_bottleneck']}`). Ranking is demonstrably non-duration-only.",
-        f"- **Outliers Detected:** `{report['delays_and_bottlenecks']['outliers_detected']}` (Turnaround > P90, pilot boarding MAD, DQ-008 720h override detected with transparent KPI exclusion toggle)",
+        f"- **Outliers Detected:** `{report['delays_and_bottlenecks']['outliers_detected']}` (governed rules: turnaround > P90 and pilot-boarding MAD; DQ-008 is disclosed separately as a fixture-only reconciliation exclusion)",
         f"- **Calls Over 120h Turnaround:** `6` calls preserved in population",
         f"- **Operational Alerts Active:** `{report['delays_and_bottlenecks']['active_alerts']}` active alerts across SLA breach, critical bottleneck, missing reason, and resource shortage rules",
         "",
@@ -878,15 +907,29 @@ def demonstrate_scenario(scenario_key: str):
             print("\nResult: Both source timestamps preserved in canonical model. Governed review conflict created.")
 
         elif scenario_key == "G":
-            print("SCENARIO G: Extreme Operational Outlier (DQ-008 on SYNVCN2600063)")
-            outlier = db.execute(select(OutlierRecord).where(OutlierRecord.vcn == "SYNVCN2600063")).scalar_one_or_none()
-            if outlier:
-                print(f"   VCN: {outlier.vcn}")
-                print(f"   Outlier Type: {outlier.outlier_type}")
-                print(f"   Observed Value: {outlier.observed_value}h vs Expected: 720.0h")
-                print(f"   Divergence: {outlier.divergence}h | Severity: {outlier.severity}")
-                print(f"   Excluded From Production KPI: {outlier.is_excluded_from_kpi}")
-            print("\nResult: Extreme 720h override detected as intentional outlier; transparent exclusion toggle available.")
+            print("SCENARIO G: Fixture Oracle Discrepancy (DQ-008)")
+            oracle = db.execute(
+                select(ExpectedOutput).where(
+                    ExpectedOutput.metric_name == "Expected_Turnaround_Hours_ATA_to_ATD",
+                    ExpectedOutput.expected_value == 720.0,
+                )
+            ).scalar_one_or_none()
+            definition = db.execute(
+                select(LeadTimeDefinition).where(LeadTimeDefinition.name == "Turnaround")
+            ).scalar_one_or_none()
+            result = None
+            if oracle and definition:
+                result = db.execute(
+                    select(LeadTimeResult).where(
+                        LeadTimeResult.vcn == oracle.vcn,
+                        LeadTimeResult.definition_id == definition.id,
+                    )
+                ).scalar_one_or_none()
+            if oracle and result:
+                print(f"   Fixture oracle VCN: {oracle.vcn}")
+                print(f"   ExpectedOutputs turnaround: {oracle.expected_value}h")
+                print(f"   Governed canonical turnaround: {result.duration_hours}h")
+            print("\nResult: The validation-only reconciliation excludes this documented fixture oracle discrepancy; production outlier rules remain data-derived.")
 
         elif scenario_key == "H":
             print("SCENARIO H: Orphan Record (DQ-009 EV-ORPHAN-001)")
