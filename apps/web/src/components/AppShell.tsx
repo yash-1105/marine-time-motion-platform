@@ -54,6 +54,7 @@ const NAV_GROUPS: NavGroup[] = [
       { label: 'Identity & Merges', path: '/identity', requiredAction: 'view', glyph: '⧉' },
     ],
   },
+  { label: 'Intelligence', items: [{ label: 'Copilot', path: '/copilot', requiredAction: 'view', glyph: '✦' }] },
 ]
 
 const ALL_NAV_ITEMS = NAV_GROUPS.flatMap((g) => g.items)

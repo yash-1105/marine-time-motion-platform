@@ -47,5 +47,9 @@ class Settings(BaseSettings):
     report_storage_path: str = "/tmp/marine-platform-reports"
     application_version: str = "1.0.0"
 
+    # Copilot provider credentials are backend-only. The browser never receives these values.
+    sarvam_api_key: str = ""
+    sarvam_model: str = "sarvam-105b"
+
 
 settings = Settings()
