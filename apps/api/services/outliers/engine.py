@@ -147,46 +147,6 @@ class OutlierEngine:
                                 },
                             })
 
-        # 4. DQ-008: SYNVCN2600063 Deliberate 720h Oracle Override
-        # Check testkit.expected_output or check SYNVCN2600063
-        vc_dq008 = self.db.execute(
-            select(VesselCall).where(VesselCall.vcn == "SYNVCN2600063")
-        ).scalar_one_or_none()
-
-        if vc_dq008:
-            # Check calculated turnaround
-            calc_tr = self.db.execute(
-                select(LeadTimeResult.duration_hours)
-                .join(LeadTimeDefinition, LeadTimeResult.definition_id == LeadTimeDefinition.id)
-                .where(
-                    LeadTimeDefinition.name == "Turnaround",
-                    LeadTimeResult.vessel_call_id == vc_dq008.id,
-                )
-            ).scalars().first()
-
-            calc_val = calc_tr if calc_tr is not None else 86.5
-            expected_override = 720.0  # Intentional oracle value from fixture
-            divergence = round(abs(expected_override - calc_val), 2)
-
-            outliers.append({
-                "vessel_call_id": vc_dq008.id,
-                "vcn": "SYNVCN2600063",
-                "outlier_type": "DATA_QUALITY_OUTLIER",
-                "metric_name": "Turnaround (DQ-008 Oracle Override)",
-                "observed_value": expected_override,
-                "benchmark_or_p90": round(calc_val, 2),
-                "divergence": divergence,
-                "severity": "CRITICAL",
-                "evidence": {
-                    "rule_id": "DQ-008",
-                    "calculated_turnaround_hours": round(calc_val, 2),
-                    "expected_turnaround_hours": expected_override,
-                    "divergence_hours": divergence,
-                    "classification": "EXTREME_OPERATIONAL_OUTLIER",
-                    "handling": "Documented intentional test case. Excluded from clean aggregate KPIs by default.",
-                },
-            })
-
         # Persist to analytics.outlier_record
         if persist:
             # Preserve existing exclusion choices
@@ -199,9 +159,8 @@ class OutlierEngine:
 
             for o in outliers:
                 prev_excl, prev_rat = existing_exclusions.get((o["vcn"], o["metric_name"]), (False, None))
-                # By default, DQ-008 is marked excluded from KPI aggregates
-                is_excl = prev_excl or (o["vcn"] == "SYNVCN2600063" and "DQ-008" in o["metric_name"])
-                rat = prev_rat or ("Deliberate fixture outlier excluded from KPI aggregates" if is_excl else None)
+                is_excl = prev_excl
+                rat = prev_rat
 
                 rec = OutlierRecord(
                     vessel_call_id=o["vessel_call_id"],

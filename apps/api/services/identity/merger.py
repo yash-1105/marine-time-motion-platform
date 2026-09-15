@@ -75,6 +75,17 @@ class MergerService:
         # Events
         events = db.execute(select(EventOccurrence).where(EventOccurrence.vessel_call_id == merged.id)).scalars().all()
         for ev in events:
+            # The canonical occurrence key is per vessel call. Exact duplicate calls
+            # can carry the same event/index; retain the survivor observation rather
+            # than violating the invariant while merging evidence.
+            duplicate = db.execute(select(EventOccurrence.id).where(
+                EventOccurrence.vessel_call_id == survivor.id,
+                EventOccurrence.event_definition_id == ev.event_definition_id,
+                EventOccurrence.occurrence_index == ev.occurrence_index,
+            )).scalar_one_or_none()
+            if duplicate:
+                db.delete(ev)
+                continue
             transferred_children["event_occurrences"].append(str(ev.id))
             ev.vessel_call_id = survivor.id
 

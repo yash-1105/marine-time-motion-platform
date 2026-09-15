@@ -92,6 +92,16 @@ def test_all_8_reconciliation_metrics_compute(db_session, analytics_fixture):
         assert available_cnt >= 70, f"Expected >= 70 available results for {target}, got {available_cnt}"
 
 
+def test_repeated_metric_compute_is_idempotent(db_session, analytics_fixture):
+    """A repeated governed recalculation must not multiply result rows."""
+    engine = AnalyticsEngine(db_session, tenant_id="synthetic-tenant")
+    engine.compute_all_metrics()
+    engine.compute_all_metrics()
+    definition = db_session.execute(select(LeadTimeDefinition).where(LeadTimeDefinition.name == "Turnaround")).scalar_one()
+    rows = db_session.execute(select(LeadTimeResult).where(LeadTimeResult.definition_id == definition.id)).scalars().all()
+    assert len(rows) == len({row.vessel_call_id for row in rows}) == 72
+
+
 def test_turnaround_matches_expected_within_tolerance(db_session, analytics_fixture):
     """Verifies Turnaround calculation against ExpectedOutputs oracle within ±0.02h tolerance."""
     defn = db_session.execute(
@@ -484,4 +494,3 @@ def test_overlapping_stages_and_residual_time(db_session, analytics_fixture):
             if m["metric_name"] in ("Anchorage Wait", "Inward Movement", "Berth Stay", "Outward Movement"):
                 # Individual movement stages must each be less than total turnaround
                 assert m["duration_hours"] <= turnaround, f"{m['metric_name']} exceeds total turnaround"
-
