@@ -10,6 +10,7 @@ export interface DataScope {
 
 export interface UserProfile {
   user_id: string
+  name?: string
   email: string
   roles: string[]
   permissions: string[]
@@ -17,6 +18,18 @@ export interface UserProfile {
   is_service_account: boolean
   is_synthetic: boolean
 }
+
+export const ALL_ROLES = [
+  'Platform Administrator',
+  'Data Steward',
+  'Marine Operations Controller',
+  'Analyst',
+  'Department Head',
+  'Executive',
+  'Report Manager',
+  'Auditor',
+  'Integration Service Account',
+]
 
 interface AuthContextType {
   user: UserProfile | null
@@ -27,6 +40,7 @@ interface AuthContextType {
   isLoading: boolean
   token?: string
   can: (action: string) => boolean
+  login: (name: string, roleName: string) => Promise<void>
   switchRole: (roleName: string) => Promise<void>
   logout: () => Promise<void>
 }
@@ -40,6 +54,7 @@ const AuthContext = createContext<AuthContextType>({
   isLoading: true,
   token: undefined,
   can: () => false,
+  login: async () => {},
   switchRole: async () => {},
   logout: async () => {},
 })
@@ -48,52 +63,50 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<UserProfile | null>(null)
-  const [token, setToken] = useState<string | undefined>(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('auth_token') || 'dev-token'
-    }
-    return 'dev-token'
-  })
+  const [token, setToken] = useState<string | undefined>(undefined)
   const [isLoading, setIsLoading] = useState<boolean>(true)
 
-  const fetchCurrentUser = async () => {
-    try {
-      const storedToken = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
-      const headers: Record<string, string> = {}
-      if (storedToken) {
-        headers['Authorization'] = `Bearer ${storedToken}`
+  // Initialize from persistent storage on mount
+  useEffect(() => {
+    const initAuth = async () => {
+      try {
+        if (typeof window !== 'undefined') {
+          const storedUser = localStorage.getItem('auth_user')
+          const storedToken = localStorage.getItem('auth_token')
+          if (storedUser && storedToken) {
+            try {
+              const parsed: UserProfile = JSON.parse(storedUser)
+              setUser(parsed)
+              setToken(storedToken)
+            } catch {
+              localStorage.removeItem('auth_user')
+              localStorage.removeItem('auth_token')
+              setUser(null)
+              setToken(undefined)
+            }
+          } else {
+            setUser(null)
+            setToken(undefined)
+          }
+        }
+      } finally {
+        setIsLoading(false)
       }
-      const res = await fetch(`${API_BASE}/api/v1/auth/me`, {
-        headers,
-        credentials: 'include',
-      })
-      if (res.ok) {
-        const data = await res.json()
-        setUser(data)
-      } else {
-        // In local development, auto-login with Platform Administrator if not logged in
-        await autoDevLogin('Platform Administrator')
-      }
-    } catch {
-      // Fallback dev login mock for local dev preview
-      setUser({
-        user_id: 'dev-user-admin',
-        email: 'admin@port.local',
-        roles: ['Platform Administrator'],
-        permissions: [
-          'view', 'create', 'edit', 'approve', 'reject', 'merge', 'unmerge',
-          'recalculate', 'publish', 'export', 'configure', 'administer', 'audit'
-        ],
-        data_scope: { tenant_id: 'tenant-synthetic-01', port_id: '*', terminal_id: '*' },
-        is_service_account: false,
-        is_synthetic: true,
-      })
-    } finally {
-      setIsLoading(false)
     }
-  }
 
-  const autoDevLogin = async (roleName: string) => {
+    initAuth()
+  }, [])
+
+  const login = async (name: string, roleName: string) => {
+    const cleanName = name.trim()
+    if (!cleanName) {
+      throw new Error('Please enter your name.')
+    }
+    if (!roleName) {
+      throw new Error('Please select a role.')
+    }
+
+    setIsLoading(true)
     try {
       const res = await fetch(`${API_BASE}/api/v1/auth/dev/login`, {
         method: 'POST',
@@ -101,42 +114,76 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         body: JSON.stringify({ role_or_email: roleName }),
         credentials: 'include',
       })
+
       if (res.ok) {
         const data = await res.json()
-        setToken(data.access_token)
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('auth_token', data.access_token)
-        }
-        setUser({
+        const userProfile: UserProfile = {
           user_id: data.session_id,
+          name: cleanName,
           email: `${roleName.toLowerCase().replace(/ /g, '_')}@port.local`,
           roles: data.roles,
           permissions: data.permissions,
           data_scope: data.data_scope,
           is_service_account: false,
           is_synthetic: true,
-        })
+        }
+        setToken(data.access_token)
+        setUser(userProfile)
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('auth_token', data.access_token)
+          localStorage.setItem('auth_user', JSON.stringify(userProfile))
+        }
+      } else {
+        // Fallback for offline environments
+        const userProfile: UserProfile = {
+          user_id: `user-${roleName.toLowerCase().replace(/ /g, '-')}`,
+          name: cleanName,
+          email: `${roleName.toLowerCase().replace(/ /g, '_')}@port.local`,
+          roles: [roleName],
+          permissions: [
+            'view', 'create', 'edit', 'approve', 'reject', 'merge', 'unmerge',
+            'recalculate', 'publish', 'export', 'configure', 'administer', 'audit'
+          ],
+          data_scope: { tenant_id: 'tenant-synthetic-01', port_id: '*', terminal_id: '*' },
+          is_service_account: false,
+          is_synthetic: true,
+        }
+        setToken('dev-token')
+        setUser(userProfile)
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('auth_token', 'dev-token')
+          localStorage.setItem('auth_user', JSON.stringify(userProfile))
+        }
       }
     } catch {
-      // Ignore network errors in static rendering / disconnected states
+      // Offline fallback
+      const userProfile: UserProfile = {
+        user_id: `user-${roleName.toLowerCase().replace(/ /g, '-')}`,
+        name: cleanName,
+        email: `${roleName.toLowerCase().replace(/ /g, '_')}@port.local`,
+        roles: [roleName],
+        permissions: [
+          'view', 'create', 'edit', 'approve', 'reject', 'merge', 'unmerge',
+          'recalculate', 'publish', 'export', 'configure', 'administer', 'audit'
+        ],
+        data_scope: { tenant_id: 'tenant-synthetic-01', port_id: '*', terminal_id: '*' },
+        is_service_account: false,
+        is_synthetic: true,
+      }
+      setToken('dev-token')
+      setUser(userProfile)
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('auth_token', 'dev-token')
+        localStorage.setItem('auth_user', JSON.stringify(userProfile))
+      }
+    } finally {
+      setIsLoading(false)
     }
   }
 
-  useEffect(() => {
-    fetchCurrentUser()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  const can = (action: string): boolean => {
-    if (!user) return false
-    if (user.roles.includes('Platform Administrator')) return true
-    return user.permissions.includes(action)
-  }
-
   const switchRole = async (roleName: string) => {
-    setIsLoading(true)
-    await autoDevLogin(roleName)
-    setIsLoading(false)
+    if (!user) return
+    await login(user.name || 'User', roleName)
   }
 
   const logout = async () => {
@@ -145,13 +192,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         method: 'POST',
         credentials: 'include',
       })
+    } catch {
+      // Ignore network errors on logout
     } finally {
       setUser(null)
-      setToken('dev-token')
+      setToken(undefined)
       if (typeof window !== 'undefined') {
         localStorage.removeItem('auth_token')
+        localStorage.removeItem('auth_user')
       }
     }
+  }
+
+  const can = (action: string): boolean => {
+    if (!user) return false
+    if (user.roles.includes('Platform Administrator')) return true
+    return user.permissions.includes(action)
   }
 
   return (
@@ -165,6 +221,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isLoading,
         token,
         can,
+        login,
         switchRole,
         logout,
       }}

@@ -4,11 +4,11 @@
     "file_size_bytes": 173374,
     "sha256": "90919984816264e44f0e83bf47a6ef11cc98f000ca375bebc77bf3f7e49b0763",
     "manifest_verified": true,
-    "execution_time_seconds": 55.86,
+    "execution_time_seconds": 57.3,
     "app_version": "1.0.0",
     "rule_version": "1.0",
     "formula_version": "1.0",
-    "run_timestamp": "2026-09-15T03:58:57.445037+00:00"
+    "run_timestamp": "2026-09-15T04:20:32.522399+00:00"
   },
   "row_counts": {
     "VesselCalls": {
@@ -185,19 +185,19 @@
         "tolerance_exceeded": 0,
         "details": [
           {
+            "vcn": "SYNVCN2600018",
+            "status": "UNAVAILABLE",
+            "actual": null,
+            "expected": 89.95,
+            "reason": "Required timestamp 'ATA' is blank in VesselCalls (DQ-003)"
+          },
+          {
             "vcn": "SYNVCN2600063",
             "status": "EXCLUDED",
             "actual": 86.5,
             "expected": 720.0,
             "diff": 633.5,
             "rationale": "DQ-008 deliberate 720h test outlier override against calculated 86.5h"
-          },
-          {
-            "vcn": "SYNVCN2600018",
-            "status": "UNAVAILABLE",
-            "actual": null,
-            "expected": 89.95,
-            "reason": "Required timestamp 'ATA' is blank in VesselCalls (DQ-003)"
           }
         ],
         "reconciled_fraction": "70 of 72"

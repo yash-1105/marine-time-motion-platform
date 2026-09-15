@@ -1,8 +1,8 @@
 'use client'
 
-import React from 'react'
+import React, { useEffect } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { useAuth } from '../lib/auth-context'
 import { useDatasetStatus } from '../lib/dataset-context'
 import { GlobalFilterBar } from './GlobalFilterBar'
@@ -24,18 +24,6 @@ interface NavGroup {
   label: string
   items: NavItem[]
 }
-
-const ALL_ROLES = [
-  'Platform Administrator',
-  'Data Steward',
-  'Marine Operations Controller',
-  'Analyst',
-  'Department Head',
-  'Executive',
-  'Report Manager',
-  'Auditor',
-  'Integration Service Account',
-]
 
 const NAV_GROUPS: NavGroup[] = [
   {
@@ -75,14 +63,53 @@ const PAGE_TITLES: Record<string, string> = Object.fromEntries(
 
 export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const pathname = usePathname()
-  const { user, roles, permissions, can, switchRole, logout } = useAuth()
+  const router = useRouter()
+  const { user, roles, can, isLoading, logout } = useAuth()
   const { status: datasetStatus, errorMessage: datasetError, refresh: refreshDataset } = useDatasetStatus()
+
+  // Route protection
+  useEffect(() => {
+    if (!isLoading) {
+      if (!user && pathname !== '/login') {
+        router.replace('/login')
+      } else if (user && pathname === '/login') {
+        router.replace('/')
+      }
+    }
+  }, [isLoading, user, pathname, router])
+
+  // If on /login page, don't show the AppShell chrome (sidebar, header, filter bar)
+  if (pathname === '/login') {
+    return <>{children}</>
+  }
+
+  // If loading auth state or unauthenticated on a protected page, show clean minimal spinner
+  if (isLoading || !user) {
+    return (
+      <div className="flex h-screen w-screen items-center justify-center bg-[var(--color-bg)]">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-6 h-6 border-2 border-[var(--color-border-strong)] border-t-[var(--color-accent)] rounded-full animate-spin" />
+          <span className="text-xs text-[var(--color-text-secondary)] font-medium">Loading session…</span>
+        </div>
+      </div>
+    )
+  }
 
   const currentRole = roles[0] || 'Platform Administrator'
   const currentTitle = PAGE_TITLES[pathname] || 'Marine Time & Motion'
   const showScopeFilter = SCOPE_FILTER_PATHS.has(pathname)
   const isIngestionPage = pathname === '/ingestion'
   const showDatasetGate = !isIngestionPage && datasetStatus !== 'ready' && datasetStatus !== 'loading'
+
+  // User initials for header avatar
+  const displayName = user.name || 'User'
+  const initials =
+    displayName
+      .split(' ')
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((n) => n[0].toUpperCase())
+      .join('') || 'U'
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[var(--color-bg)] text-[var(--color-text-primary)]">
@@ -132,42 +159,49 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
           })}
         </nav>
 
-        <div className="p-3 border-t border-[var(--color-border)]">
-          <div className="flex items-center justify-between mb-1">
-            <label htmlFor="role-select" className="text-[10px] uppercase tracking-wider text-[var(--color-text-tertiary)] font-semibold">
-              Role
-            </label>
-            <button
-              onClick={() => logout()}
-              className="text-[10px] text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] cursor-pointer"
-            >
-              Sign out
-            </button>
-          </div>
-          <select
-            id="role-select"
-            aria-label="Switch Role"
-            value={currentRole}
-            onChange={(e) => switchRole(e.target.value)}
-            className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded-md px-2 py-1.5 text-xs text-[var(--color-text-primary)] font-medium focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] cursor-pointer"
-          >
-            {ALL_ROLES.map((r) => (
-              <option key={r} value={r}>
-                {r}
-              </option>
-            ))}
-          </select>
-          <div className="text-[11px] text-[var(--color-text-tertiary)] truncate mt-1.5">
-            {user?.email || 'admin@port.local'} &middot; {permissions.length} actions
-          </div>
+        {/* Bottom sidebar status indicator (clean, unobtrusive, no large role selector) */}
+        <div className="px-4 py-3 border-t border-[var(--color-border)] text-[11px] text-[var(--color-text-tertiary)] flex items-center justify-between">
+          <span className="flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-good)] inline-block" />
+            <span>Operational System</span>
+          </span>
+          <span className="font-mono text-[10px]">v1.0</span>
         </div>
       </aside>
 
       {/* Main workspace */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {/* Header */}
+        {/* Header with Title on Left, Compact User Identity & Sign Out on Right */}
         <header className="h-14 flex-shrink-0 px-6 flex items-center justify-between border-b border-[var(--color-border)] bg-[var(--color-surface)]">
           <h1 className="text-sm font-semibold text-[var(--color-text-primary)]">{currentTitle}</h1>
+
+          {/* Compact User Menu & Sign Out */}
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2.5 py-1 px-2.5 rounded-md bg-[var(--color-surface-muted)] border border-[var(--color-border)]">
+              <span className="w-6 h-6 rounded-full bg-[var(--color-accent-soft)] border border-[var(--color-accent-soft-border)] text-[var(--color-accent)] font-semibold text-[11px] flex items-center justify-center flex-shrink-0">
+                {initials}
+              </span>
+              <div className="flex flex-col text-left">
+                <span className="text-xs font-medium text-[var(--color-text-primary)] leading-none max-w-[150px] truncate">
+                  {displayName}
+                </span>
+                <span className="text-[10px] text-[var(--color-text-tertiary)] leading-tight mt-0.5 max-w-[150px] truncate">
+                  {currentRole}
+                </span>
+              </div>
+            </div>
+
+            <button
+              onClick={async () => {
+                await logout()
+                router.push('/login')
+              }}
+              className="text-xs font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-critical)] px-2.5 py-1.5 rounded-md hover:bg-[var(--color-surface-muted)] transition-colors cursor-pointer"
+              title="Sign out of active session"
+            >
+              Sign out
+            </button>
+          </div>
         </header>
 
         {showScopeFilter && !showDatasetGate && (
