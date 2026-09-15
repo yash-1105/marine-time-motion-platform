@@ -4,7 +4,7 @@
 
 The system is **not ready** for controlled demonstration or production release.
 
-The governing fixture rule remains violated by the legacy production analytics reconciliation helper reading `testkit`/fixture-specific values. The Phase 16 remediation pass removed fixture-specific outlier behaviour and repaired the observed result-idempotency and merge/reset failures; a subsequent `make validate` artifact reports PASS. Fixture isolation is still a release gate.
+Fixture reconciliation and loading now reside in the validation-only `testkit` package; application analytics and routes no longer read oracle data. Production readiness remains blocked by unverified deployment integrations, not this fixture-isolation finding.
 
 Before demonstrating the system, complete these gates:
 
