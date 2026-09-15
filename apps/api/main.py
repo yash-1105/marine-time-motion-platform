@@ -1,4 +1,5 @@
 import logging
+import os
 import uuid
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
@@ -29,15 +30,19 @@ app = FastAPI(
     version="1.0.0",
 )
 
+cors_origins = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+]
+if os.getenv("CORS_ORIGINS"):
+    cors_origins.extend([origin.strip() for origin in os.getenv("CORS_ORIGINS", "").split(",") if origin.strip()])
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "http://localhost:8000",
-        "http://127.0.0.1:8000",
-    ],
-    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
+    allow_origins=cors_origins,
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$|^https://.*\.vercel\.app$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

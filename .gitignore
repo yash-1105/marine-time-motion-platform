@@ -3,3 +3,9 @@ __pycache__/
 .env
 *.pyc
 .DS_Store
+.railway
+.vercel
+node_modules/
+.next/
+*.log
+

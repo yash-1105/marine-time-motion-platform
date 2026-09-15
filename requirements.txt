@@ -6,6 +6,8 @@ dramatiq
 redis
 psycopg2-binary
 alembic
+sqlalchemy
+pyyaml
 polars
 pandas
 openpyxl
