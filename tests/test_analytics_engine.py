@@ -31,8 +31,9 @@ from apps.api.models.testkit import ExpectedOutput
 from apps.api.services.analytics.catalogue import ensure_catalogue
 from apps.api.services.analytics.custom_builder import CustomLeadTimeBuilder
 from apps.api.services.analytics.engine import AnalyticsEngine, within_tolerance
+from testkit.reconciliation import reconcile_expected_outputs
 from apps.api.services.identity.engine import IdentityEngine
-from apps.api.services.ingestion.synthetic import load_synthetic_dataset
+from testkit.loader import load_synthetic_dataset
 from apps.api.services.journey.reconstructor import JourneyReconstructionEngine
 from apps.api.services.quality.engine import DataQualityEngine
 
@@ -132,7 +133,7 @@ def test_turnaround_matches_expected_within_tolerance(db_session, analytics_fixt
 def test_berth_stay_and_cargo_working_reconcile_100_percent(db_session, analytics_fixture):
     """Verifies Berth Stay, Cargo Working, and Outward Movement achieve 100% reconciliation."""
     engine = AnalyticsEngine(db_session, tenant_id="synthetic-tenant", exclude_quarantined=True)
-    report = engine.reconcile_against_expected_outputs(tolerance=0.02)
+    report = reconcile_expected_outputs(db_session, tolerance=0.02)
 
     for target in ["Berth Stay", "Cargo Working", "Outward Movement", "Arrival Execution Delay", "Sailing Execution Delay"]:
         m = report["metrics_reconciled"][target]
@@ -333,12 +334,9 @@ def test_analytics_api_endpoints_work(db_session, analytics_fixture):
     metrics_list = r_metrics.json()
     assert len(metrics_list) >= 8
 
-    # GET /reconciliation
+    # Fixture reconciliation is validation-only, never a production endpoint.
     r_recon = client.get("/api/v1/analytics/reconciliation?tolerance=0.02", headers=headers)
-    assert r_recon.status_code == 200
-    recon_data = r_recon.json()
-    assert "metrics_reconciled" in recon_data
-    assert recon_data["summary"]["total_targets"] == 8
+    assert r_recon.status_code == 404
 
     # POST /custom
     r_custom = client.post(

@@ -2,7 +2,7 @@
 
 **Audit date:** 2026-09-15  
 **Scope:** repository state through Phase 15, local PostgreSQL/Redis readiness, focused security/Copilot tests, frontend production build, static code/configuration review.  
-**Remediation update:** lead-time persistence and canonical merge reset fixes were applied in the Phase 16 remediation pass. `make validate` subsequently produced a PASS artifact (72 base calls, 8/8 metrics, 10/10 DQ cases). Fixture isolation remains incomplete because the legacy reconciliation helper still resides in an application analytics service; it remains a release gate.
+**Remediation update:** expected-output reconciliation now resides in the validation-only `testkit` package; application analytics and routes no longer read the oracle schema.
 
 ## Evidence checked
 

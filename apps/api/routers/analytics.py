@@ -1,5 +1,4 @@
 """Time and Motion Analytics REST API (Phase 07, spec §10 & §16).
-
 All routes are protected by the repository-level authorization dependency `require()`.
 Every metric response provides complete traceability: formula version, source record IDs,
 filter context, exclusions, and data-quality status.
@@ -313,17 +312,3 @@ def get_vessel_call_lead_times(
         "turnaround_hours": turnaround_hours,
         "metrics": metrics,
     }
-
-
-@router.get("/reconciliation")
-def get_reconciliation_scorecard(
-    tolerance: float = Query(0.02, ge=0.001, le=1.0),
-    tenant_id: str | None = Query(None),
-    db: Session = Depends(get_db),
-    principal: UserPrincipal = Depends(require("view", "vessel_call")),
-):
-    """Compares all 8 reconciliation target metrics against gold-standard testkit.expected_output."""
-    target_tenant = _resolve_target_tenant(principal, tenant_id)
-    engine = AnalyticsEngine(db, tenant_id=target_tenant)
-    report = engine.reconcile_against_expected_outputs(tolerance=tolerance)
-    return report

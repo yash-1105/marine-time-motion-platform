@@ -48,10 +48,11 @@ from apps.api.models.quality import QualityIssue, QualityRule
 from apps.api.models.testkit import DQCase, ExpectedOutput, ValidationRunHistory, ValidationSummary
 from apps.api.services.alerts.engine import AlertEngine
 from apps.api.services.analytics.engine import AnalyticsEngine, within_tolerance
+from testkit.reconciliation import reconcile_expected_outputs
 from apps.api.services.bottlenecks.engine import BottleneckEngine
 from apps.api.services.delays.service import DelayService
 from apps.api.services.identity.engine import IdentityEngine
-from apps.api.services.ingestion.synthetic import load_synthetic_dataset
+from testkit.loader import load_synthetic_dataset
 from apps.api.auth.scope import DataScope
 from apps.api.repository.vessel_call import VesselCallRepository
 from apps.api.services.dashboard.executive import ExecutiveDashboardService
@@ -340,7 +341,7 @@ def run_full_validation() -> Dict[str, Any]:
         analytics_engine = AnalyticsEngine(db, tenant_id="synthetic-tenant")
         analytics_engine.compute_all_metrics()
         analytics_engine.compute_all_statistics()
-        recon_report = analytics_engine.reconcile_against_expected_outputs(tolerance=0.02)
+        recon_report = reconcile_expected_outputs(db, tolerance=0.02)
 
         # Step 7: Execute Governed KPI Engine
         print("6. Running Governed KPI Engine...")

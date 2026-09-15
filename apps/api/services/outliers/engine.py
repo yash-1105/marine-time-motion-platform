@@ -5,7 +5,7 @@ Detects:
 2. Pilot boarding delay beyond MAD / 3-sigma (EXTREME_DELAY_CASE)
 3. Cargo working duration anomaly relative to volume (OPERATIONAL_OUTLIER)
 4. Chronological anomalies / process violations (PROCESS_VIOLATION)
-5. DQ-008 deliberate 720h oracle outlier for SYNVCN2600063 (DATA_QUALITY_OUTLIER / EXTREME_DELAY_CASE)
+5. Governed extreme-duration and data-quality outliers from observed records.
 
 Provides transparent exclusion/inclusion toggling for downstream KPI and statistical computations.
 """

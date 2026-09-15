@@ -536,7 +536,7 @@ class ExecutiveDashboardService:
                 "vessel_type": vessel_type or "ALL",
                 "cargo_type": cargo_type or "ALL",
                 "timezone": "Africa/Johannesburg",
-                "tolerance": "±0.02h against ExpectedOutputs oracle",
+                "tolerance": "Analytics calculation precision is governed by formula version and source evidence.",
                 "generated_at": datetime.now(UTC).isoformat(),
             },
         }

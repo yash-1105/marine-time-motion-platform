@@ -11,7 +11,7 @@ from apps.api.auth.dependencies import require
 from apps.api.core.database import get_db
 from apps.api.models.ingestion import IngestionBatch
 from apps.api.services.ingestion.pipeline import IngestionPipeline
-from apps.api.services.ingestion.synthetic import load_synthetic_dataset, reset_tenant_dataset
+from apps.api.services.ingestion.synthetic import reset_tenant_dataset
 from apps.api.services.pipeline_runner import run_full_analytics_pipeline
 from apps.api.core.config import settings
 
@@ -90,23 +90,6 @@ def upload_file(
             except Exception:
                 pass
         raise HTTPException(status_code=400, detail=str(e))
-
-
-@router.post("/synthetic")
-def load_synthetic(
-    db: Session = Depends(get_db),
-    principal = Depends(require("administer", "tenant"))
-):
-    try:
-        fixture_path = "fixtures/Synthetic_Marine_Time_Motion_Test_Data.xlsx"
-        batch_id = load_synthetic_dataset(db, fixture_path)
-        pipeline = IngestionPipeline(db, tenant_id="synthetic-tenant")
-        checksum = pipeline.calculate_checksum(fixture_path)
-        run_full_analytics_pipeline(db, tenant_id="synthetic-tenant", batch_id=batch_id, file_checksum=checksum)
-        return {"batch_id": batch_id, "status": "COMPLETED"}
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.delete("/dataset")
