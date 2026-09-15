@@ -107,12 +107,17 @@ function VesselCallsContent() {
     traceability: DurationTraceability
   } | null>(null)
 
+  const getActiveAuthHeaders = useCallback((): HeadersInit => {
+    const t = token || (typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null)
+    return t ? { Authorization: `Bearer ${t}` } : {}
+  }, [token])
+
   // Fetch data
   const fetchData = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const headers = { Authorization: `Bearer ${token || 'dev-token'}` }
+      const headers = getActiveAuthHeaders()
       const params = new URLSearchParams()
       params.set('limit', '250')
 
@@ -141,7 +146,7 @@ function VesselCallsContent() {
     } finally {
       setLoading(false)
     }
-  }, [token, searchParams, showMerged])
+  }, [searchParams, showMerged, getActiveAuthHeaders])
 
   useEffect(() => {
     fetchData()

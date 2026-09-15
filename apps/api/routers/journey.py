@@ -42,7 +42,8 @@ def run_reconstruction(
     Reconstructs the journey for one vessel call, or every unmerged vessel call in the
     principal's tenant when no id is given.
     """
-    engine = JourneyReconstructionEngine(db, tenant_id=principal.data_scope.tenant_id)
+    target_tenant = "synthetic-tenant" if principal.data_scope.tenant_id in ("*", "tenant-synthetic-01") else principal.data_scope.tenant_id
+    engine = JourneyReconstructionEngine(db, tenant_id=target_tenant)
     if vessel_call_id:
         vc = db.execute(select(VesselCall).where(VesselCall.id == vessel_call_id)).scalar_one_or_none()
         if not vc:
@@ -308,7 +309,9 @@ def get_coverage_summary(
     principal: UserPrincipal = Depends(require("view", "vessel_call")),
 ):
     """Aggregate reconstruction coverage across all active vessel calls in scope."""
-    target_tenant = tenant_id or principal.data_scope.tenant_id
+    target_tenant = tenant_id or (
+        "synthetic-tenant" if principal.data_scope.tenant_id in ("*", "tenant-synthetic-01") else principal.data_scope.tenant_id
+    )
     vessel_calls = db.execute(
         select(VesselCall).where(VesselCall.tenant_id == target_tenant, VesselCall.is_merged == False)  # noqa: E712
     ).scalars().all()

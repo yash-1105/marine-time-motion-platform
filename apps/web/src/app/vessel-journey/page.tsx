@@ -242,12 +242,15 @@ function VesselJourneyContent() {
   const [historyRows, setHistoryRows] = useState<Array<{ run_version: number; rule_version?: string; triggered_by: string; created_at?: string; snapshot: unknown }>>([])
   const [loadingHistory, setLoadingHistory] = useState(false)
 
-  const headers = { Authorization: `Bearer ${token || 'dev-token'}` }
+  const getActiveAuthHeaders = useCallback((): HeadersInit => {
+    const t = token || (typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null)
+    return t ? { Authorization: `Bearer ${t}` } : {}
+  }, [token])
 
   // Load vessel call list
   useEffect(() => {
     setLoadingList(true)
-    fetch(`${API}/api/v1/operations/vessel-calls?limit=200`, { headers })
+    fetch(`${API}/api/v1/operations/vessel-calls?limit=200`, { headers: getActiveAuthHeaders() })
       .then((r) => r.json())
       .then((d) => {
         const items: VesselCallSummary[] = Array.isArray(d) ? d : (d.items ?? [])
@@ -273,7 +276,7 @@ function VesselJourneyContent() {
       })
       .catch(() => setError('Failed to load vessel calls'))
       .finally(() => setLoadingList(false))
-  }, [token]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [token, getActiveAuthHeaders]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadJourney = useCallback(
     (vcId: string) => {
@@ -283,14 +286,15 @@ function VesselJourneyContent() {
       setRawEvents([])
       setError(null)
 
+      const authHeaders = getActiveAuthHeaders()
       Promise.all([
-        fetch(`${API}/api/v1/journey/${vcId}`, { headers }).then((r) =>
+        fetch(`${API}/api/v1/journey/${vcId}`, { headers: authHeaders }).then((r) =>
           r.ok ? r.json() : Promise.reject(r.statusText)
         ),
-        fetch(`${API}/api/v1/journey/${vcId}/conflicts`, { headers }).then((r) =>
+        fetch(`${API}/api/v1/journey/${vcId}/conflicts`, { headers: authHeaders }).then((r) =>
           r.ok ? r.json() : []
         ),
-        fetch(`${API}/api/v1/journey/${vcId}/events`, { headers }).then((r) =>
+        fetch(`${API}/api/v1/journey/${vcId}/events`, { headers: authHeaders }).then((r) =>
           r.ok ? r.json() : []
         ),
       ])
@@ -302,7 +306,7 @@ function VesselJourneyContent() {
         .catch(() => setError('No reconstructed journey for this vessel call. Use Reconstruct to build it.'))
         .finally(() => setLoadingJourney(false))
     },
-    [token] // eslint-disable-line react-hooks/exhaustive-deps
+    [token, getActiveAuthHeaders] // eslint-disable-line react-hooks/exhaustive-deps
   )
 
   const handleSelect = (vcId: string) => {
@@ -320,7 +324,7 @@ function VesselJourneyContent() {
     setReconstructMsg(null)
     fetch(`${API}/api/v1/journey/reconstruct?vessel_call_id=${selectedVcId}`, {
       method: 'POST',
-      headers,
+      headers: getActiveAuthHeaders(),
     })
       .then((r) => r.json())
       .then((d) => {
@@ -334,7 +338,7 @@ function VesselJourneyContent() {
   const handleLoadHistory = () => {
     if (!selectedVcId) return
     setLoadingHistory(true)
-    fetch(`${API}/api/v1/journey/${selectedVcId}/history`, { headers })
+    fetch(`${API}/api/v1/journey/${selectedVcId}/history`, { headers: getActiveAuthHeaders() })
       .then((r) => r.json())
       .then(setHistoryRows)
       .finally(() => setLoadingHistory(false))

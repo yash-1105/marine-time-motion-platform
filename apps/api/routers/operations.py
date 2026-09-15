@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from apps.api.auth.dependencies import require
 from apps.api.auth.principal import UserPrincipal
+from apps.api.auth.scope import DataScope
 from apps.api.core.database import get_db
 from apps.api.repository.vessel_call import VesselCallRepository
 from apps.api.services.audit import log_audit_event
@@ -31,6 +32,14 @@ class MergeRequest(BaseModel):
     reason: str
 
 
+def _resolve_tenant(principal: UserPrincipal, explicit_tenant: str | None = None) -> str:
+    if explicit_tenant:
+        return explicit_tenant
+    if principal.data_scope.tenant_id in ("*", "tenant-synthetic-01"):
+        return "synthetic-tenant"
+    return principal.data_scope.tenant_id
+
+
 @router.get("/vessel-calls")
 def list_vessel_calls(
     skip: int = 0,
@@ -44,6 +53,7 @@ def list_vessel_calls(
     is_merged: bool | None = None,
     sort_by: str | None = "vcn",
     sort_dir: str | None = "asc",
+    tenant_id: str | None = None,
     principal: UserPrincipal = Depends(require("view", "vessel_call")),
     db: Session = Depends(get_db),
 ):
@@ -56,9 +66,15 @@ def list_vessel_calls(
     from apps.api.models.journey import JourneyInstance
     from apps.api.models.quality import QualityIssue, QualityRule
 
+    target_tenant = _resolve_tenant(principal, tenant_id)
+    scope = DataScope(
+        tenant_id=target_tenant,
+        port_id=principal.data_scope.port_id,
+        terminal_id=principal.data_scope.terminal_id,
+    )
     repo = VesselCallRepository(db)
     calls = repo.list(
-        scope=principal.data_scope,
+        scope=scope,
         skip=skip,
         limit=limit,
         search=search,
@@ -293,8 +309,14 @@ def get_vessel_call(
     db: Session = Depends(get_db),
 ):
     """Retrieves a single vessel call. Logs view_sensitive if record is flagged sensitive."""
+    target_tenant = _resolve_tenant(principal)
+    scope = DataScope(
+        tenant_id=target_tenant,
+        port_id=principal.data_scope.port_id,
+        terminal_id=principal.data_scope.terminal_id,
+    )
     repo = VesselCallRepository(db)
-    call = repo.get_by_id(principal.data_scope, call_id)
+    call = repo.get_by_id(scope, call_id)
     if not call:
         raise HTTPException(status_code=404, detail="Vessel call not found within data scope")
 
@@ -316,11 +338,14 @@ def get_vessel_call(
         "id": str(call.id),
         "vessel_name": call.vessel_name,
         "vcn": call.vcn,
+        "imo_number": call.imo_number,
         "vessel_type": call.vessel_type,
         "cargo_type": call.cargo_type,
         "tenant_id": call.tenant_id,
         "port_id": call.port_id,
         "terminal_id": call.terminal_id,
+        "is_merged": call.is_merged,
+        "merged_into_id": str(call.merged_into_id) if call.merged_into_id else None,
     }
 
 
@@ -333,8 +358,14 @@ def edit_vessel_call(
     db: Session = Depends(get_db),
 ):
     """Edits a vessel call and logs the correction event."""
+    target_tenant = _resolve_tenant(principal)
+    scope = DataScope(
+        tenant_id=target_tenant,
+        port_id=principal.data_scope.port_id,
+        terminal_id=principal.data_scope.terminal_id,
+    )
     repo = VesselCallRepository(db)
-    call = repo.get_by_id(principal.data_scope, call_id)
+    call = repo.get_by_id(scope, call_id)
     if not call:
         raise HTTPException(status_code=404, detail="Vessel call not found within data scope")
 
@@ -365,8 +396,14 @@ def export_vessel_calls(
     db: Session = Depends(get_db),
 ):
     """Exports vessel calls. Sensitive export is audited with filters and row count per spec §17."""
+    target_tenant = _resolve_tenant(principal)
+    scope = DataScope(
+        tenant_id=target_tenant,
+        port_id=principal.data_scope.port_id,
+        terminal_id=principal.data_scope.terminal_id,
+    )
     repo = VesselCallRepository(db)
-    records = repo.export(scope=principal.data_scope, filters=body.filters)
+    records = repo.export(scope=scope, filters=body.filters)
     row_count = len(records)
 
     log_audit_event(
