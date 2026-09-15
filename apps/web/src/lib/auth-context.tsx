@@ -43,6 +43,7 @@ interface AuthContextType {
   login: (name: string, roleName: string) => Promise<void>
   switchRole: (roleName: string) => Promise<void>
   logout: () => Promise<void>
+  refreshAccessToken: () => Promise<string | null>
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -57,14 +58,57 @@ const AuthContext = createContext<AuthContextType>({
   login: async () => {},
   switchRole: async () => {},
   logout: async () => {},
+  refreshAccessToken: async () => null,
 })
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+
+function isJwtExpired(jwtToken: string): boolean {
+  try {
+    const parts = jwtToken.split('.')
+    if (parts.length !== 3) return false
+    const payload = JSON.parse(atob(parts[1]))
+    if (payload.exp && typeof payload.exp === 'number') {
+      // Consider expired if less than 30 seconds remain
+      return payload.exp * 1000 < Date.now() + 30000
+    }
+    return false
+  } catch {
+    return false
+  }
+}
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<UserProfile | null>(null)
   const [token, setToken] = useState<string | undefined>(undefined)
   const [isLoading, setIsLoading] = useState<boolean>(true)
+
+  const refreshAccessToken = async (): Promise<string | null> => {
+    try {
+      if (typeof window === 'undefined') return null
+      const refreshToken = localStorage.getItem('auth_refresh_token')
+      if (!refreshToken) return null
+      const res = await fetch(`${API_BASE}/api/v1/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh_token: refreshToken }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setToken(data.access_token)
+        localStorage.setItem('auth_token', data.access_token)
+        if (data.refresh_token) {
+          localStorage.setItem('auth_refresh_token', data.refresh_token)
+        }
+        return data.access_token
+      } else {
+        await logout()
+        return null
+      }
+    } catch {
+      return null
+    }
+  }
 
   // Initialize from persistent storage on mount
   useEffect(() => {
@@ -76,11 +120,46 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (storedUser && storedToken) {
             try {
               const parsed: UserProfile = JSON.parse(storedUser)
+              // Check if access token is expired
+              if (isJwtExpired(storedToken)) {
+                // Try to refresh
+                const storedRefreshToken = localStorage.getItem('auth_refresh_token')
+                if (storedRefreshToken) {
+                  try {
+                    const res = await fetch(`${API_BASE}/api/v1/auth/refresh`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ refresh_token: storedRefreshToken }),
+                    })
+                    if (res.ok) {
+                      const data = await res.json()
+                      setUser(parsed)
+                      setToken(data.access_token)
+                      localStorage.setItem('auth_token', data.access_token)
+                      if (data.refresh_token) {
+                        localStorage.setItem('auth_refresh_token', data.refresh_token)
+                      }
+                      return
+                    }
+                  } catch {
+                    // Ignore network error on refresh
+                  }
+                }
+                // Token is dead and couldn't be refreshed: purge stale session
+                localStorage.removeItem('auth_user')
+                localStorage.removeItem('auth_token')
+                localStorage.removeItem('auth_refresh_token')
+                setUser(null)
+                setToken(undefined)
+                return
+              }
+
               setUser(parsed)
               setToken(storedToken)
             } catch {
               localStorage.removeItem('auth_user')
               localStorage.removeItem('auth_token')
+              localStorage.removeItem('auth_refresh_token')
               setUser(null)
               setToken(undefined)
             }
@@ -131,6 +210,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUser(userProfile)
         if (typeof window !== 'undefined') {
           localStorage.setItem('auth_token', data.access_token)
+          if (data.refresh_token) {
+            localStorage.setItem('auth_refresh_token', data.refresh_token)
+          }
           localStorage.setItem('auth_user', JSON.stringify(userProfile))
         }
       } else {
@@ -199,6 +281,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setToken(undefined)
       if (typeof window !== 'undefined') {
         localStorage.removeItem('auth_token')
+        localStorage.removeItem('auth_refresh_token')
         localStorage.removeItem('auth_user')
       }
     }
@@ -207,7 +290,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const can = (action: string): boolean => {
     if (!user) return false
     if (user.roles.includes('Platform Administrator')) return true
-    return user.permissions.includes(action)
+    if (user.permissions.includes(action)) return true
+    // Also match resource-scoped permissions by base action (e.g. "create:vessel_call" matches "create")
+    if (action.includes(':')) {
+      const baseAction = action.split(':')[0]
+      if (user.permissions.includes(baseAction)) return true
+    }
+    return false
   }
 
   return (
@@ -224,6 +313,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         login,
         switchRole,
         logout,
+        refreshAccessToken,
       }}
     >
       {children}

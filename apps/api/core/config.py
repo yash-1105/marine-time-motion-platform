@@ -31,9 +31,9 @@ class Settings(BaseSettings):
     # JWT Session Configuration
     jwt_secret_key: str = "marine-platform-secure-jwt-secret-key-development"
     jwt_algorithm: str = "HS256"
-    access_token_expire_minutes: int = 15
+    access_token_expire_minutes: int = 1440  # 24 hours
     refresh_token_expire_days: int = 7
-    session_idle_timeout_minutes: int = 30
+    session_idle_timeout_minutes: int = 1440  # 24 hours
     session_absolute_timeout_hours: int = 24
     cookie_secure: bool = False  # True in production HTTPS
     cookie_samesite: str = "lax"

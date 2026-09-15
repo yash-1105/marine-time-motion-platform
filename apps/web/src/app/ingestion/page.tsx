@@ -11,7 +11,7 @@ const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 type UploadState = 'idle' | 'uploading' | 'error'
 
 export default function IngestionPage() {
-  const { can, token } = useAuth()
+  const { can, token, refreshAccessToken, logout } = useAuth()
   const { status: datasetStatus, fileName, refresh: refreshDataset, clearDataset } = useDatasetStatus()
   const [file, setFile] = useState<File | null>(null)
   const [uploadState, setUploadState] = useState<UploadState>('idle')
@@ -29,10 +29,16 @@ export default function IngestionPage() {
     )
   }
 
-  const authHeaders = { Authorization: `Bearer ${token || 'dev-token'}` }
+  const getActiveAuthHeaders = (): Record<string, string> => {
+    let currentToken = token
+    if (!currentToken && typeof window !== 'undefined') {
+      currentToken = localStorage.getItem('auth_token') || undefined
+    }
+    return { Authorization: `Bearer ${currentToken || 'dev-token'}` }
+  }
 
   const resolveBatchOutcome = async (batchId: string) => {
-    const res = await fetch(`${API}/api/v1/ingestion/batches`, { headers: authHeaders })
+    const res = await fetch(`${API}/api/v1/ingestion/batches`, { headers: getActiveAuthHeaders() })
     if (!res.ok) return null
     const batches: Array<{ batch_id: string; status: string; error_message?: string | null }> = await res.json()
     return batches.find((b) => b.batch_id === batchId) || null
@@ -46,14 +52,40 @@ export default function IngestionPage() {
     formData.append('file', targetFile)
 
     try {
-      const res = await fetch(`${API}/api/v1/ingestion/upload`, {
+      let headers = getActiveAuthHeaders()
+      let res = await fetch(`${API}/api/v1/ingestion/upload`, {
         method: 'POST',
-        headers: authHeaders,
+        headers,
         body: formData,
       })
+
+      // If unauthorized, attempt to refresh access token once and retry
+      if (res.status === 401) {
+        const freshToken = await refreshAccessToken()
+        if (freshToken) {
+          headers = { Authorization: `Bearer ${freshToken}` }
+          res = await fetch(`${API}/api/v1/ingestion/upload`, {
+            method: 'POST',
+            headers,
+            body: formData,
+          })
+        }
+      }
+
       if (!res.ok) {
         const err = await res.json().catch(() => null)
-        throw new Error(err?.detail || `Upload failed (HTTP ${res.status})`)
+        const parsedMessage =
+          err?.message ||
+          err?.detail?.message ||
+          (typeof err?.detail === 'string' ? err.detail : null) ||
+          (res.status === 401
+            ? 'Session expired. Please sign in again.'
+            : `Upload failed (HTTP ${res.status})`)
+
+        if (res.status === 401) {
+          await logout()
+        }
+        throw new Error(parsedMessage)
       }
       const data = await res.json()
       const outcome = await resolveBatchOutcome(data.batch_id)
