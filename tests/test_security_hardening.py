@@ -8,6 +8,7 @@ from starlette.datastructures import UploadFile
 
 from apps.api.main import app
 from apps.api.routers.ingestion import upload_file
+from apps.api.core.config import Settings
 
 PRINCIPAL = SimpleNamespace(data_scope=SimpleNamespace(tenant_id="tenant-security"))
 
@@ -33,3 +34,8 @@ def test_upload_rejects_invalid_xlsx_container_before_processing():
     with pytest.raises(HTTPException) as exc:
         upload_file(BackgroundTasks(), upload, None, PRINCIPAL)
     assert exc.value.status_code == 415
+
+
+def test_production_refuses_default_jwt_and_missing_cors():
+    with pytest.raises(ValueError):
+        Settings(_env_file=None, environment="production", jwt_secret_key="change-me", cors_origins="", cookie_secure=False)

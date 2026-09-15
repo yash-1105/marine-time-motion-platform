@@ -1,4 +1,4 @@
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -52,6 +52,18 @@ class Settings(BaseSettings):
     # Copilot provider credentials are backend-only. The browser never receives these values.
     sarvam_api_key: str = ""
     sarvam_model: str = "sarvam-105b"
+
+    @model_validator(mode="after")
+    def require_production_secrets(self):
+        if self.environment != "development":
+            weak = len(self.jwt_secret_key) < 32 or self.jwt_secret_key in {"change-me", "marine-platform-secure-jwt-secret-key-development"}
+            if weak:
+                raise ValueError("JWT_SECRET_KEY must be a unique 32+ character secret outside development")
+            if not self.cors_origins:
+                raise ValueError("CORS_ORIGINS must list exact trusted origins outside development")
+            if not self.cookie_secure:
+                raise ValueError("COOKIE_SECURE must be true outside development")
+        return self
 
 
 settings = Settings()

@@ -151,7 +151,7 @@
 | REQ-147 | 21A.5 Dataset-specific acceptance criteria | Missing or invalid required events make dependent outputs unavailable, rather th... | Core | test_req_147 | NOT_STARTED |
 | REQ-148 | 21A.5 Dataset-specific acceptance criteria | The orphan event is rejected or quarantined.... | Core | test_req_148 | NOT_STARTED |
 | REQ-149 | 21A.5 Dataset-specific acceptance criteria | Conflicting ATA observations remain traceable and require governed resolution.... | Core | test_req_149 | NOT_STARTED |
-| REQ-150 | 21A.5 Dataset-specific acceptance criteria | The dashboard, API, report, and database totals reconcile under identical filter... | reporting | test_req_150 | NOT_STARTED |
+| REQ-150 | 21A.5 Dataset-specific acceptance criteria | The dashboard, API, report, and database totals reconcile under identical filter... | reporting | test_dashboard_reconciliation | BLOCKED |
 | REQ-151 | 21A.5 Dataset-specific acceptance criteria | The synthetic-data flag is visible and synthetic data cannot be mistaken for pro... | Core | test_req_151 | NOT_STARTED |
 | REQ-152 | 21A.5 Dataset-specific acceptance criteria | A validation report can be rerun after any code, rule, mapping, or KPI formula c... | kpi | test_req_152 | NOT_STARTED |
 | REQ-153 | 22. AUTONOMOUS BUILD SEQUENCE | Parse this specification into a requirements traceability matrix.... | Core | test_req_153 | NOT_STARTED |
