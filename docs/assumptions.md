@@ -19,4 +19,4 @@
 | A-016 | §11 | Duplicate KPI concepts (11/53 tug response, 14/51 berth occupancy) | Designated primary/alias pairs; aliases excluded from default scorecards to prevent double-counting; admin endpoint allows primary designation swap | Yes | `kpi.primary_selection` | `test_alias_pairs_primary_and_alias_status` |
 | A-017 | §11 | Unit isolation for KPI-02 (Average Vessel Call Size) | Segmented strictly by unit (TEU, MT, Units); unqualified mixed-unit totals prohibited | Yes | `kpi.unit_segmentation` | `test_computable_kpis_arithmetic_on_hand_verified_fixture` |
 | A-018 | §11 | Peer benchmark absence handling | When peer data is unconfigured, source and period are empty and absent notice is returned rather than inventing numbers | No (governed) | n/a | `test_benchmark_peer_data_absence_disclosed` |
-
+| A-019 | §13 | Incident/resource/towage values are absent from the current governed dashboard result | Daily Operations renders `UNAVAILABLE` with a required-input reason; it never queries or computes reporting-only values | No (governed) | n/a | `test_report_unavailable_sections` |

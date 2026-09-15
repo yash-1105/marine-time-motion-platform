@@ -13,5 +13,6 @@ As per §6 of the specification, the following scoping decisions govern the impl
 | KPI engine + all 55 registry entries | Report *scheduling execution* (architecture built, cron deferred) |
 | Six dashboards + drill-through | Multi-tenant onboarding beyond a single synthetic tenant |
 | One report template in all four formats | |
+| Daily Operations report workflow, approval, publication, artifact access and delivery log | Four registered report templates (Weekly, Monthly, Quarterly, Benchmark) are explicitly deferred; scheduler invocation interface exists but production cron deployment remains deferred |
 | Grounded copilot over governed data | |
 | RBAC, audit, accessibility, deploy, docs | |

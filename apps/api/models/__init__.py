@@ -1,5 +1,6 @@
 from .analytics import *
 from .audit import *
+from .reporting import *
 from .auth import *
 from .base import Base
 from .canonical import *

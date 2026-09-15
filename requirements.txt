@@ -17,3 +17,6 @@ fastexcel
 python-multipart
 pytz
 python-dateutil
+reportlab
+python-docx
+python-pptx

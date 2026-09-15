@@ -23,6 +23,7 @@ from apps.api.routers.kpi import router as kpi_router
 from apps.api.routers.operations import router as operations_router
 from apps.api.routers.outliers import router as outliers_router
 from apps.api.routers.quality import router as quality_router
+from apps.api.routers.reporting import router as reporting_router
 
 app = FastAPI(
     title="Marine Time & Motion Platform",
@@ -108,6 +109,7 @@ v1_router.include_router(outliers_router)
 v1_router.include_router(criticality_router)
 v1_router.include_router(alerts_router)
 v1_router.include_router(dashboard_router)
+v1_router.include_router(reporting_router)
 
 app.include_router(v1_router)
 

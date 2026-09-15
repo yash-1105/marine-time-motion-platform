@@ -42,5 +42,10 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     gemini_model: str = "gemini-2.0-flash"
 
+    # Report artifact storage. Local paths are used in development; deployment supplies
+    # an object-storage mounted/adapter path (MinIO/GCS deployment configuration).
+    report_storage_path: str = "/tmp/marine-platform-reports"
+    application_version: str = "1.0.0"
+
 
 settings = Settings()

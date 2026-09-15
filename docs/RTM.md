@@ -90,8 +90,8 @@
 | REQ-086 | Resource utilisation | Average Tug Response: average Tug Arrival - Request.... | Core | test_req_086 | NOT_STARTED |
 | REQ-087 | Resource utilisation | Average Pilot Response: average Pilot On Board - Request.... | Core | test_req_087 | NOT_STARTED |
 | REQ-088 | Resource utilisation | Average Crane Downtime: total downtime / incidents, with optional vessel-level t... | Core | test_req_088 | NOT_STARTED |
-| REQ-089 | 13. AI-POWERED REPORTING | Daily Operations: movements, anchorage, pilotage, towage, berth, cargo progress,... | Core | test_req_089 | NOT_STARTED |
-| REQ-090 | 13. AI-POWERED REPORTING | Weekly Marine Performance: turnaround, pilot/tug, berth, delays, resources, bott... | Core | test_req_090 | NOT_STARTED |
+| REQ-089 | 13. AI-POWERED REPORTING | Daily Operations: movements, anchorage, pilotage, towage, berth, cargo progress,... | reporting | test_reporting_daily_operations | IMPLEMENTED |
+| REQ-090 | 13. AI-POWERED REPORTING | Weekly Marine Performance: turnaround, pilot/tug, berth, delays, resources, bott... | reporting | test_reporting_templates_registered | DEFERRED |
 | REQ-091 | 13. AI-POWERED REPORTING | Monthly Management Review: KPIs, throughput, turnaround, delays, utilisation, cr... | kpi | test_req_091 | NOT_STARTED |
 | REQ-092 | 13. AI-POWERED REPORTING | Quarterly KPI Review: full scorecards, targets, trends, variance, rankings, bott... | kpi | test_req_092 | NOT_STARTED |
 | REQ-093 | 13. AI-POWERED REPORTING | Benchmark Performance: internal/historical/peer comparison where available, gaps... | Core | test_req_093 | NOT_STARTED |
@@ -108,7 +108,7 @@
 | REQ-104 | 20. ACCEPTANCE CRITERIA | Bottleneck and criticality calculations expose component scores.... | Core | test_req_104 | NOT_STARTED |
 | REQ-105 | 20. ACCEPTANCE CRITERIA | All 55 source KPIs exist in a governed registry, including duplicate/alias treat... | kpi | test_req_105 | NOT_STARTED |
 | REQ-106 | 20. ACCEPTANCE CRITERIA | Executive, Operations, KPI, Delay, Vessel Journey, and Data Quality dashboards f... | kpi | test_req_106 | NOT_STARTED |
-| REQ-107 | 20. ACCEPTANCE CRITERIA | Word, Excel, PowerPoint, and PDF reporting works for at least one report templat... | Core | test_req_107 | NOT_STARTED |
+| REQ-107 | 20. ACCEPTANCE CRITERIA | Word, Excel, PowerPoint, and PDF reporting works for at least one report templat... | reporting | test_reporting_daily_operations | IMPLEMENTED |
 | REQ-108 | 20. ACCEPTANCE CRITERIA | Copilot answers are grounded, scoped, reproducible, caveated, and linked to supp... | Core | test_req_108 | NOT_STARTED |
 | REQ-109 | 20. ACCEPTANCE CRITERIA | Role permissions, audit logs, accessibility, test suite, migrations, backups, ob... | Core | test_req_109 | NOT_STARTED |
 | REQ-110 | 20. ACCEPTANCE CRITERIA | There are no placeholder controls, fabricated production metrics, or unlabelled ... | Core | test_req_110 | NOT_STARTED |

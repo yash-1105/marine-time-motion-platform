@@ -1,0 +1,18 @@
+"""Reporting workflow, artifacts, delivery log, and scheduler interface (Phase 13)."""
+from alembic import op
+import sqlalchemy as sa
+
+revision = "h6i7j8k9l0m1"
+down_revision = "3ec34f3322d8"
+branch_labels = None
+depends_on = None
+
+BASE = [sa.Column("id", sa.UUID(), primary_key=True), sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False), sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False), sa.Column("created_by", sa.String()), sa.Column("updated_by", sa.String()), sa.Column("source_lineage_id", sa.String()), sa.Column("version", sa.Integer(), server_default="1", nullable=False)]
+def upgrade():
+    op.create_table("report_template", *BASE, sa.Column("template_id", sa.String(100), nullable=False, unique=True), sa.Column("template_version", sa.String(30), nullable=False), sa.Column("name", sa.String(255), nullable=False), sa.Column("status", sa.String(30), nullable=False), sa.Column("section_definitions", sa.JSON(), nullable=False), schema="analytics")
+    op.create_table("report_run", *BASE, sa.Column("report_run_id", sa.String(100), nullable=False, unique=True), sa.Column("template_id", sa.String(100), nullable=False), sa.Column("template_version", sa.String(30), nullable=False), sa.Column("tenant_id", sa.String(100), nullable=False), sa.Column("port_id", sa.String(100)), sa.Column("terminal_id", sa.String(100)), sa.Column("period_start", sa.DateTime(timezone=True)), sa.Column("period_end", sa.DateTime(timezone=True)), sa.Column("filters", sa.JSON(), nullable=False), sa.Column("formats", sa.JSON(), nullable=False), sa.Column("status", sa.String(30), nullable=False), sa.Column("progress", sa.Integer(), nullable=False), sa.Column("requested_by", sa.String(255)), sa.Column("approved_by", sa.String(255)), sa.Column("approved_at", sa.DateTime(timezone=True)), sa.Column("rejection_reason", sa.Text()), sa.Column("published_at", sa.DateTime(timezone=True)), sa.Column("cancelled_at", sa.DateTime(timezone=True)), sa.Column("failure_reason", sa.Text()), sa.Column("result_data", sa.JSON()), schema="analytics")
+    op.create_table("report_artifact", *BASE, sa.Column("report_run_id", sa.UUID(), sa.ForeignKey("analytics.report_run.id", ondelete="CASCADE"), nullable=False), sa.Column("format", sa.String(10), nullable=False), sa.Column("storage_key", sa.String(500), nullable=False), sa.Column("content_type", sa.String(100), nullable=False), sa.Column("access_scope", sa.JSON(), nullable=False), schema="analytics")
+    op.create_table("report_delivery", *BASE, sa.Column("report_run_id", sa.UUID(), sa.ForeignKey("analytics.report_run.id", ondelete="CASCADE"), nullable=False), sa.Column("channel", sa.String(30), nullable=False), sa.Column("recipient", sa.String(255), nullable=False), sa.Column("status", sa.String(30), nullable=False), sa.Column("attempts", sa.Integer(), nullable=False), sa.Column("error_message", sa.Text()), sa.Column("delivered_at", sa.DateTime(timezone=True)), schema="analytics")
+    op.create_table("report_schedule", *BASE, sa.Column("template_id", sa.String(100), nullable=False), sa.Column("tenant_id", sa.String(100), nullable=False), sa.Column("frequency", sa.String(30), nullable=False), sa.Column("enabled", sa.Boolean(), nullable=False), sa.Column("filters", sa.JSON(), nullable=False), sa.Column("formats", sa.JSON(), nullable=False), sa.Column("recipients", sa.JSON(), nullable=False), schema="analytics")
+def downgrade():
+    for table in ["report_schedule", "report_delivery", "report_artifact", "report_run", "report_template"]: op.drop_table(table, schema="analytics")
