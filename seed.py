@@ -55,6 +55,56 @@ def seed_events():
             session.add(event)
     session.commit()
 
+    # Also seed the uppercase event names used in the fixture workbook's Event_Name column.
+    # Without these, the ingestion pipeline silently drops every occurrence whose name
+    # is not in config.event_definition.
+    FIXTURE_EVENT_NAMES = [
+        ("ANCHORAGE_ARRIVAL", "Anchorage"),
+        ("PILOT_REQUEST_ARRIVAL", "Pilotage"),
+        ("PILOT_ASSIGNED_ARRIVAL", "Pilotage"),
+        ("PILOT_ON_BOARD_ARRIVAL", "Pilotage"),
+        ("PILOT_DISEMBARK_ARRIVAL", "Pilotage"),
+        ("PILOT_SCHEDULED_ARRIVAL", "Pilotage"),
+        ("PILOT_REQUEST_SAILING", "Pilotage"),
+        ("PILOT_ASSIGNED_SAILING", "Pilotage"),
+        ("PILOT_ON_BOARD_SAILING", "Pilotage"),
+        ("PILOT_DISEMBARK_SAILING", "Pilotage"),
+        ("PILOT_SCHEDULED_SAILING", "Pilotage"),
+        ("TUG_REQUEST_ARRIVAL", "Towage"),
+        ("TUG_ASSIGNED_ARRIVAL", "Towage"),
+        ("TUG_SERVICE_START_ARRIVAL", "Towage"),
+        ("TUG_SERVICE_END_ARRIVAL", "Towage"),
+        ("TUG_REQUEST_SAILING", "Towage"),
+        ("TUG_ASSIGNED_SAILING", "Towage"),
+        ("TUG_SERVICE_START_SAILING", "Towage"),
+        ("TUG_SERVICE_END_SAILING", "Towage"),
+        ("BREAKWATER_IN", "Movement"),
+        ("BREAKWATER_OUT", "Movement"),
+        ("FIRST_LINE_TIED_ARRIVAL", "Berthing"),
+        ("LAST_LINE_TIED_ARRIVAL", "Berthing"),
+        ("ALL_FAST_ARRIVAL", "Berthing"),
+        ("FIRST_LINE_UNTIED_SAILING", "Sailing"),
+        ("LAST_LINE_UNTIED_SAILING", "Sailing"),
+        ("CARGO_START", "Cargo"),
+        ("CARGO_END", "Cargo"),
+        ("SHIFT_PILOT_ON_BOARD", "Shifting"),
+        ("SHIFT_ALL_FAST", "Shifting"),
+        ("NOMINATION_SUBMITTED", "Pre-arrival and clearance"),
+        ("ISPS_CLEARANCE", "Pre-arrival and clearance"),
+        ("PHO_CLEARANCE", "Pre-arrival and clearance"),
+        ("IMDG_CLEARANCE", "Pre-arrival and clearance"),
+        ("PORT_LIMIT_IN", "Movement"),
+        ("PORT_LIMIT_OUT", "Movement"),
+        ("ANCHOR_DROP", "Anchorage"),
+        ("ANCHOR_AWEIGH", "Anchorage"),
+    ]
+    for name, category in FIXTURE_EVENT_NAMES:
+        event = session.query(EventDefinition).filter_by(name=name).first()
+        if not event:
+            event = EventDefinition(name=name, category=category, description=f"Canonical event: {name}")
+            session.add(event)
+    session.commit()
+
 
 def seed_aliases():
     data = load_yaml("aliases.yaml")
