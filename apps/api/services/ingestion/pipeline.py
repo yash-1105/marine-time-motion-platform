@@ -29,16 +29,23 @@ class IngestionPipeline:
                 sha256_hash.update(byte_block)
         return sha256_hash.hexdigest()
 
-    def process_file(self, file_path: str, filename: str, is_synthetic: bool = False, dry_run: bool = False) -> str:
+    def process_file(self, file_path: str, filename: str, is_synthetic: bool = False, dry_run: bool = False, force_new: bool = False) -> str:
         checksum = self.calculate_checksum(file_path)
         batch_id = str(uuid.uuid4())
         
-        existing = self.db.execute(
-            select(IngestionBatch).where(IngestionBatch.file_checksum == checksum)
-        ).scalar_one_or_none()
-        
-        if existing and existing.status == "COMMITTED":
-            return str(existing.batch_id)
+        if not force_new:
+            existing = self.db.execute(
+                select(IngestionBatch).where(
+                    IngestionBatch.file_checksum == checksum,
+                    IngestionBatch.tenant_id == self.tenant_id,
+                )
+            ).scalar_one_or_none()
+            
+            if existing and existing.status == "COMMITTED":
+                existing.file_name = filename
+                existing.is_active = True
+                self.db.commit()
+                return str(existing.batch_id)
 
         batch = IngestionBatch(
             batch_id=batch_id,

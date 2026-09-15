@@ -5,8 +5,23 @@ import { useAuth } from './auth-context'
 
 export type DatasetState = 'loading' | 'none' | 'processing' | 'ready' | 'failed'
 
+interface ActiveDatasetResponse {
+  has_active_dataset: boolean
+  batch?: {
+    batch_id: string
+    file_name: string
+    file_checksum: string
+    created_at?: string | null
+    status: string
+    is_active?: boolean
+  } | null
+}
+
 interface DatasetContextType {
   status: DatasetState
+  batchId?: string
+  fileName?: string
+  fileChecksum?: string
   errorMessage?: string
   refresh: () => Promise<void>
   /** Removes the tenant's active dataset (backend source of truth) and immediately
@@ -22,58 +37,58 @@ const DatasetContext = createContext<DatasetContextType>({
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
-interface BatchRecord {
-  batch_id: string
-  file_name: string
-  status: string
-  error_message?: string | null
-}
-
-/**
- * Reuses the existing ingestion batch record (the backend's own source of truth for
- * ingestion state) to determine whether real analytical data is available, instead of
- * a frontend-only guess. The most recent batch for the tenant determines the state:
- *
- *   NO_DATASET ('none') -> PROCESSING ('processing') -> DATASET_READY ('ready')
- *   DATASET_READY -> (clearDataset) -> NO_DATASET
- *
- * There is no localStorage/sessionStorage flag to keep in sync — every consumer reads
- * this same context, so a refresh or a clearDataset() call updates every analytics page
- * at once, and a browser refresh re-derives state from the backend rather than replaying
- * a stale client-side flag.
- */
 export const DatasetStatusProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { token, isLoading: authLoading } = useAuth()
   const [status, setStatus] = useState<DatasetState>('loading')
+  const [batchId, setBatchId] = useState<string | undefined>(undefined)
+  const [fileName, setFileName] = useState<string | undefined>(undefined)
+  const [fileChecksum, setFileChecksum] = useState<string | undefined>(undefined)
   const [errorMessage, setErrorMessage] = useState<string | undefined>(undefined)
 
   const authHeaders = useCallback(() => ({ Authorization: `Bearer ${token || 'dev-token'}` }), [token])
 
   const refresh = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/v1/ingestion/batches`, { headers: authHeaders() })
+      const res = await fetch(`${API_BASE}/api/v1/ingestion/active`, { headers: authHeaders() })
       if (!res.ok) {
         setStatus('none')
+        setBatchId(undefined)
+        setFileName(undefined)
+        setFileChecksum(undefined)
         return
       }
-      const batches: BatchRecord[] = await res.json()
-      if (!batches.length) {
-        setStatus('none')
-        setErrorMessage(undefined)
-        return
-      }
-      const latest = batches[0]
-      if (latest.status === 'COMMITTED') {
+      const data: ActiveDatasetResponse = await res.json()
+      if (data.has_active_dataset && data.batch && data.batch.status === 'COMMITTED') {
         setStatus('ready')
+        setBatchId(data.batch.batch_id)
+        setFileName(data.batch.file_name)
+        setFileChecksum(data.batch.file_checksum)
         setErrorMessage(undefined)
-      } else if (latest.status === 'FAILED') {
-        setStatus('failed')
-        setErrorMessage(latest.error_message || 'The most recent dataset upload failed to process.')
       } else {
-        setStatus('processing')
+        // Check if there are processing or failed batches
+        const bRes = await fetch(`${API_BASE}/api/v1/ingestion/batches`, { headers: authHeaders() })
+        if (bRes.ok) {
+          const batches = await bRes.json()
+          if (batches.length > 0 && batches[0].status === 'FAILED') {
+            setStatus('failed')
+            setErrorMessage(batches[0].error_message || 'The most recent dataset upload failed to process.')
+          } else if (batches.length > 0 && batches[0].status === 'PROCESSING') {
+            setStatus('processing')
+          } else {
+            setStatus('none')
+          }
+        } else {
+          setStatus('none')
+        }
+        setBatchId(undefined)
+        setFileName(undefined)
+        setFileChecksum(undefined)
       }
     } catch {
       setStatus('none')
+      setBatchId(undefined)
+      setFileName(undefined)
+      setFileChecksum(undefined)
     }
   }, [authHeaders])
 
@@ -88,6 +103,9 @@ export const DatasetStatusProvider: React.FC<{ children: React.ReactNode }> = ({
     // Reflect NO_DATASET immediately rather than waiting on a re-fetch — every page
     // reading this context re-renders to the empty state right away.
     setStatus('none')
+    setBatchId(undefined)
+    setFileName(undefined)
+    setFileChecksum(undefined)
     setErrorMessage(undefined)
   }, [authHeaders])
 
@@ -97,7 +115,7 @@ export const DatasetStatusProvider: React.FC<{ children: React.ReactNode }> = ({
   }, [authLoading, refresh])
 
   return (
-    <DatasetContext.Provider value={{ status, errorMessage, refresh, clearDataset }}>
+    <DatasetContext.Provider value={{ status, batchId, fileName, fileChecksum, errorMessage, refresh, clearDataset }}>
       {children}
     </DatasetContext.Provider>
   )

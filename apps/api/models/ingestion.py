@@ -40,3 +40,4 @@ class IngestionBatch(BaseModel):
     error_message = Column(String, nullable=True)
     tenant_id = Column(String, nullable=False)
     is_synthetic = Column(Boolean, default=False)
+    is_active = Column(Boolean, default=True, nullable=False)

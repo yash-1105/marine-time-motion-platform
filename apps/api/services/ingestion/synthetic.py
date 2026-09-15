@@ -81,14 +81,16 @@ def load_testkit_oracles(db: Session, file_path: str):
 
 
 
-def reset_tenant_dataset(db: Session, tenant_id: str):
+def reset_tenant_dataset(db: Session, tenant_id: str, keep_batches: bool = False):
     """Purges all ingested/derived data for a tenant, returning it to a clean,
     no-dataset-loaded state. Used both to reset before loading a fresh dataset
     and to implement the user-facing "Remove Dataset" action."""
 
-    db.execute(text("DELETE FROM raw.record WHERE ingestion_batch_id IN (SELECT batch_id FROM raw.batch WHERE tenant_id = :t)"), {"t": tenant_id})
-    db.execute(text("DELETE FROM staging.record WHERE ingestion_batch_id IN (SELECT batch_id FROM raw.batch WHERE tenant_id = :t)"), {"t": tenant_id})
-    db.execute(text("DELETE FROM raw.batch WHERE tenant_id = :t"), {"t": tenant_id})
+    if not keep_batches:
+        db.execute(text("DELETE FROM raw.record WHERE ingestion_batch_id IN (SELECT batch_id FROM raw.batch WHERE tenant_id = :t)"), {"t": tenant_id})
+        db.execute(text("DELETE FROM staging.record WHERE ingestion_batch_id IN (SELECT batch_id FROM raw.batch WHERE tenant_id = :t)"), {"t": tenant_id})
+        db.execute(text("DELETE FROM raw.batch WHERE tenant_id = :t"), {"t": tenant_id})
+        db.execute(text("DELETE FROM analytics.dashboard_snapshot WHERE tenant_id = :t"), {"t": tenant_id})
 
     db.execute(text("DELETE FROM identity.merge_decision"))
     db.execute(text("DELETE FROM identity.match_evidence"))

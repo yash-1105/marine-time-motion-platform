@@ -110,6 +110,8 @@ interface DashboardData {
   lineage: {
     dataset_type: string
     dataset_label: string
+    batch_id?: string
+    file_checksum?: string
     port_id: string
     terminal_id: string
     vessel_type: string
@@ -146,6 +148,9 @@ function ExecutiveDashboardContent() {
   const { token, isLoading: authLoading } = useAuth()
 
   const [data, setData] = useState<DashboardData | null>(null)
+  const [loadedBatchId, setLoadedBatchId] = useState<string | null>(null)
+  const [newDatasetAvailable, setNewDatasetAvailable] = useState(false)
+  const [newBatchName, setNewBatchName] = useState<string | null>(null)
   const [recon, setRecon] = useState<ReconciliationResult | null>(null)
   const [reconLoading, setReconLoading] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -179,6 +184,10 @@ function ExecutiveDashboardContent() {
       .then((r) => (r.ok ? r.json() : Promise.reject(`Failed to load executive metrics: ${r.statusText}`)))
       .then((dashData) => {
         setData(dashData)
+        if (dashData.lineage?.batch_id) {
+          setLoadedBatchId(dashData.lineage.batch_id)
+        }
+        setNewDatasetAvailable(false)
         setLoading(false)
       })
       .catch((err) => {
@@ -191,6 +200,35 @@ function ExecutiveDashboardContent() {
     if (authLoading) return
     fetchDashboard()
   }, [authLoading, fetchDashboard])
+
+  // Detect when a newly uploaded dataset becomes active in the background
+  useEffect(() => {
+    if (authLoading || !token) return
+    const checkActiveBatch = async () => {
+      try {
+        const res = await fetch(`${API}/api/v1/ingestion/active`, {
+          headers: { Authorization: `Bearer ${token || 'dev-token'}` },
+        })
+        if (!res.ok) return
+        const json = await res.json()
+        if (json.has_active_dataset && json.batch?.batch_id) {
+          if (loadedBatchId && json.batch.batch_id !== loadedBatchId) {
+            setNewDatasetAvailable(true)
+            setNewBatchName(json.batch.file_name || 'New Dataset')
+          }
+        }
+      } catch {
+        // Silently ignore background polling errors
+      }
+    }
+    const timer = setInterval(checkActiveBatch, 8000)
+    return () => clearInterval(timer)
+  }, [authLoading, token, loadedBatchId])
+
+  const handleRefreshNewDataset = useCallback(() => {
+    setNewDatasetAvailable(false)
+    fetchDashboard()
+  }, [fetchDashboard])
 
   // 3-way reconciliation is expensive (recomputes the executive summary across 7 filter
   // combinations) — only run it on demand when the user opens the verification modal,
@@ -218,7 +256,7 @@ function ExecutiveDashboardContent() {
         <div className="flex flex-col items-center gap-3">
           <span className="w-7 h-7 border-2 border-[var(--color-accent)] border-t-transparent rounded-full animate-spin"></span>
           <span className="text-sm text-[var(--color-text-secondary)]">
-            Calculating executive metrics…
+            Loading executive dashboard…
           </span>
         </div>
       </div>
@@ -239,6 +277,35 @@ function ExecutiveDashboardContent() {
           >
             Retry
           </button>
+        </div>
+      </div>
+    )
+  }
+
+  if (data.summary.total_vessel_calls === 0) {
+    return (
+      <div className="flex-1 flex flex-col h-full bg-[var(--color-bg)]">
+        <div className="bg-[var(--color-surface)] border-b border-[var(--color-border)] px-6 py-5 flex items-center justify-between">
+          <h1 className="text-xl font-semibold text-[var(--color-text-primary)]">Executive Dashboard</h1>
+        </div>
+        <div className="flex-1 flex items-center justify-center p-8">
+          <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg p-8 max-w-md w-full text-center space-y-4 shadow-sm">
+            <div className="w-12 h-12 rounded-full bg-[var(--color-accent-soft)] text-[var(--color-accent)] flex items-center justify-center mx-auto text-xl font-semibold">
+              ⚓
+            </div>
+            <div>
+              <h2 className="text-base font-semibold text-[var(--color-text-primary)]">No dataset loaded</h2>
+              <p className="text-sm text-[var(--color-text-secondary)] mt-1">
+                Upload a port operations Excel workbook to compute and display executive analytics.
+              </p>
+            </div>
+            <Link
+              href="/ingestion"
+              className="inline-block px-4 py-2 bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-white text-sm font-medium rounded-md shadow-sm transition-colors"
+            >
+              Go to Data Ingestion
+            </Link>
+          </div>
         </div>
       </div>
     )
@@ -282,6 +349,29 @@ function ExecutiveDashboardContent() {
           </button>
         </div>
       </div>
+
+      {/* New dataset notification banner */}
+      {newDatasetAvailable && (
+        <div className="mx-6 mt-4 bg-[var(--color-surface)] border border-[var(--color-accent)] rounded-lg p-3 px-4 flex items-center justify-between gap-3 shadow-sm">
+          <div className="flex items-center gap-2.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-[var(--color-accent)] animate-pulse" />
+            <span className="text-sm font-semibold text-[var(--color-text-primary)]">
+              New dataset available
+            </span>
+            {newBatchName && (
+              <span className="text-xs text-[var(--color-text-secondary)]">
+                — {newBatchName} is ready to view
+              </span>
+            )}
+          </div>
+          <button
+            onClick={handleRefreshNewDataset}
+            className="px-3.5 py-1.5 bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-white text-xs font-semibold rounded-md cursor-pointer transition-colors shadow-sm"
+          >
+            Refresh
+          </button>
+        </div>
+      )}
 
       {/* Main Dashboard Canvas */}
       <div className="p-6 space-y-6 flex-1">

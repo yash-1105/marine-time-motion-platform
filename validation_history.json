@@ -98,5 +98,35 @@
     "base_calls": 72,
     "metrics_reconciled": "8 of 8",
     "dq_cases_passed": "10 of 10"
+  },
+  {
+    "run_timestamp": "2026-09-15T05:37:10.488292+00:00",
+    "execution_time_seconds": 55.96,
+    "app_version": "1.0.0",
+    "overall_status": "PASS",
+    "dataset_checksum": "90919984816264e44f0e83bf47a6ef11cc98f000ca375bebc77bf3f7e49b0763",
+    "base_calls": 72,
+    "metrics_reconciled": "8 of 8",
+    "dq_cases_passed": "10 of 10"
+  },
+  {
+    "run_timestamp": "2026-09-15T05:43:32.080378+00:00",
+    "execution_time_seconds": 49.33,
+    "app_version": "1.0.0",
+    "overall_status": "PASS",
+    "dataset_checksum": "90919984816264e44f0e83bf47a6ef11cc98f000ca375bebc77bf3f7e49b0763",
+    "base_calls": 72,
+    "metrics_reconciled": "8 of 8",
+    "dq_cases_passed": "10 of 10"
+  },
+  {
+    "run_timestamp": "2026-09-15T05:46:45.207474+00:00",
+    "execution_time_seconds": 54.76,
+    "app_version": "1.0.0",
+    "overall_status": "PASS",
+    "dataset_checksum": "90919984816264e44f0e83bf47a6ef11cc98f000ca375bebc77bf3f7e49b0763",
+    "base_calls": 72,
+    "metrics_reconciled": "8 of 8",
+    "dq_cases_passed": "10 of 10"
   }
 ]

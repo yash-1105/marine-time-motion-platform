@@ -249,3 +249,15 @@ class ActionItem(BaseModel):
     comments = Column(JSON, default=list)
     created_by = Column(String(100), nullable=True)
 
+
+class DashboardSnapshot(BaseModel):
+    __tablename__ = "dashboard_snapshot"
+    __table_args__ = {"schema": "analytics"}
+
+    tenant_id = Column(String(100), nullable=False, index=True)
+    batch_id = Column(String(100), nullable=False, index=True)
+    file_checksum = Column(String(64), nullable=False)
+    filters_hash = Column(String(64), nullable=False, default="unfiltered")
+    snapshot_data = Column(JSON, nullable=False)
+    is_active = Column(Boolean, nullable=False, default=True, index=True)
+

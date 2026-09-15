@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 
 from apps.api.models.analytics import (
     KPI,
+    DashboardSnapshot,
     LeadTimeDefinition,
     LeadTimeResult,
 )
@@ -29,6 +30,7 @@ from apps.api.models.canonical import (
     EventOccurrence,
     VesselCall,
 )
+from apps.api.models.ingestion import IngestionBatch
 from apps.api.models.config import EventDefinition
 from apps.api.models.quality import QualityIssue, QualityRule
 from apps.api.services.analytics.engine import AnalyticsEngine
@@ -42,7 +44,112 @@ class ExecutiveDashboardService:
         self.db = db
         self.tenant_id = tenant_id
 
+    def persist_snapshot(
+        self,
+        batch_id: str,
+        file_checksum: str,
+        payload: dict[str, Any],
+        filters_hash: str = "unfiltered",
+    ) -> DashboardSnapshot:
+        """Persists the precomputed executive dashboard summary to analytics.dashboard_snapshot."""
+        self.db.query(DashboardSnapshot).filter(
+            DashboardSnapshot.tenant_id == self.tenant_id,
+            DashboardSnapshot.filters_hash == filters_hash,
+        ).update({"is_active": False})
+
+        snapshot = DashboardSnapshot(
+            tenant_id=self.tenant_id,
+            batch_id=batch_id,
+            file_checksum=file_checksum,
+            filters_hash=filters_hash,
+            snapshot_data=payload,
+            is_active=True,
+        )
+        self.db.add(snapshot)
+        self.db.commit()
+        return snapshot
+
+    def compute_and_persist_snapshot(self, batch_id: str, file_checksum: str) -> dict[str, Any]:
+        """Calculates executive metrics once, sets batch identity in lineage, and persists snapshot."""
+        payload = self._calculate_executive_summary()
+        if "lineage" in payload:
+            payload["lineage"]["batch_id"] = batch_id
+            payload["lineage"]["file_checksum"] = file_checksum
+        self.persist_snapshot(batch_id, file_checksum, payload, filters_hash="unfiltered")
+        return payload
+
     def get_executive_summary(
+        self,
+        port_id: str | None = None,
+        terminal_id: str | None = None,
+        vessel_type: str | None = None,
+        cargo_type: str | None = None,
+        start_date: datetime | None = None,
+        end_date: datetime | None = None,
+        quality_status: str | None = None,
+        force_recompute: bool = False,
+    ) -> dict[str, Any]:
+        """Fetches persisted executive dashboard metrics from PostgreSQL (Process Once -> Store -> Reuse)."""
+        is_unfiltered = (
+            (port_id is None or port_id == "*")
+            and (terminal_id is None or terminal_id == "*")
+            and (vessel_type is None or vessel_type in ("*", "ALL", ""))
+            and (cargo_type is None or cargo_type in ("*", "ALL", ""))
+            and start_date is None
+            and end_date is None
+            and (quality_status is None or quality_status in ("*", "ALL", ""))
+        )
+        if is_unfiltered and not force_recompute:
+            snapshot = (
+                self.db.execute(
+                    select(DashboardSnapshot)
+                    .where(
+                        DashboardSnapshot.tenant_id == self.tenant_id,
+                        DashboardSnapshot.is_active == True,
+                        DashboardSnapshot.filters_hash == "unfiltered",
+                    )
+                    .order_by(DashboardSnapshot.created_at.desc())
+                )
+                .scalars()
+                .first()
+            )
+            if snapshot and snapshot.snapshot_data:
+                return snapshot.snapshot_data
+
+        payload = self._calculate_executive_summary(
+            port_id=port_id,
+            terminal_id=terminal_id,
+            vessel_type=vessel_type,
+            cargo_type=cargo_type,
+            start_date=start_date,
+            end_date=end_date,
+            quality_status=quality_status,
+        )
+
+        if is_unfiltered and payload.get("summary", {}).get("total_vessel_calls", 0) > 0:
+            active_batch = (
+                self.db.execute(
+                    select(IngestionBatch)
+                    .where(
+                        IngestionBatch.tenant_id == self.tenant_id,
+                        IngestionBatch.is_active == True,
+                        IngestionBatch.status == "COMMITTED",
+                    )
+                    .order_by(IngestionBatch.created_at.desc())
+                )
+                .scalars()
+                .first()
+            )
+            b_id = active_batch.batch_id if active_batch else "default-batch"
+            c_sum = active_batch.file_checksum if active_batch else "no-checksum"
+            if "lineage" in payload:
+                payload["lineage"]["batch_id"] = b_id
+                payload["lineage"]["file_checksum"] = c_sum
+            self.persist_snapshot(b_id, c_sum, payload, filters_hash="unfiltered")
+
+        return payload
+
+    def _calculate_executive_summary(
         self,
         port_id: str | None = None,
         terminal_id: str | None = None,

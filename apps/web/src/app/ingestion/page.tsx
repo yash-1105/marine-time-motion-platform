@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import Link from 'next/link'
 import { useAuth } from '@/lib/auth-context'
 import { useDatasetStatus } from '@/lib/dataset-context'
@@ -12,13 +12,14 @@ type UploadState = 'idle' | 'uploading' | 'error'
 
 export default function IngestionPage() {
   const { can, token } = useAuth()
-  const { status: datasetStatus, refresh: refreshDataset, clearDataset } = useDatasetStatus()
+  const { status: datasetStatus, fileName, refresh: refreshDataset, clearDataset } = useDatasetStatus()
   const [file, setFile] = useState<File | null>(null)
   const [uploadState, setUploadState] = useState<UploadState>('idle')
   const [uploadedName, setUploadedName] = useState<string>('')
   const [errorMessage, setErrorMessage] = useState<string>('')
   const [confirmingRemoval, setConfirmingRemoval] = useState(false)
   const [removing, setRemoving] = useState(false)
+  const addNewInputRef = useRef<HTMLInputElement>(null)
 
   if (!can('create:vessel_call')) {
     return (
@@ -30,9 +31,6 @@ export default function IngestionPage() {
 
   const authHeaders = { Authorization: `Bearer ${token || 'dev-token'}` }
 
-  // The ingestion pipeline runs synchronously on the server, so there is no real
-  // intermediate progress to poll — show an honest indeterminate state for the
-  // single request, then reflect the batch's actual final status.
   const resolveBatchOutcome = async (batchId: string) => {
     const res = await fetch(`${API}/api/v1/ingestion/batches`, { headers: authHeaders })
     if (!res.ok) return null
@@ -40,13 +38,12 @@ export default function IngestionPage() {
     return batches.find((b) => b.batch_id === batchId) || null
   }
 
-  const handleUpload = async () => {
-    if (!file) return
+  const processUpload = async (targetFile: File) => {
     setUploadState('uploading')
     setErrorMessage('')
 
     const formData = new FormData()
-    formData.append('file', file)
+    formData.append('file', targetFile)
 
     try {
       const res = await fetch(`${API}/api/v1/ingestion/upload`, {
@@ -65,7 +62,7 @@ export default function IngestionPage() {
         setErrorMessage(outcome.error_message || 'Dataset processing failed.')
         return
       }
-      setUploadedName(file.name)
+      setUploadedName(targetFile.name)
       setFile(null)
       setUploadState('idle')
       await refreshDataset()
@@ -74,6 +71,19 @@ export default function IngestionPage() {
       setUploadState('error')
       setErrorMessage(e.message)
     }
+  }
+
+  const handleInitialUpload = async () => {
+    if (!file) return
+    await processUpload(file)
+  }
+
+  const handleAddNewFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = e.target.files?.[0]
+    if (!selected) return
+    // Reset the input value so the same file can be re-selected if needed
+    e.target.value = ''
+    await processUpload(selected)
   }
 
   const retry = () => {
@@ -88,17 +98,28 @@ export default function IngestionPage() {
       setUploadedName('')
       setFile(null)
     } catch {
-      // Dataset context already reflects failure via its own state if the call fails;
-      // keep the confirmation dialog open-free and let the user retry the action.
+      // Handled via context
     } finally {
       setRemoving(false)
       setConfirmingRemoval(false)
     }
   }
 
+  const displayFileName = uploadedName || fileName || 'Vessel Operations Dataset'
+
   return (
     <div className="flex-1 flex flex-col h-full bg-[var(--color-bg)] overflow-y-auto">
       <PageHeader title="Data Ingestion" />
+
+      {/* Hidden file input for "Add New" action */}
+      <input
+        type="file"
+        ref={addNewInputRef}
+        accept=".xlsx"
+        onChange={handleAddNewFileSelected}
+        className="hidden"
+        aria-hidden="true"
+      />
 
       <div className="p-6 max-w-3xl w-full mx-auto space-y-6">
         {uploadState === 'uploading' ? (
@@ -117,19 +138,26 @@ export default function IngestionPage() {
           <Card className="border-[var(--color-good-border)] bg-[var(--color-good-bg)]">
             <div className="flex items-center justify-between gap-4 flex-wrap">
               <div>
-                <p className="text-sm font-semibold text-[var(--color-text-primary)]">Dataset loaded</p>
-                {uploadedName && <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">{uploadedName}</p>}
+                <p className="text-sm font-semibold text-[var(--color-text-primary)]">Dataset uploaded</p>
+                <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">{displayFileName}</p>
               </div>
               <div className="flex items-center gap-2">
+                <button
+                  onClick={() => addNewInputRef.current?.click()}
+                  className="px-3.5 py-1.5 bg-[var(--color-surface)] hover:bg-[var(--color-surface-muted)] text-[var(--color-text-primary)] rounded-md text-sm font-medium border border-[var(--color-border)] cursor-pointer transition-colors shadow-sm"
+                  title="Select another Excel workbook to replace the active dataset"
+                >
+                  Add New
+                </button>
                 <Link
                   href="/"
-                  className="px-3.5 py-1.5 bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-white rounded-md text-sm font-medium"
+                  className="px-3.5 py-1.5 bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-white rounded-md text-sm font-medium shadow-sm transition-colors"
                 >
                   View Executive Dashboard
                 </Link>
                 <button
                   onClick={() => setConfirmingRemoval(true)}
-                  className="px-3.5 py-1.5 bg-[var(--color-surface)] hover:bg-[var(--color-critical-bg)] hover:text-[var(--color-critical)] text-[var(--color-text-secondary)] rounded-md text-sm font-medium border border-[var(--color-border)] cursor-pointer"
+                  className="px-3.5 py-1.5 bg-[var(--color-surface)] hover:bg-[var(--color-critical-bg)] hover:text-[var(--color-critical)] text-[var(--color-text-secondary)] rounded-md text-sm font-medium border border-[var(--color-border)] cursor-pointer transition-colors"
                 >
                   Remove Dataset
                 </button>
@@ -137,24 +165,35 @@ export default function IngestionPage() {
             </div>
           </Card>
         ) : (
-          <Card>
-            <SectionHeader title="Upload vessel operations dataset" description="Supported format: Excel (.xlsx)" />
-            <div className="space-y-4">
-              <input
-                type="file"
-                accept=".xlsx"
-                onChange={(e) => setFile(e.target.files?.[0] || null)}
-                className="block w-full text-sm text-[var(--color-text-secondary)] border border-[var(--color-border)] rounded-md p-2 file:mr-3 file:px-3 file:py-1.5 file:rounded-md file:border-0 file:text-xs file:font-medium file:bg-[var(--color-accent-soft)] file:text-[var(--color-accent)] cursor-pointer"
-              />
-              <button
-                onClick={handleUpload}
-                disabled={!file}
-                className="px-4 py-1.5 bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-white rounded-md text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-              >
-                Upload &amp; Process
-              </button>
+          <div className="space-y-4">
+            <div className="p-4 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold text-[var(--color-text-primary)]">No dataset loaded</p>
+                <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
+                  Upload an Excel operations workbook to populate analytics.
+                </p>
+              </div>
             </div>
-          </Card>
+
+            <Card>
+              <SectionHeader title="Upload vessel operations dataset" description="Supported format: Excel (.xlsx)" />
+              <div className="space-y-4">
+                <input
+                  type="file"
+                  accept=".xlsx"
+                  onChange={(e) => setFile(e.target.files?.[0] || null)}
+                  className="block w-full text-sm text-[var(--color-text-secondary)] border border-[var(--color-border)] rounded-md p-2 file:mr-3 file:px-3 file:py-1.5 file:rounded-md file:border-0 file:text-xs file:font-medium file:bg-[var(--color-accent-soft)] file:text-[var(--color-accent)] cursor-pointer"
+                />
+                <button
+                  onClick={handleInitialUpload}
+                  disabled={!file}
+                  className="px-4 py-1.5 bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-white rounded-md text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors shadow-sm"
+                >
+                  Upload &amp; Process
+                </button>
+              </div>
+            </Card>
+          </div>
         )}
       </div>
 
