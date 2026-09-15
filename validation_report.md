@@ -1,7 +1,7 @@
 # Marine Time & Motion Analytics Platform — Synthetic Validation Report
 
 > [!NOTE]
-> **Validation Run:** `2026-09-15T05:46:45.207474+00:00` | **Execution Time:** `54.76s` | **Overall Verdict:** **`PASS`**
+> **Validation Run:** `2026-09-15T16:22:03.289355+00:00` | **Execution Time:** `54.09s` | **Overall Verdict:** **`FAIL`**
 > **App Version:** `1.0.0` | **Rule Version:** `1.0` | **Formula Version:** `1.0`
 
 ---
@@ -39,7 +39,7 @@
 | `DQ-005` | Missing service event | `SYNVCN2600036` | Pilot request exists without scheduled event | `High` | Missing scheduled event flagged | DQ-005 flagged in Quality Engine | **`PASS`** |
 | `DQ-006` | Chronology violation | `SYNVCN2600045` | Pilot on board before scheduled | `Critical` | Critical chronology violation quarantined | Quarantined in Quality Engine; sequence violation noted in Anchorage Wait | **`PASS`** |
 | `DQ-007` | Missing delay reason | `SYNVCN2600054` | Positive delay but reason/category blank | `Medium` | Mandatory delay reason review raised at MEDIUM severity | DQ-007 review issue and operational alert created | **`PASS`** |
-| `DQ-008` | Extreme operational outlier | `SYNVCN2600063` | Turnaround expected set to 720h vs calculated 86.5h | `High/Critical` | Flagged as extreme outlier, transparent KPI exclusion toggle | Detected by OutlierEngine (observed 720h, severity CRITICAL) | **`PASS`** |
+| `DQ-008` | Extreme operational outlier | `SYNVCN2600063` | Turnaround expected set to 720h vs calculated 86.5h | `High/Critical` | Flagged as extreme outlier, transparent KPI exclusion toggle | Detected by OutlierEngine (observed 720h, severity CRITICAL) | **`FAIL`** |
 | `DQ-009` | Referential integrity | `SYNVCN-NOTFOUND` | Event refers to absent vessel call (EV-ORPHAN-001) | `Critical` | Orphan event rejected or quarantined; not attached to active VC | Staged orphan (0 row) excluded from canonical occurrences (True) | **`PASS`** |
 | `DQ-010` | Conflicting timestamps | `SYNVCN2600070` | Two ATA values differ by 5 hours (AIS vs Manual Log) | `High` | Both observations preserved; conflicting review raised | Both occurrences stored in canonical.event_occurrence; conflict flagged | **`PASS`** |
 
@@ -91,7 +91,7 @@
 
 - **Delays Reconciled:** `41 of 41` (duration recalculated from $Served - Scheduled$, canonical categories mapped)
 - **Multi-Dimensional Bottlenecks:** `8` items ranked across 7 dimensions (Rank 1: `Cargo Working`). Ranking is demonstrably non-duration-only.
-- **Outliers Detected:** `8` (Turnaround > P90, pilot boarding MAD, DQ-008 720h override detected with transparent KPI exclusion toggle)
+- **Outliers Detected:** `7` (Turnaround > P90, pilot boarding MAD, DQ-008 720h override detected with transparent KPI exclusion toggle)
 - **Calls Over 120h Turnaround:** `6` calls preserved in population
 - **Operational Alerts Active:** `100` active alerts across SLA breach, critical bottleneck, missing reason, and resource shortage rules
 
@@ -127,5 +127,5 @@
 
 ## 10. Final Acceptance Verdict
 
-> ### **RESULT: PASS**
+> ### **RESULT: FAIL**
 > All spec §21A.3 and Phase 12 dashboard reconciliation requirements verified. The V1 analytical spine and dashboards are fully reconciled.
