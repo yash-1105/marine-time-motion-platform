@@ -1,10 +1,14 @@
 import logging
 import os
+import time
 import uuid
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy import text
+import redis
+from apps.api.core.database import engine
 
 from apps.api.auth.dependencies import require
 from apps.api.core.config import settings
@@ -38,13 +42,12 @@ cors_origins = [
     "http://localhost:8000",
     "http://127.0.0.1:8000",
 ]
-if os.getenv("CORS_ORIGINS"):
-    cors_origins.extend([origin.strip() for origin in os.getenv("CORS_ORIGINS", "").split(",") if origin.strip()])
+if settings.cors_origins:
+    cors_origins.extend([origin.strip() for origin in settings.cors_origins.split(",") if origin.strip()])
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
-    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$|^https://.*\.vercel\.app$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -54,20 +57,36 @@ logger = logging.getLogger("marine_platform")
 logger.setLevel(logging.INFO)
 handler = logging.StreamHandler()
 handler.setFormatter(
-    logging.Formatter(
-        '{"time": "%(asctime)s", "level": "%(levelname)s", "message": "%(message)s", "correlation_id": "%(correlation_id)s"}'
-    )
+    logging.Formatter('{"time":"%(asctime)s","level":"%(levelname)s","message":%(message)s}')
 )
-logger.addHandler(handler)
+if not logger.handlers:
+    logger.addHandler(handler)
 
 
 @app.middleware("http")
 async def add_correlation_id(request: Request, call_next):
     correlation_id = request.headers.get("X-Correlation-ID", str(uuid.uuid4()))
     request.state.correlation_id = correlation_id
+    started = time.perf_counter()
+    # Cookie-backed writes must be same-origin. Bearer-token API clients remain supported.
+    if request.method not in {"GET", "HEAD", "OPTIONS"} and request.cookies.get("access_token") and request.headers.get("origin"):
+        if request.headers["origin"] not in cors_origins:
+            return JSONResponse(status_code=403, content={"code":"CSRF_REJECTED","message":"Cross-origin cookie request rejected","correlation_id":correlation_id})
     response = await call_next(request)
     response.headers["X-Correlation-ID"] = correlation_id
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "same-origin"
+    response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+    response.headers["Content-Security-Policy"] = "default-src 'self'; frame-ancestors 'none'; base-uri 'self'; object-src 'none'"
+    if settings.environment != "development":
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    logger.info(json_log({"event":"http_request","method":request.method,"path":request.url.path,"status":response.status_code,"latency_ms":round((time.perf_counter()-started)*1000,2),"correlation_id":correlation_id}))
     return response
+
+def json_log(values: dict) -> str:
+    import json
+    return json.dumps(values, default=str, separators=(",", ":"))
 
 
 # Public liveness and readiness endpoints
@@ -78,7 +97,12 @@ def health_check():
 
 @app.get("/ready")
 def readiness_check():
-    return {"status": "ready"}
+    try:
+        with engine.connect() as conn: conn.execute(text("SELECT 1"))
+        redis.Redis.from_url(settings.redis_url, socket_connect_timeout=1, socket_timeout=1).ping()
+    except Exception:
+        return JSONResponse(status_code=503, content={"status":"not_ready"})
+    return {"status": "ready", "dependencies": {"postgres":"ok", "redis":"ok"}}
 
 
 @app.get("/live")
@@ -136,12 +160,13 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
+    logger.exception(json_log({"event":"unhandled_error","path":request.url.path,"correlation_id":getattr(request.state,"correlation_id","unknown")}))
     return JSONResponse(
         status_code=500,
         content={
             "code": "INTERNAL_SERVER_ERROR",
             "message": "An unexpected error occurred",
-            "detail": str(exc),
+            "detail": str(exc) if settings.environment == "development" else None,
             "correlation_id": getattr(request.state, "correlation_id", "unknown"),
         },
     )

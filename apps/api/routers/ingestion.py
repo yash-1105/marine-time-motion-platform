@@ -1,6 +1,7 @@
 import os
 import shutil
 import uuid
+from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
 from sqlalchemy import desc, select, text
@@ -12,6 +13,7 @@ from apps.api.models.ingestion import IngestionBatch
 from apps.api.services.ingestion.pipeline import IngestionPipeline
 from apps.api.services.ingestion.synthetic import load_synthetic_dataset, reset_tenant_dataset
 from apps.api.services.pipeline_runner import run_full_analytics_pipeline
+from apps.api.core.config import settings
 
 router = APIRouter(prefix="/ingestion", tags=["ingestion"])
 
@@ -34,10 +36,22 @@ def upload_file(
     and persists the calculated executive snapshot into PostgreSQL.
     """
     tenant_id = _resolve_tenant(principal)
+    safe_name = Path(file.filename or "").name
+    if not safe_name.lower().endswith((".xlsx", ".csv")):
+        raise HTTPException(status_code=415, detail="Only .xlsx and .csv uploads are accepted")
     os.makedirs("/tmp/uploads", exist_ok=True)
-    temp_path = f"/tmp/uploads/{uuid.uuid4()}_{file.filename}"
+    temp_path = f"/tmp/uploads/{uuid.uuid4()}_{safe_name}"
     with open(temp_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+        written = 0
+        while chunk := file.file.read(1024 * 1024):
+            written += len(chunk)
+            if written > settings.upload_max_bytes:
+                buffer.close(); os.remove(temp_path)
+                raise HTTPException(status_code=413, detail="Upload exceeds configured size limit")
+            buffer.write(chunk)
+    if safe_name.lower().endswith(".xlsx") and open(temp_path, "rb").read(4) != b"PK\x03\x04":
+        os.remove(temp_path)
+        raise HTTPException(status_code=415, detail="XLSX upload is not a valid OOXML container")
 
     try:
         pipeline = IngestionPipeline(db, tenant_id=tenant_id)
@@ -67,7 +81,7 @@ def upload_file(
         if os.path.exists(temp_path):
             os.remove(temp_path)
 
-        return {"batch_id": batch_id, "file_name": file.filename, "status": "COMMITTED"}
+        return {"batch_id": batch_id, "file_name": safe_name, "status": "COMMITTED"}
     except Exception as e:
         db.rollback()
         if os.path.exists(temp_path):

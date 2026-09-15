@@ -40,51 +40,54 @@ def create(payload: CreateReport, db: Session = Depends(get_db), principal: User
 
 @router.post("/{run_id}/run")
 def run_now(run_id: str, db: Session = Depends(get_db), principal: UserPrincipal = Depends(require("create", "reporting"))):
-    r = find(db, run_id, tenant(principal)); ReportService(db, r.tenant_id).generate(run_id); return status(r)
+    r = find(db, run_id, principal); ReportService(db, r.tenant_id).generate(run_id); return status(r)
 @router.get("/{run_id}")
-def get(run_id: str, db: Session = Depends(get_db), principal: UserPrincipal = Depends(require("view", "reporting"))): return status(find(db, run_id, tenant(principal)))
+def get(run_id: str, db: Session = Depends(get_db), principal: UserPrincipal = Depends(require("view", "reporting"))): return status(find(db, run_id, principal))
 @router.post("/{run_id}/cancel")
 def cancel(run_id: str, db: Session = Depends(get_db), principal: UserPrincipal = Depends(require("create", "reporting"))):
-    r = find(db, run_id, tenant(principal)); r.status, r.cancelled_at = "CANCELLED", datetime.now(UTC); db.commit(); return status(r)
+    r = find(db, run_id, principal); r.status, r.cancelled_at = "CANCELLED", datetime.now(UTC); db.commit(); return status(r)
 @router.post("/{run_id}/retry")
 def retry(run_id: str, db: Session = Depends(get_db), principal: UserPrincipal = Depends(require("create", "reporting"))):
-    r = find(db, run_id, tenant(principal)); r.status, r.failure_reason = "QUEUED", None; db.commit(); return status(r)
+    r = find(db, run_id, principal); r.status, r.failure_reason = "QUEUED", None; db.commit(); return status(r)
 @router.post("/{run_id}/approve")
 def approve(run_id: str, db: Session = Depends(get_db), principal: UserPrincipal = Depends(require("approve", "reporting"))):
-    r = find(db, run_id, tenant(principal));
+    r = find(db, run_id, principal);
     if r.status != "AWAITING_APPROVAL": raise HTTPException(409, "Report is not awaiting approval")
     r.status, r.approved_by, r.approved_at = "APPROVED", principal.email, datetime.now(UTC); db.commit(); return status(r)
 @router.post("/{run_id}/reject")
 def reject(run_id: str, reason: str, db: Session = Depends(get_db), principal: UserPrincipal = Depends(require("reject", "reporting"))):
-    r = find(db, run_id, tenant(principal)); r.status, r.rejection_reason = "REJECTED", reason; db.commit(); return status(r)
+    r = find(db, run_id, principal); r.status, r.rejection_reason = "REJECTED", reason; db.commit(); return status(r)
 @router.post("/{run_id}/publish")
 def publish(run_id: str, db: Session = Depends(get_db), principal: UserPrincipal = Depends(require("publish", "reporting"))):
-    r = find(db, run_id, tenant(principal));
+    r = find(db, run_id, principal);
     if r.status != "APPROVED": raise HTTPException(409, "Only approved reports may be published")
     r.status, r.published_at = "PUBLISHED", datetime.now(UTC); db.commit(); return status(r)
 @router.get("/{run_id}/artifacts/{fmt}")
 def artifact(run_id: str, fmt: str, db: Session = Depends(get_db), principal: UserPrincipal = Depends(require("view", "reporting"))):
-    r = find(db, run_id, tenant(principal));
+    r = find(db, run_id, principal);
     if r.status != "PUBLISHED": raise HTTPException(403, "Artifact is not published")
     a = db.execute(select(ReportArtifact).where(ReportArtifact.report_run_id == r.id, ReportArtifact.format == fmt.upper())).scalar_one_or_none()
     if not a or not Path(a.storage_key).is_file(): raise HTTPException(404, "Artifact not found")
     return FileResponse(a.storage_key, media_type=a.content_type, filename=Path(a.storage_key).name)
 @router.post("/{run_id}/deliver")
 def deliver(run_id: str, payload: DeliveryRequest, db: Session = Depends(get_db), principal: UserPrincipal = Depends(require("publish", "reporting"))):
-    r = find(db, run_id, tenant(principal));
+    r = find(db, run_id, principal);
     if r.status != "PUBLISHED": raise HTTPException(409, "Only published reports can be delivered")
     return delivery(ReportService(db, r.tenant_id).deliver(r, payload.channel, payload.recipient, payload.simulate_failure))
 @router.post("/deliveries/{delivery_id}/retry")
 def retry_delivery(delivery_id: str, db: Session = Depends(get_db), principal: UserPrincipal = Depends(require("publish", "reporting"))):
     d = db.get(ReportDelivery, delivery_id)
     if not d: raise HTTPException(404, "Delivery not found")
-    r = db.get(ReportRun, d.report_run_id); find(db, r.report_run_id, tenant(principal)); return delivery(ReportService(db, r.tenant_id).retry_delivery(d))
+    r = db.get(ReportRun, d.report_run_id); find(db, r.report_run_id, principal); return delivery(ReportService(db, r.tenant_id).retry_delivery(d))
 @router.post("/schedules")
 def schedule(payload: ScheduleRequest, db: Session = Depends(get_db), principal: UserPrincipal = Depends(require("configure", "reporting"))):
     s = ReportSchedule(template_id=payload.template_id, tenant_id=tenant(principal), frequency=payload.frequency, formats=payload.formats, recipients=payload.recipients, filters=payload.filters); db.add(s); db.commit(); return {"id": str(s.id), "scheduler_notice": "A deployment scheduler must invoke this model; cron execution is intentionally not bundled."}
 
-def find(db, run_id, tenant_id):
-    r = db.execute(select(ReportRun).where(ReportRun.report_run_id == run_id, ReportRun.tenant_id == tenant_id)).scalar_one_or_none()
+def find(db, run_id, principal):
+    stmt = select(ReportRun).where(ReportRun.report_run_id == run_id, ReportRun.tenant_id == tenant(principal))
+    if principal.data_scope.port_id and principal.data_scope.port_id != "*": stmt = stmt.where(ReportRun.port_id == principal.data_scope.port_id)
+    if principal.data_scope.terminal_id and principal.data_scope.terminal_id != "*": stmt = stmt.where(ReportRun.terminal_id == principal.data_scope.terminal_id)
+    r = db.execute(stmt).scalar_one_or_none()
     if not r: raise HTTPException(404, "Report run not found in data scope")
     return r
 def status(r): return {"report_run_id": r.report_run_id, "status": r.status, "progress": r.progress, "template_id": r.template_id, "formats": r.formats, "failure_reason": r.failure_reason, "version": r.version}

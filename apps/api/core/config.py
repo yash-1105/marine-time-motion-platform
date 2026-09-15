@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     # Database & Cache
     database_url: str = "postgresql://admin:password@localhost:5434/marine_platform"
     redis_url: str = "redis://localhost:6379/0"
+    cors_origins: str = ""
+    upload_max_bytes: int = 25 * 1024 * 1024
 
     @field_validator("database_url", mode="before")
     @classmethod

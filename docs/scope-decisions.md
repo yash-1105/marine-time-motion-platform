@@ -16,3 +16,4 @@ As per §6 of the specification, the following scoping decisions govern the impl
 | Daily Operations report workflow, approval, publication, artifact access and delivery log | Four registered report templates (Weekly, Monthly, Quarterly, Benchmark) are explicitly deferred; scheduler invocation interface exists but production cron deployment remains deferred |
 | Grounded copilot over governed data | |
 | RBAC, audit, accessibility, deploy, docs | |
+| Security headers, dependency readiness, bounded upload validation, structured request telemetry, and deployment/security runbooks | Malware scanning/content-disarm, live GCS IAM verification, live backup restore, and deployed scheduler exercise require production integrations and credentials |

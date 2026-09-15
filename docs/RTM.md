@@ -110,7 +110,7 @@
 | REQ-106 | 20. ACCEPTANCE CRITERIA | Executive, Operations, KPI, Delay, Vessel Journey, and Data Quality dashboards f... | kpi | test_req_106 | NOT_STARTED |
 | REQ-107 | 20. ACCEPTANCE CRITERIA | Word, Excel, PowerPoint, and PDF reporting works for at least one report templat... | reporting | test_reporting_daily_operations | IMPLEMENTED |
 | REQ-108 | 20. ACCEPTANCE CRITERIA | Copilot answers are grounded, scoped, reproducible, caveated, and linked to supp... | copilot | test_copilot_core | IMPLEMENTED |
-| REQ-109 | 20. ACCEPTANCE CRITERIA | Role permissions, audit logs, accessibility, test suite, migrations, backups, ob... | Core | test_req_109 | NOT_STARTED |
+| REQ-109 | 20. ACCEPTANCE CRITERIA | Role permissions, audit logs, accessibility, test suite, migrations, backups, ob... | security | test_security_hardening | PARTIALLY_IMPLEMENTED |
 | REQ-110 | 20. ACCEPTANCE CRITERIA | There are no placeholder controls, fabricated production metrics, or unlabelled ... | Core | test_req_110 | NOT_STARTED |
 | REQ-111 | 21A.1 Dataset files and expected package handling | Require an authorised administrator or developer role.... | Core | test_req_111 | NOT_STARTED |
 | REQ-112 | 21A.1 Dataset files and expected package handling | Label the data as synthetic in all environments and screens.... | Core | test_req_112 | NOT_STARTED |
