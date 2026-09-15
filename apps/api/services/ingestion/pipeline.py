@@ -228,6 +228,23 @@ class IngestionPipeline:
         
         event_defs = self.db.execute(select(EventDefinition)).scalars().all()
         event_def_map = {e.name: e.id for e in event_defs}
+
+        # Auto-register any event names from the workbook that are not yet in config.event_definition.
+        # This ensures upstream event names (e.g. ANCHORAGE_ARRIVAL, PILOT_ON_BOARD_ARRIVAL) are
+        # always resolvable rather than silently dropped.
+        seen_event_names: set[str] = set()
+        for r_scan in event_records:
+            en = r_scan.parsed_data.get("Event_Name")
+            if en and en not in event_def_map:
+                seen_event_names.add(en)
+        for en in sorted(seen_event_names):
+            new_def = EventDefinition(name=en, category="Ingested", description=f"Auto-registered from workbook: {en}")
+            self.db.add(new_def)
+        if seen_event_names:
+            self.db.flush()
+            # Rebuild the lookup map with newly created definitions
+            event_defs = self.db.execute(select(EventDefinition)).scalars().all()
+            event_def_map = {e.name: e.id for e in event_defs}
         
         import pytz
         from dateutil import parser

@@ -173,3 +173,58 @@ def list_batches(
         }
         for b in batches
     ]
+
+
+@router.post("/reprocess")
+def reprocess_active_dataset(
+    db: Session = Depends(get_db),
+    principal=Depends(require("administer", "tenant")),
+):
+    """Re-runs canonical commit and full analytics from existing staging records.
+
+    Use this to recover from silent event-occurrence drops caused by missing EventDefinition
+    records (e.g. after the event-definitions seed migration) without requiring a file re-upload.
+    """
+    from apps.api.services.ingestion.synthetic import reset_tenant_dataset
+
+    tenant_id = _resolve_tenant(principal)
+
+    active_batch = db.execute(
+        select(IngestionBatch)
+        .where(
+            IngestionBatch.tenant_id == tenant_id,
+            IngestionBatch.is_active == True,
+        )
+        .order_by(desc(IngestionBatch.created_at))
+    ).scalars().first()
+
+    if not active_batch:
+        raise HTTPException(status_code=404, detail="No active dataset found for this tenant")
+
+    batch_id = active_batch.batch_id
+    checksum = active_batch.file_checksum
+
+    try:
+        # 1. Wipe canonical + derived data while keeping raw/staging records intact
+        reset_tenant_dataset(db, tenant_id, keep_batches=True)
+
+        # 2. Re-commit from existing staging records (auto-creates missing EventDefinition rows)
+        pipeline = IngestionPipeline(db, tenant_id=tenant_id)
+        pipeline._commit_to_canonical(active_batch)
+
+        # 3. Re-mark batch as active and COMMITTED
+        active_batch.is_active = True
+        active_batch.status = "COMMITTED"
+        db.commit()
+
+        # 4. Re-run full analytics pipeline and persist snapshot
+        run_full_analytics_pipeline(db, tenant_id=tenant_id, batch_id=batch_id, file_checksum=checksum)
+
+        return {
+            "status": "REPROCESSED",
+            "batch_id": batch_id,
+            "file_name": active_batch.file_name,
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
