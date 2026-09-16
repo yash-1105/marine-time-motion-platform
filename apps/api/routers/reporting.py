@@ -28,6 +28,14 @@ class DeliveryRequest(BaseModel): channel: str; recipient: str; simulate_failure
 def templates(db: Session = Depends(get_db), _: UserPrincipal = Depends(require("view", "reporting"))):
     register_templates(db); return [{"template_id": r.template_id, "version": r.template_version, "name": r.name, "status": r.status, "sections": r.section_definitions} for r in db.execute(select(ReportTemplate)).scalars()]
 
+@router.get("/runs")
+def runs(db: Session = Depends(get_db), principal: UserPrincipal = Depends(require("view", "reporting"))):
+    """Returns report history constrained to the caller's authoritative scope."""
+    stmt = select(ReportRun).where(ReportRun.tenant_id == tenant(principal)).order_by(ReportRun.created_at.desc()).limit(20)
+    if principal.data_scope.port_id and principal.data_scope.port_id != "*": stmt = stmt.where(ReportRun.port_id == principal.data_scope.port_id)
+    if principal.data_scope.terminal_id and principal.data_scope.terminal_id != "*": stmt = stmt.where(ReportRun.terminal_id == principal.data_scope.terminal_id)
+    return [status(r) for r in db.execute(stmt).scalars().all()]
+
 @router.post("")
 def create(payload: CreateReport, db: Session = Depends(get_db), principal: UserPrincipal = Depends(require("create", "reporting"))):
     register_templates(db); t = db.execute(select(ReportTemplate).where(ReportTemplate.template_id == payload.template_id)).scalar_one_or_none()
@@ -43,6 +51,11 @@ def run_now(run_id: str, db: Session = Depends(get_db), principal: UserPrincipal
     r = find(db, run_id, principal); ReportService(db, r.tenant_id).generate(run_id); return status(r)
 @router.get("/{run_id}")
 def get(run_id: str, db: Session = Depends(get_db), principal: UserPrincipal = Depends(require("view", "reporting"))): return status(find(db, run_id, principal))
+@router.get("/{run_id}/result")
+def result(run_id: str, db: Session = Depends(get_db), principal: UserPrincipal = Depends(require("view", "reporting"))):
+    run = find(db, run_id, principal)
+    if not run.result_data: raise HTTPException(404, "Report result is not available yet")
+    return {"report_run_id": run.report_run_id, "status": run.status, "result": run.result_data}
 @router.post("/{run_id}/cancel")
 def cancel(run_id: str, db: Session = Depends(get_db), principal: UserPrincipal = Depends(require("create", "reporting"))):
     r = find(db, run_id, principal); r.status, r.cancelled_at = "CANCELLED", datetime.now(UTC); db.commit(); return status(r)
