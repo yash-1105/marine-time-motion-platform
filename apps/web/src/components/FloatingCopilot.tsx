@@ -20,6 +20,29 @@ type ChatItem = { question: string; reply?: CopilotReply; error?: string }
 
 const STORAGE_KEY = 'marine-copilot-chat'
 
+function describeResult(reply: CopilotReply): string | null {
+  if (reply.result?.status !== 'AVAILABLE') return null
+  const summary = reply.result.summary as Record<string, unknown> | undefined
+  if (!summary) return null
+  const categories = Array.isArray(summary.top_categories) ? summary.top_categories as Array<Record<string, unknown>> : []
+  const bottlenecks = Array.isArray(summary.top_bottlenecks) ? summary.top_bottlenecks as Array<Record<string, unknown>> : []
+  const totalHours = typeof summary.total_delay_hours === 'number' ? summary.total_delay_hours : null
+  const totalCount = typeof summary.total_delays_count === 'number' ? summary.total_delays_count : null
+  const parts: string[] = []
+  if (totalCount !== null && totalHours !== null) {
+    parts.push(`${totalCount} confirmed delays account for ${totalHours.toFixed(1)} hours in the governed population.`)
+  }
+  if (categories.length) {
+    const top = categories.slice(0, 3).map((item) => `${String(item.category)} (${String(item.count)} delays, ${String(item.percentage)}%)`)
+    parts.push(`The most frequent categories are ${top.join(', ')}.`)
+  }
+  if (bottlenecks.length) {
+    const names = bottlenecks.slice(0, 3).map((item) => String(item.stage_or_resource)).filter(Boolean)
+    if (names.length) parts.push(`Highest-ranked bottleneck stages/resources: ${names.join(', ')}.`)
+  }
+  return parts.length ? parts.join(' ') : null
+}
+
 export function FloatingCopilot() {
   const { user, token } = useAuth()
   const [open, setOpen] = useState(false)
@@ -110,10 +133,14 @@ export function FloatingCopilot() {
                 ) : item.reply ? (
                   <div className="rounded-lg border border-[var(--color-border)] px-3 py-2 text-[var(--color-text-primary)]">
                     <p className="whitespace-pre-wrap">{item.reply.answer}</p>
+                    {describeResult(item.reply) && <p className="mt-2 leading-relaxed text-[var(--color-text-primary)]">{describeResult(item.reply)}</p>}
                     <p className="mt-2 text-[10px] text-[var(--color-text-tertiary)]">Tool: {item.reply.tool} · {item.reply.method}</p>
                     <p className="mt-1 text-[10px] text-[var(--color-text-secondary)]">{item.reply.data_quality_caveat}</p>
                     {item.reply.result?.status === 'UNAVAILABLE' && <p className="mt-1 font-medium text-[var(--color-warning)]">UNAVAILABLE: {item.reply.result.reason || 'Required data is not available.'}</p>}
-                    {item.reply.evidence.length > 0 && <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1"><span className="text-[10px] text-[var(--color-text-tertiary)]">Evidence:</span>{item.reply.evidence.slice(0, 4).map((href) => <Link key={href} href={href} className="text-[10px] text-[var(--color-accent)] underline">Open</Link>)}</div>}
+                    <div className="mt-3 flex flex-wrap items-center gap-3">
+                      {(item.reply.tool === 'delay_analysis' || item.reply.tool === 'cohort_statistics') && <Link href="/delays" className="rounded-md bg-[var(--color-accent)] px-2.5 py-1.5 text-[10px] font-medium text-white hover:opacity-90">View delays &amp; bottlenecks →</Link>}
+                      {item.reply.evidence.length > 0 && <span className="flex items-center gap-2 text-[10px] text-[var(--color-text-tertiary)]">Evidence: {item.reply.evidence.slice(0, 4).map((href) => <Link key={href} href={href} className="text-[var(--color-accent)] underline">Open</Link>)}</span>}
+                    </div>
                   </div>
                 ) : (
                   <div className="px-3 py-2 text-[var(--color-text-tertiary)]">Using governed tools…</div>
