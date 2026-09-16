@@ -18,6 +18,7 @@ from apps.api.auth.dependencies import require
 from apps.api.auth.principal import UserPrincipal
 from apps.api.core.database import get_db
 from apps.api.models.analytics import KPI, KPIFormulaVersion, KPIResult
+from apps.api.models.ingestion import IngestionBatch
 from apps.api.services.kpi.benchmarks import KPIBenchmarkService
 from apps.api.services.kpi.engine import KPIEngine
 from apps.api.services.kpi.registry import ensure_kpi_registry
@@ -124,7 +125,65 @@ def get_scorecard(
     """
     target_tenant = _resolve_tenant(principal, tenant_id)
     engine = KPIEngine(db, tenant_id=target_tenant)
-    calc_res = engine.calculate_all_kpis()
+
+    # Scorecards are read far more often than they are recalculated.  The ingestion
+    # pipeline persists the governed ALL-grain result for every KPI, so reuse that
+    # complete snapshot instead of running all 55 formulas (and their canonical
+    # data loads) on every page request.  Fall back to the engine when a complete
+    # snapshot is not available or predates the active committed batch.
+    kpi_map = engine.ensure_registry()
+    persisted_rows = db.execute(
+        select(KPIResult)
+        .where(
+            KPIResult.period_start.is_(None),
+            KPIResult.period_end.is_(None),
+            KPIResult.grain == "ALL",
+            KPIResult.cohort_key == "all",
+            KPIResult.cohort_filters.is_(None),
+            KPIResult.is_recalculation == False,
+            KPIResult.kpi_id.in_([k.id for k in kpi_map.values()]),
+        )
+        .order_by(KPIResult.calculated_at.desc())
+    ).scalars().all()
+    latest_by_kpi: dict[Any, KPIResult] = {}
+    for row in persisted_rows:
+        latest_by_kpi.setdefault(row.kpi_id, row)
+
+    active_batch = db.execute(
+        select(IngestionBatch)
+        .where(IngestionBatch.tenant_id == target_tenant, IngestionBatch.is_active == True, IngestionBatch.status == "COMMITTED")
+        .order_by(IngestionBatch.created_at.desc())
+    ).scalars().first()
+    snapshot_is_current = bool(latest_by_kpi) and len(latest_by_kpi) == len(kpi_map) and (
+        not active_batch
+        or all(row.calculated_at is not None and row.calculated_at >= active_batch.created_at for row in latest_by_kpi.values())
+    )
+
+    if snapshot_is_current:
+        results = {
+            code: {
+                "kpi_id": str(row.kpi_id),
+                "code": code,
+                "name": kpi_map[code].name,
+                "value": row.value,
+                "status": row.status,
+                "band": row.band,
+                "unit": kpi_map[code].unit,
+                "target": row.target_value,
+                "is_primary": kpi_map[code].is_primary,
+            }
+            for code, kpi in kpi_map.items()
+            for row in [latest_by_kpi[kpi.id]]
+        }
+        calc_res = {
+            "total_kpis": len(results),
+            "computed": sum(1 for item in results.values() if item["status"] == "COMPUTED"),
+            "no_source_data": sum(1 for item in results.values() if item["status"] == "NO_SOURCE_DATA"),
+            "unavailable": sum(1 for item in results.values() if item["status"] == "UNAVAILABLE"),
+            "results": results,
+        }
+    else:
+        calc_res = engine.calculate_all_kpis()
 
     # Organize by category
     kpi_objs = db.execute(select(KPI).order_by(KPI.kpi_number.asc())).scalars().all()
