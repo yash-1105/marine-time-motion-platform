@@ -7,6 +7,7 @@ import { useAuth } from '../lib/auth-context'
 import { useDatasetStatus } from '../lib/dataset-context'
 import { GlobalFilterBar } from './GlobalFilterBar'
 import { EmptyState, LoadingState, ErrorState } from './ui'
+import { FloatingCopilot } from './FloatingCopilot'
 
 // Pages whose data is actually driven by the global Scope filter bar.
 // Other pages either use their own local filters or are record/detail-specific,
@@ -243,6 +244,7 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
           )}
         </main>
       </div>
+      <FloatingCopilot />
     </div>
   )
 }
