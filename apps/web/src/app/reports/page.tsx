@@ -4,13 +4,21 @@ import { useEffect, useState } from 'react'
 import { Card, PageHeader } from '@/components/ui'
 import { useAuth } from '@/lib/auth-context'
 
-const api = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1'
+const api = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000') + '/api/v1'
 type Template = { template_id: string; name: string; version: string; status: string; sections: string[] }
 
 export default function ReportsPage() {
   const { token } = useAuth() as { token?: string }
   const [templates, setTemplates] = useState<Template[]>([]); const [message, setMessage] = useState('')
-  useEffect(() => { fetch(`${api}/reports/templates`, { headers: { Authorization: `Bearer ${token || 'dev-token'}` } }).then(r => r.json()).then(setTemplates).catch(() => setMessage('Unable to load report templates.')) }, [token])
+  useEffect(() => {
+    fetch(`${api}/reports/templates`, { headers: { Authorization: `Bearer ${token || 'dev-token'}` } })
+      .then(async (response) => {
+        const payload = await response.json()
+        if (!response.ok || !Array.isArray(payload)) throw new Error('Unable to load report templates.')
+        setTemplates(payload)
+      })
+      .catch(() => setMessage('Unable to load report templates.'))
+  }, [token])
   async function runNow() {
     setMessage('Creating Daily Operations run…')
     const h = { 'Content-Type': 'application/json', Authorization: `Bearer ${token || 'dev-token'}` }
