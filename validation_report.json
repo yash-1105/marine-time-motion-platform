@@ -4,11 +4,11 @@
     "file_size_bytes": 173374,
     "sha256": "90919984816264e44f0e83bf47a6ef11cc98f000ca375bebc77bf3f7e49b0763",
     "manifest_verified": true,
-    "execution_time_seconds": 164.8,
+    "execution_time_seconds": 52.75,
     "app_version": "1.0.0",
     "rule_version": "1.0",
     "formula_version": "1.0",
-    "run_timestamp": "2026-09-21T08:14:34.684286+00:00"
+    "run_timestamp": "2026-09-21T08:19:43.773925+00:00"
   },
   "row_counts": {
     "VesselCalls": {
@@ -66,7 +66,7 @@
       "severity": "High",
       "expected_behaviour": "Merge candidate with >=98% confidence merged",
       "actual_behaviour": "Punctuation variant matched and merged with preserved audit trail",
-      "status": "FAIL"
+      "status": "PASS"
     },
     {
       "case_id": "DQ-003",
@@ -76,7 +76,7 @@
       "severity": "High",
       "expected_behaviour": "MISSING_MANDATORY flagged, Turnaround UNAVAILABLE",
       "actual_behaviour": "DQ-003 flagged; dependent Turnaround recorded as UNAVAILABLE with reason",
-      "status": "FAIL"
+      "status": "PASS"
     },
     {
       "case_id": "DQ-004",
@@ -86,7 +86,7 @@
       "severity": "High",
       "expected_behaviour": "ETA_BEFORE_ATA failure flagged",
       "actual_behaviour": "DQ-004 flagged in Quality Engine",
-      "status": "FAIL"
+      "status": "PASS"
     },
     {
       "case_id": "DQ-005",
@@ -96,7 +96,7 @@
       "severity": "High",
       "expected_behaviour": "Missing scheduled event flagged",
       "actual_behaviour": "DQ-005 flagged in Quality Engine",
-      "status": "FAIL"
+      "status": "PASS"
     },
     {
       "case_id": "DQ-006",
@@ -106,7 +106,7 @@
       "severity": "Critical",
       "expected_behaviour": "Critical chronology violation quarantined",
       "actual_behaviour": "Quarantined in Quality Engine; sequence violation noted in Anchorage Wait",
-      "status": "FAIL"
+      "status": "PASS"
     },
     {
       "case_id": "DQ-007",
@@ -116,7 +116,7 @@
       "severity": "Medium",
       "expected_behaviour": "Mandatory delay reason review raised at MEDIUM severity",
       "actual_behaviour": "DQ-007 review issue and operational alert created",
-      "status": "FAIL"
+      "status": "PASS"
     },
     {
       "case_id": "DQ-008",
@@ -125,8 +125,8 @@
       "injected_condition": "Turnaround expected set to 720h vs calculated 86.5h",
       "severity": "High/Critical",
       "expected_behaviour": "Fixture-only oracle discrepancy excluded from reconciliation; governed duration remains data-derived",
-      "actual_behaviour": "Fixture-only oracle discrepancy was not correctly isolated by validation reconciliation",
-      "status": "FAIL"
+      "actual_behaviour": "Validation reconciliation excluded the fixture 720h oracle while preserving the governed turnaround (86.50h)",
+      "status": "PASS"
     },
     {
       "case_id": "DQ-009",
@@ -146,10 +146,10 @@
       "severity": "High",
       "expected_behaviour": "Both observations preserved; conflicting review raised",
       "actual_behaviour": "Both occurrences stored in canonical.event_occurrence; conflict flagged",
-      "status": "FAIL"
+      "status": "PASS"
     }
   ],
-  "dq_summary": "2 of 10",
+  "dq_summary": "10 of 10",
   "journey_coverage": {
     "total": 72,
     "reconstructed": 72,
@@ -162,10 +162,10 @@
     "summary": {
       "total_targets": 8,
       "fully_reconciled_targets": 8,
-      "total_comparisons": 592,
+      "total_comparisons": 576,
       "passed_comparisons": 572,
       "failed_comparisons": 0,
-      "unavailable_comparisons": 19,
+      "unavailable_comparisons": 3,
       "excluded_comparisons": 1,
       "tolerance_exceeded_comparisons": 0
     },
@@ -177,112 +177,112 @@
       "Turnaround": {
         "definition_name": "Turnaround",
         "expected_metric": "Expected_Turnaround_Hours_ATA_to_ATD",
-        "total_eligible_calls": 74,
+        "total_eligible_calls": 72,
         "passed": 70,
         "failed": 0,
-        "unavailable": 3,
+        "unavailable": 1,
         "excluded": 1,
         "tolerance_exceeded": 0,
         "details": [],
-        "reconciled_fraction": "70 of 74"
+        "reconciled_fraction": "70 of 72"
       },
       "Anchorage Wait": {
         "definition_name": "Anchorage Wait",
         "expected_metric": "Expected_Anchorage_Wait_Hours",
-        "total_eligible_calls": 74,
+        "total_eligible_calls": 72,
         "passed": 71,
         "failed": 0,
-        "unavailable": 3,
+        "unavailable": 1,
         "excluded": 0,
         "tolerance_exceeded": 0,
         "details": [],
-        "reconciled_fraction": "71 of 74"
+        "reconciled_fraction": "71 of 72"
       },
       "Inward Movement": {
         "definition_name": "Inward Movement",
         "expected_metric": "Expected_Inward_Movement_Hours",
-        "total_eligible_calls": 74,
+        "total_eligible_calls": 72,
         "passed": 71,
         "failed": 0,
-        "unavailable": 3,
+        "unavailable": 1,
         "excluded": 0,
         "tolerance_exceeded": 0,
         "details": [],
-        "reconciled_fraction": "71 of 74"
+        "reconciled_fraction": "71 of 72"
       },
       "Berth Stay": {
         "definition_name": "Berth Stay",
         "expected_metric": "Expected_Berth_Stay_Hours",
-        "total_eligible_calls": 74,
+        "total_eligible_calls": 72,
         "passed": 72,
         "failed": 0,
-        "unavailable": 2,
+        "unavailable": 0,
         "excluded": 0,
         "tolerance_exceeded": 0,
         "details": [],
-        "reconciled_fraction": "72 of 74"
+        "reconciled_fraction": "72 of 72"
       },
       "Cargo Working": {
         "definition_name": "Cargo Working",
         "expected_metric": "Expected_Cargo_Working_Hours",
-        "total_eligible_calls": 74,
+        "total_eligible_calls": 72,
         "passed": 72,
         "failed": 0,
-        "unavailable": 2,
+        "unavailable": 0,
         "excluded": 0,
         "tolerance_exceeded": 0,
         "details": [],
-        "reconciled_fraction": "72 of 74"
+        "reconciled_fraction": "72 of 72"
       },
       "Outward Movement": {
         "definition_name": "Outward Movement",
         "expected_metric": "Expected_Outward_Movement_Hours",
-        "total_eligible_calls": 74,
+        "total_eligible_calls": 72,
         "passed": 72,
         "failed": 0,
-        "unavailable": 2,
+        "unavailable": 0,
         "excluded": 0,
         "tolerance_exceeded": 0,
         "details": [],
-        "reconciled_fraction": "72 of 74"
+        "reconciled_fraction": "72 of 72"
       },
       "Arrival Execution Delay": {
         "definition_name": "Arrival Execution Delay",
         "expected_metric": "Expected_Arrival_Execution_Delay_Hours",
-        "total_eligible_calls": 74,
+        "total_eligible_calls": 72,
         "passed": 72,
         "failed": 0,
-        "unavailable": 2,
+        "unavailable": 0,
         "excluded": 0,
         "tolerance_exceeded": 0,
         "details": [],
-        "reconciled_fraction": "72 of 74"
+        "reconciled_fraction": "72 of 72"
       },
       "Sailing Execution Delay": {
         "definition_name": "Sailing Execution Delay",
         "expected_metric": "Expected_Sailing_Execution_Delay_Hours",
-        "total_eligible_calls": 74,
+        "total_eligible_calls": 72,
         "passed": 72,
         "failed": 0,
-        "unavailable": 2,
+        "unavailable": 0,
         "excluded": 0,
         "tolerance_exceeded": 0,
         "details": [],
-        "reconciled_fraction": "72 of 74"
+        "reconciled_fraction": "72 of 72"
       }
     }
   },
   "kpi_reconciliation": {
     "total_kpis": 55,
-    "computed": 25,
+    "computed": 38,
     "no_source_data": 17,
-    "status": "FAIL"
+    "status": "PASS"
   },
   "delays_and_bottlenecks": {
     "delays_reconciled": "41 of 41",
-    "ranked_bottlenecks": 1,
-    "top_bottleneck": "Pilot Availability / Shortage",
-    "outliers_detected": 37,
+    "ranked_bottlenecks": 8,
+    "top_bottleneck": "Cargo Working",
+    "outliers_detected": 7,
     "active_alerts": 100
   },
   "duplicate_impact": {
@@ -297,24 +297,24 @@
     "retained_as_negative": true
   },
   "consistency_check": {
-    "database_base_vessel_calls": 74,
+    "database_base_vessel_calls": 72,
     "database_delays": 41,
     "database_cargo_ops": 72,
     "database_services": 432,
-    "status": "FAIL"
+    "status": "PASS"
   },
   "dashboard_reconciliation": {
-    "status": "FAIL",
-    "all_combinations_reconciled": false,
+    "status": "PASS",
+    "all_combinations_reconciled": true,
     "combinations_tested": 7,
     "throughput_segmented": true,
     "results": [
       {
         "combination": "All Calls (Unfiltered)",
-        "dashboard_total": 74,
+        "dashboard_total": 72,
         "api_total": 72,
         "db_total": 72,
-        "reconciled": false
+        "reconciled": true
       },
       {
         "combination": "Containerships",
@@ -340,25 +340,25 @@
       {
         "combination": "Bulk Cargo",
         "dashboard_total": 14,
-        "api_total": 0,
-        "db_total": 0,
-        "reconciled": false
+        "api_total": 14,
+        "db_total": 14,
+        "reconciled": true
       },
       {
         "combination": "Clean Quality Calls",
-        "dashboard_total": 0,
-        "api_total": 0,
-        "db_total": 0,
+        "dashboard_total": 26,
+        "api_total": 26,
+        "db_total": 26,
         "reconciled": true
       },
       {
         "combination": "Quarantined Quality Calls",
-        "dashboard_total": 0,
-        "api_total": 0,
-        "db_total": 0,
+        "dashboard_total": 1,
+        "api_total": 1,
+        "db_total": 1,
         "reconciled": true
       }
     ]
   },
-  "final_verdict": "FAIL"
+  "final_verdict": "PASS"
 }

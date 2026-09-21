@@ -31,6 +31,7 @@ from apps.api.models.canonical import (
     VesselCall,
 )
 from apps.api.models.config import EventDefinition
+from apps.api.models.ingestion import IngestionBatch, StagingRecord
 from apps.api.models.journey import CanonicalObservation
 
 from .catalogue import ensure_catalogue
@@ -110,12 +111,16 @@ class AnalyticsEngine:
         vc_ids = [vc.id for vc in vessel_calls]
         existing_results = {}
         if vc_ids:
-            rows = self.db.execute(
-                select(LeadTimeResult).where(
-                    LeadTimeResult.definition_id == defn.id,
-                    LeadTimeResult.vessel_call_id.in_(vc_ids),
+            rows = (
+                self.db.execute(
+                    select(LeadTimeResult).where(
+                        LeadTimeResult.definition_id == defn.id,
+                        LeadTimeResult.vessel_call_id.in_(vc_ids),
+                    )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
             for r in rows:
                 if r.vessel_call_id in existing_results:
                     # Remove duplicate row to maintain 1:1 definition-to-call invariant
@@ -180,14 +185,21 @@ class AnalyticsEngine:
 
         # Per AGENTS.md §6: Turnaround definition is VesselCalls.ATD - VesselCalls.ATA
         if defn.name == "Turnaround":
-            from apps.api.models.ingestion import StagingRecord
-            vc_staging = self.db.execute(
-                select(StagingRecord).where(
-                    StagingRecord.canonical_table == 'vessel_call',
-                    StagingRecord.parsed_data["VCN"].as_string() == vc.vcn
+            staging_stmt = (
+                select(StagingRecord)
+                .join(IngestionBatch, IngestionBatch.batch_id == StagingRecord.ingestion_batch_id)
+                .where(
+                    StagingRecord.canonical_table == "vessel_call",
+                    StagingRecord.parsed_data["VCN"].as_string() == vc.vcn,
+                    IngestionBatch.tenant_id == self.tenant_id,
+                    IngestionBatch.status.in_(["PROCESSING", "COMMITTED"]),
                 )
-            ).scalars().first()
-            if vc_staging and (not vc_staging.parsed_data.get("ATA") or str(vc_staging.parsed_data.get("ATA")).strip() == ""):
+                .order_by(IngestionBatch.created_at.desc())
+            )
+            vc_staging = self.db.execute(staging_stmt).scalars().first()
+            if vc_staging and (
+                not vc_staging.parsed_data.get("ATA") or str(vc_staging.parsed_data.get("ATA")).strip() == ""
+            ):
                 row.status = "UNAVAILABLE"
                 row.duration_hours = None
                 row.unavailable_reason = "Required timestamp 'ATA' is blank in VesselCalls (DQ-003)"
@@ -403,14 +415,12 @@ class AnalyticsEngine:
         Percentiles use explicit linear interpolation.
         """
         # Fetch definition
-        defn = self.db.execute(
-            select(LeadTimeDefinition).where(LeadTimeDefinition.id == definition_id)
-        ).scalar_one()
+        defn = self.db.execute(select(LeadTimeDefinition).where(LeadTimeDefinition.id == definition_id)).scalar_one()
 
         # Query all LeadTimeResults for this definition
-        results = self.db.execute(
-            select(LeadTimeResult).where(LeadTimeResult.definition_id == definition_id)
-        ).scalars().all()
+        results = (
+            self.db.execute(select(LeadTimeResult).where(LeadTimeResult.definition_id == definition_id)).scalars().all()
+        )
 
         total_eligible = len(results)
         available_rows = [r for r in results if r.status == "AVAILABLE" and r.duration_hours is not None]
@@ -459,10 +469,12 @@ class AnalyticsEngine:
             return agg
 
         # Build Polars DataFrame for statistical computation
-        df = pl.DataFrame({
-            "vcn": [r.vcn or "" for r in available_rows],
-            "duration": [r.duration_hours for r in available_rows],
-        })
+        df = pl.DataFrame(
+            {
+                "vcn": [r.vcn or "" for r in available_rows],
+                "duration": [r.duration_hours for r in available_rows],
+            }
+        )
         s = df["duration"]
 
         obs_cnt = len(s)

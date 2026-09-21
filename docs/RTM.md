@@ -116,7 +116,7 @@
 | REQ-112 | 21A.1 Dataset files and expected package handling | Label the data as synthetic in all environments and screens.... | Core | test_req_112 | NOT_STARTED |
 | REQ-113 | 21A.1 Dataset files and expected package handling | Prevent synthetic data from being confused or combined with production data.... | Core | test_req_113 | NOT_STARTED |
 | REQ-114 | 21A.1 Dataset files and expected package handling | Import using the same ingestion, mapping, validation, lineage, journey reconstru... | kpi | test_req_114 | NOT_STARTED |
-| REQ-115 | 21A.1 Dataset files and expected package handling | Be idempotent. Re-importing the same workbook must not unintentionally multiply ... | Core | test_req_115 | NOT_STARTED |
+| REQ-115 | 21A.1 Dataset files and expected package handling | Be idempotent. Re-importing the same workbook must not unintentionally multiply ... | ingestion | `test_dataset_upload_queues_analytics_and_worker_commits_batch`, `test_reset_removes_staging_rows_before_batch_rows` | IMPLEMENTED |
 | REQ-116 | 21A.1 Dataset files and expected package handling | Allow complete removal/reset of the synthetic dataset without affecting other da... | Core | test_req_116 | NOT_STARTED |
 | REQ-117 | 21A.1 Dataset files and expected package handling | Display an import summary with accepted, rejected, quarantined, duplicate, merge... | identity | test_identity_engine | IMPLEMENTED |
 | REQ-118 | 21A.1 Dataset files and expected package handling | Preserve workbook name, worksheet name, row number, ingestion batch, checksum, a... | ingestion | test_req_118 | NOT_STARTED |

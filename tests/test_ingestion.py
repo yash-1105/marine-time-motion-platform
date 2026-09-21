@@ -10,7 +10,8 @@ from sqlalchemy.orm import sessionmaker
 from apps.api.core.config import settings
 from apps.api.main import app
 from apps.api.models.analytics import DashboardSnapshot
-from apps.api.models.ingestion import IngestionBatch
+from apps.api.models.ingestion import IngestionBatch, StagingRecord
+from apps.api.services.ingestion.synthetic import reset_tenant_dataset
 from apps.worker.main import process_ingestion_analytics_task
 from testkit.loader import load_synthetic_dataset
 
@@ -160,3 +161,14 @@ def test_dataset_removal_clears_active_state(auth_headers, db_session):
     # routes never load governed test fixtures.
     restored_batch = load_synthetic_dataset(db_session, "fixtures/Synthetic_Marine_Time_Motion_Test_Data.xlsx")
     assert restored_batch is not None
+
+
+def test_reset_removes_staging_rows_before_batch_rows(db_session):
+    """A tenant reset must not leave stale staging evidence for a later dataset."""
+    batch = load_synthetic_dataset(db_session, "fixtures/Synthetic_Marine_Time_Motion_Test_Data.xlsx")
+    assert db_session.execute(select(StagingRecord).where(StagingRecord.ingestion_batch_id == batch)).scalars().first()
+    reset_tenant_dataset(db_session, "synthetic-tenant")
+    assert (
+        db_session.execute(select(StagingRecord).where(StagingRecord.ingestion_batch_id == batch)).scalars().first()
+        is None
+    )
