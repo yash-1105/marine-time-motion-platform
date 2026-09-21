@@ -567,7 +567,7 @@ export default function DelaysAndBottlenecksPage() {
 
   return (
     <div className="flex flex-col min-h-full">
-      <PageHeader title="Delays & Bottlenecks" description="Understand delay causes, operational constraints, outliers, criticality, and resulting actions." />
+      <PageHeader title="Delays & Bottlenecks" />
 
       <div className="px-6 py-6 space-y-6">
         {/* KPI Row */}

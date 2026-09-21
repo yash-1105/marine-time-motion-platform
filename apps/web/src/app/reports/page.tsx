@@ -75,7 +75,7 @@ export default function ReportsPage() {
 
   return (
     <div className="min-h-full bg-[var(--color-bg)]">
-      <PageHeader title="Reports" description="Generate and review governed operational reports from the same persisted analytics used across the platform." />
+      <PageHeader title="Reports" />
       <div className="mx-auto w-full max-w-7xl space-y-6 p-6 lg:p-8">
         {message && <div className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3 text-sm text-[var(--color-text-secondary)] shadow-[var(--shadow-xs)]" role="status">{message}</div>}
 

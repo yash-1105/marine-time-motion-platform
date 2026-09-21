@@ -412,10 +412,12 @@ function VesselJourneyContent() {
             {/* Header */}
             <PageHeader
               title={`${journey.vcn} — ${journey.vessel_name}`}
-              description="Reconstructed operational journey with stage timing, evidence, handovers, and exception context."
               meta={
                 <div className="flex flex-col gap-1.5">
                   <div className="flex gap-4 flex-wrap items-center">
+                    <span className="font-semibold text-[var(--color-text-primary)]">
+                      {journey.vcn} · {journey.vessel_name}
+                    </span>
                     <span>
                       Status: <StatusBadge status={journey.status} showGlyph={false} className="ml-1" />
                     </span>

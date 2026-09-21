@@ -154,7 +154,7 @@ export default function IngestionPage() {
 
   return (
     <div className="flex-1 flex flex-col h-full bg-[var(--color-bg)] overflow-y-auto">
-      <PageHeader title="Data Ingestion" description="Manage the governed operations dataset used across dashboards and analytics." />
+      <PageHeader title="Data Ingestion" />
 
       {/* Hidden file input for "Add New" action */}
       <input

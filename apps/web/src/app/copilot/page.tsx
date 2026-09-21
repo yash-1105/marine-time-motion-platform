@@ -47,7 +47,7 @@ export default function CopilotPage() {
 
   return (
     <div className="flex min-h-full flex-col bg-[var(--color-bg)]">
-      <PageHeader title="Copilot" description="Ask questions across governed operational data. Responses remain access-scoped, reproducible, and linked to evidence." meta={<StatusBadge label="Governed tool access" tone="good" />} />
+      <PageHeader title="Copilot" meta={<StatusBadge label="Governed tool access" tone="good" />} />
       <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col p-6 lg:p-8">
         <Card padded={false} className="flex min-h-[560px] flex-1 flex-col overflow-hidden">
           <div className="flex items-center gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface-subtle)] px-5 py-4">

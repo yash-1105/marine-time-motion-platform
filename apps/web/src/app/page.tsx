@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { useAuth } from '../lib/auth-context'
-import { Anchor, CircleCheck, Info, RefreshCw, TriangleAlert, X } from 'lucide-react'
+import { Anchor, ArrowUpRight, Box, CircleCheck, Info, RefreshCw, Scale, TriangleAlert, UsersRound, X } from 'lucide-react'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
@@ -286,9 +286,6 @@ function ExecutiveDashboardContent() {
   if (data.summary.total_vessel_calls === 0) {
     return (
       <div className="flex-1 flex flex-col h-full bg-[var(--color-bg)]">
-        <div className="bg-[var(--color-surface)] border-b border-[var(--color-border)] px-6 py-5 flex items-center justify-between">
-          <h1 className="text-xl font-semibold text-[var(--color-text-primary)]">Executive Dashboard</h1>
-        </div>
         <div className="flex-1 flex items-center justify-center p-8">
           <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg p-8 max-w-md w-full text-center space-y-4 shadow-sm">
             <div className="w-12 h-12 rounded-[var(--radius-lg)] bg-[var(--color-accent-soft)] text-[var(--color-accent)] flex items-center justify-center mx-auto">
@@ -314,13 +311,8 @@ function ExecutiveDashboardContent() {
 
   return (
     <div className="flex-1 flex flex-col h-full bg-[var(--color-bg)] overflow-y-auto">
-      {/* Page header */}
-      <div className="bg-[var(--color-surface)] border-b border-[var(--color-border)] px-6 lg:px-8 py-5 flex flex-wrap items-start justify-between gap-4 flex-shrink-0">
-        <div>
-          <h1 className="text-[26px] leading-8 font-semibold text-[var(--color-text-primary)] tracking-[-0.025em]">Executive Dashboard</h1>
-          <p className="mt-1 text-sm text-[var(--color-text-secondary)]">A governed operational view of vessel flow, quality, throughput, and performance.</p>
-        </div>
-
+      {/* Compact page actions; the application shell owns the primary heading. */}
+      <div className="min-h-12 bg-[var(--color-surface)] border-b border-[var(--color-border)] px-6 lg:px-8 py-2.5 flex flex-wrap items-center justify-end gap-3 flex-shrink-0" aria-label="Executive Dashboard controls">
         <div className="flex items-center gap-2.5">
           <button
             onClick={fetchReconciliation}
@@ -376,37 +368,37 @@ function ExecutiveDashboardContent() {
       )}
 
       {/* Main Dashboard Canvas */}
-      <div className="p-6 lg:p-8 space-y-6 flex-1">
+      <div className="p-6 lg:p-8 space-y-5 flex-1">
         {/* 2. Top Metric Cards (Calls & Cleanliness) */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
           {/* Total Calls */}
-          <div className="relative overflow-hidden bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[var(--radius-lg)] p-5 flex flex-col justify-between shadow-[var(--shadow-xs)] before:absolute before:inset-x-0 before:top-0 before:h-0.5 before:bg-[var(--color-accent)]">
-            <div className="flex items-center justify-between text-[var(--color-text-secondary)] text-xs font-medium">
+          <div className="group relative overflow-hidden bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[var(--radius-lg)] p-5 flex flex-col justify-between shadow-[var(--shadow-xs)] transition-[border-color,box-shadow,transform] duration-150 hover:border-[var(--color-accent-soft-border)] hover:shadow-[var(--shadow-sm)] before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:bg-[var(--color-accent)]">
+            <div className="flex items-center justify-between text-[var(--color-text-secondary)] text-xs font-semibold">
               <span>Active Vessel Calls</span>
               <span className="text-[11px] text-[var(--color-text-tertiary)]">Non-merged</span>
             </div>
             <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-3xl font-semibold text-[var(--color-text-primary)]">{data.summary.total_vessel_calls}</span>
+              <span className="text-[32px] leading-none tabular-nums font-semibold tracking-[-0.035em] text-[var(--color-text-primary)]">{data.summary.total_vessel_calls}</span>
             </div>
             <div className="mt-3 pt-3 border-t border-[var(--color-border)] flex items-center justify-between text-xs">
               <span className="text-[var(--color-text-secondary)]">{data.summary.total_merged_calls} duplicates merged</span>
-              <Link href="/vessel-calls" className="text-[var(--color-accent)] hover:underline font-medium">
-                View list →
+              <Link href="/vessel-calls" className="inline-flex items-center gap-1 rounded px-1.5 py-1 -mr-1.5 font-semibold text-[var(--color-accent)] hover:bg-[var(--color-accent-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]">
+                View list <ArrowUpRight size={12} aria-hidden="true" />
               </Link>
             </div>
           </div>
 
           {/* Clean Quality */}
-          <div className="relative overflow-hidden bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[var(--radius-lg)] p-5 flex flex-col justify-between shadow-[var(--shadow-xs)] before:absolute before:inset-x-0 before:top-0 before:h-0.5 before:bg-[var(--color-good)]">
-            <div className="flex items-center justify-between text-[var(--color-text-secondary)] text-xs font-medium">
+          <div className="relative overflow-hidden bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[var(--radius-lg)] p-5 flex flex-col justify-between shadow-[var(--shadow-xs)] transition-[border-color,box-shadow] duration-150 hover:border-[var(--color-good-border)] hover:shadow-[var(--shadow-sm)] before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:bg-[var(--color-good)]">
+            <div className="flex items-center justify-between text-[var(--color-text-secondary)] text-xs font-semibold">
               <span>Clean Calls</span>
               <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-[var(--color-good-bg)] text-[var(--color-good)] border border-[var(--color-good-border)]">
                 CLEAN
               </span>
             </div>
             <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-3xl font-semibold text-[var(--color-text-primary)]">{data.summary.clean_calls_count}</span>
-              <span className="text-xs text-[var(--color-text-tertiary)]">({data.summary.cleanliness_pct}%)</span>
+              <span className="text-[32px] leading-none tabular-nums font-semibold tracking-[-0.035em] text-[var(--color-text-primary)]">{data.summary.clean_calls_count}</span>
+              <span className="rounded bg-[var(--color-good-bg)] px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-[var(--color-good)]">{data.summary.cleanliness_pct}%</span>
             </div>
             <div className="mt-3 pt-3 border-t border-[var(--color-border)] text-xs text-[var(--color-text-secondary)]">
               Zero open quality exceptions
@@ -414,17 +406,17 @@ function ExecutiveDashboardContent() {
           </div>
 
           {/* Flagged Quality */}
-          <div className="relative overflow-hidden bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[var(--radius-lg)] p-5 flex flex-col justify-between shadow-[var(--shadow-xs)] before:absolute before:inset-x-0 before:top-0 before:h-0.5 before:bg-[var(--color-warning)]">
-            <div className="flex items-center justify-between text-[var(--color-text-secondary)] text-xs font-medium">
+          <div className="relative overflow-hidden bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[var(--radius-lg)] p-5 flex flex-col justify-between shadow-[var(--shadow-xs)] transition-[border-color,box-shadow] duration-150 hover:border-[var(--color-warning-border)] hover:shadow-[var(--shadow-sm)] before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:bg-[var(--color-warning)]">
+            <div className="flex items-center justify-between text-[var(--color-text-secondary)] text-xs font-semibold">
               <span>Flagged Calls</span>
               <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-[var(--color-warning-bg)] text-[var(--color-warning)] border border-[var(--color-warning-border)]">
                 FLAGGED
               </span>
             </div>
             <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-3xl font-semibold text-[var(--color-text-primary)]">{data.summary.flagged_calls_count}</span>
-              <span className="text-xs text-[var(--color-text-tertiary)]">
-                ({roundPct(data.summary.flagged_calls_count, data.summary.total_vessel_calls)}%)
+              <span className="text-[32px] leading-none tabular-nums font-semibold tracking-[-0.035em] text-[var(--color-text-primary)]">{data.summary.flagged_calls_count}</span>
+              <span className="rounded bg-[var(--color-warning-bg)] px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-[var(--color-warning)]">
+                {roundPct(data.summary.flagged_calls_count, data.summary.total_vessel_calls)}%
               </span>
             </div>
             <div className="mt-3 pt-3 border-t border-[var(--color-border)] text-xs text-[var(--color-text-secondary)]">
@@ -433,23 +425,23 @@ function ExecutiveDashboardContent() {
           </div>
 
           {/* Quarantined Quality */}
-          <div className="relative overflow-hidden bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[var(--radius-lg)] p-5 flex flex-col justify-between shadow-[var(--shadow-xs)] before:absolute before:inset-x-0 before:top-0 before:h-0.5 before:bg-[var(--color-critical)]">
-            <div className="flex items-center justify-between text-[var(--color-text-secondary)] text-xs font-medium">
+          <div className="group relative overflow-hidden bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[var(--radius-lg)] p-5 flex flex-col justify-between shadow-[var(--shadow-xs)] transition-[border-color,box-shadow] duration-150 hover:border-[var(--color-critical-border)] hover:shadow-[var(--shadow-sm)] before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:bg-[var(--color-critical)]">
+            <div className="flex items-center justify-between text-[var(--color-text-secondary)] text-xs font-semibold">
               <span>Quarantined Calls</span>
               <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-[var(--color-critical-bg)] text-[var(--color-critical)] border border-[var(--color-critical-border)]">
                 QUARANTINED
               </span>
             </div>
             <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-3xl font-semibold text-[var(--color-text-primary)]">{data.summary.quarantined_calls_count}</span>
-              <span className="text-xs text-[var(--color-text-tertiary)]">
-                ({roundPct(data.summary.quarantined_calls_count, data.summary.total_vessel_calls)}%)
+              <span className="text-[32px] leading-none tabular-nums font-semibold tracking-[-0.035em] text-[var(--color-text-primary)]">{data.summary.quarantined_calls_count}</span>
+              <span className="rounded bg-[var(--color-critical-bg)] px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-[var(--color-critical)]">
+                {roundPct(data.summary.quarantined_calls_count, data.summary.total_vessel_calls)}%
               </span>
             </div>
             <div className="mt-3 pt-3 border-t border-[var(--color-border)] flex items-center justify-between text-xs">
               <span className="text-[var(--color-critical)] font-medium">Excluded from KPIs</span>
-              <Link href="/data-quality" className="text-[var(--color-accent)] hover:underline font-medium">
-                Inspect issues →
+              <Link href="/data-quality" className="inline-flex items-center gap-1 rounded px-1.5 py-1 -mr-1.5 font-semibold text-[var(--color-accent)] hover:bg-[var(--color-accent-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]">
+                Inspect issues <ArrowUpRight size={12} aria-hidden="true" />
               </Link>
             </div>
           </div>
@@ -470,43 +462,43 @@ function ExecutiveDashboardContent() {
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {/* TEU */}
-            <div className="bg-[var(--color-surface-muted)] border border-[var(--color-border)] rounded-lg p-4">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-medium text-[var(--color-text-secondary)]">Containerized Volume</span>
+            <div className="bg-[var(--color-surface-subtle)] border border-[var(--color-border)] rounded-[var(--radius-lg)] p-4 transition-[border-color,background-color] duration-150 hover:border-[var(--color-accent-soft-border)] hover:bg-[var(--color-surface)]">
+              <div className="flex items-center justify-between gap-3">
+                <span className="flex items-center gap-2 text-xs font-semibold text-[var(--color-text-secondary)]"><Box size={15} className="text-[var(--color-accent)]" aria-hidden="true" />Containerized Volume</span>
                 <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-[var(--color-accent-soft)] text-[var(--color-accent)] border border-[var(--color-accent-soft-border)]">
                   TEU
                 </span>
               </div>
-              <div className="mt-2 text-2xl font-semibold text-[var(--color-text-primary)]">
-                {fmtNum(data.throughput.teu, 0)} <span className="text-xs font-normal text-[var(--color-text-tertiary)]">TEU</span>
+              <div className="mt-3 flex items-baseline gap-1.5 text-[26px] leading-none tabular-nums font-semibold tracking-[-0.025em] text-[var(--color-text-primary)]">
+                {fmtNum(data.throughput.teu, 0)} <span className="text-xs font-semibold tracking-normal text-[var(--color-text-secondary)]">TEU</span>
               </div>
               <p className="text-xs text-[var(--color-text-tertiary)] mt-1">Fully cellular containership volume</p>
             </div>
 
             {/* MT */}
-            <div className="bg-[var(--color-surface-muted)] border border-[var(--color-border)] rounded-lg p-4">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-medium text-[var(--color-text-secondary)]">Bulk & Liquid Tonnage</span>
+            <div className="bg-[var(--color-surface-subtle)] border border-[var(--color-border)] rounded-[var(--radius-lg)] p-4 transition-[border-color,background-color] duration-150 hover:border-[var(--color-good-border)] hover:bg-[var(--color-surface)]">
+              <div className="flex items-center justify-between gap-3">
+                <span className="flex items-center gap-2 text-xs font-semibold text-[var(--color-text-secondary)]"><Scale size={15} className="text-[var(--color-good)]" aria-hidden="true" />Bulk &amp; Liquid Tonnage</span>
                 <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-[var(--color-good-bg)] text-[var(--color-good)] border border-[var(--color-good-border)]">
                   MT
                 </span>
               </div>
-              <div className="mt-2 text-2xl font-semibold text-[var(--color-text-primary)]">
-                {fmtNum(data.throughput.mt, 0)} <span className="text-xs font-normal text-[var(--color-text-tertiary)]">Metric Tons</span>
+              <div className="mt-3 flex items-baseline gap-1.5 text-[26px] leading-none tabular-nums font-semibold tracking-[-0.025em] text-[var(--color-text-primary)]">
+                {fmtNum(data.throughput.mt, 0)} <span className="text-xs font-semibold tracking-normal text-[var(--color-text-secondary)]">Metric Tons</span>
               </div>
               <p className="text-xs text-[var(--color-text-tertiary)] mt-1">Dry bulk, liquid tanker, and break bulk commodities</p>
             </div>
 
             {/* Units */}
-            <div className="bg-[var(--color-surface-muted)] border border-[var(--color-border)] rounded-lg p-4">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-medium text-[var(--color-text-secondary)]">Vehicles & Passengers</span>
+            <div className="bg-[var(--color-surface-subtle)] border border-[var(--color-border)] rounded-[var(--radius-lg)] p-4 transition-[border-color,background-color] duration-150 hover:border-[var(--color-inferred-border)] hover:bg-[var(--color-surface)]">
+              <div className="flex items-center justify-between gap-3">
+                <span className="flex items-center gap-2 text-xs font-semibold text-[var(--color-text-secondary)]"><UsersRound size={15} className="text-[var(--color-inferred)]" aria-hidden="true" />Vehicles &amp; Passengers</span>
                 <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-[var(--color-inferred-bg)] text-[var(--color-inferred)] border border-[var(--color-inferred-border)]">
                   Units
                 </span>
               </div>
-              <div className="mt-2 text-2xl font-semibold text-[var(--color-text-primary)]">
-                {fmtNum(data.throughput.units, 0)} <span className="text-xs font-normal text-[var(--color-text-tertiary)]">Units</span>
+              <div className="mt-3 flex items-baseline gap-1.5 text-[26px] leading-none tabular-nums font-semibold tracking-[-0.025em] text-[var(--color-text-primary)]">
+                {fmtNum(data.throughput.units, 0)} <span className="text-xs font-semibold tracking-normal text-[var(--color-text-secondary)]">Units</span>
               </div>
               <p className="text-xs text-[var(--color-text-tertiary)] mt-1">Ro-Ro vehicle moves and passenger counts</p>
             </div>
@@ -529,7 +521,7 @@ function ExecutiveDashboardContent() {
             </Link>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
             {[
               { id: 'Turnaround', label: 'Vessel Turnaround (ATA → ATD)', key: 'Turnaround' },
               { id: 'Berth Stay', label: 'Berth Stay (All Fast → Line Untied)', key: 'Berth Stay' },
@@ -544,30 +536,33 @@ function ExecutiveDashboardContent() {
               const isDelay = st.key.includes('Execution Delay')
 
               return (
-                <div key={st.id} className="bg-[var(--color-surface-muted)] border border-[var(--color-border)] rounded-lg p-3 flex flex-col justify-between">
+                <div key={st.id} className="bg-[var(--color-surface-subtle)] border border-[var(--color-border)] rounded-[var(--radius-md)] p-3.5 flex flex-col justify-between transition-[border-color,background-color,box-shadow] duration-150 hover:border-[var(--color-accent-soft-border)] hover:bg-[var(--color-surface)] hover:shadow-[var(--shadow-xs)]">
                   <div>
-                    <div className="text-xs font-medium text-[var(--color-text-secondary)] truncate" title={st.label}>
+                    <div className="min-h-8 text-xs leading-4 font-semibold text-[var(--color-text-secondary)]" title={st.label}>
                       {st.label}
                     </div>
-                    <div className="mt-2 flex items-baseline justify-between">
-                      <span className="text-lg font-semibold text-[var(--color-text-primary)]">
+                    <div className="mt-2 flex items-end justify-between gap-2">
+                      <div>
+                        <span className="block text-[10px] uppercase tracking-[0.06em] text-[var(--color-text-tertiary)]">Mean</span>
+                        <span className="text-[22px] leading-7 tabular-nums font-semibold tracking-[-0.025em] text-[var(--color-text-primary)]">
                         {m?.mean_hours != null ? `${m.mean_hours.toFixed(2)}h` : '—'}
-                      </span>
-                      <span className="text-[11px] text-[var(--color-text-tertiary)]">
+                        </span>
+                      </div>
+                      <span className="mb-1 text-[11px] tabular-nums text-[var(--color-text-tertiary)]">
                         {m?.observation_count || 0} calls
                       </span>
                     </div>
                   </div>
 
-                  <div className="mt-3 pt-2 border-t border-[var(--color-border)] text-[11px] text-[var(--color-text-tertiary)] flex items-center justify-between">
-                    <span>Med: {m?.median_hours != null ? `${m.median_hours.toFixed(1)}h` : '—'}</span>
-                    <span>P90: {m?.p90_hours != null ? `${m.p90_hours.toFixed(1)}h` : '—'}</span>
+                  <div className="mt-3 pt-2 border-t border-[var(--color-border)] text-[11px] text-[var(--color-text-secondary)] flex items-center justify-between tabular-nums">
+                    <span><span className="text-[var(--color-text-tertiary)]">Median</span> {m?.median_hours != null ? `${m.median_hours.toFixed(1)}h` : '—'}</span>
+                    <span><span className="text-[var(--color-text-tertiary)]">P90</span> {m?.p90_hours != null ? `${m.p90_hours.toFixed(1)}h` : '—'}</span>
                   </div>
 
                   {isDelay && m && (
-                    <div className="mt-1 text-[11px] flex items-center justify-between">
-                      <span className="text-[var(--color-accent)]">Early: {m.early_service_count}</span>
-                      <span className="text-[var(--color-warning)]">Delayed: {m.delayed_count}</span>
+                    <div className="mt-2 text-[10px] font-semibold flex items-center justify-between gap-2">
+                      <span className="rounded bg-[var(--color-accent-soft)] px-1.5 py-0.5 text-[var(--color-accent)]">Early {m.early_service_count}</span>
+                      <span className="rounded bg-[var(--color-warning-bg)] px-1.5 py-0.5 text-[var(--color-warning)]">Delayed {m.delayed_count}</span>
                     </div>
                   )}
                 </div>
@@ -599,18 +594,21 @@ function ExecutiveDashboardContent() {
               </div>
             </div>
 
-            <div className="space-y-3 flex-1">
+            <div className="space-y-3.5 flex-1">
               {data.delays_summary.top_categories.map((cat, i) => (
-                <div key={i} className="text-xs">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="font-medium text-[var(--color-text-secondary)]">{cat.category}</span>
-                    <span className="text-[var(--color-text-tertiary)]">
-                      {cat.duration_hours.toFixed(1)}h ({cat.percentage}%)
+                <div key={i} className="group text-xs rounded-[var(--radius-sm)] -mx-1 px-1 py-0.5 transition-colors duration-150 hover:bg-[var(--color-surface-subtle)]">
+                  <div className="flex items-center justify-between gap-3 mb-1.5">
+                    <span className={`flex min-w-0 items-center gap-2 font-semibold ${i === 0 ? 'text-[var(--color-text-primary)]' : 'text-[var(--color-text-secondary)]'}`}>
+                      <span className={`flex h-4 w-4 flex-shrink-0 items-center justify-center rounded text-[9px] font-bold ${i === 0 ? 'bg-[var(--color-accent)] text-white' : 'bg-[var(--color-surface-muted)] text-[var(--color-text-tertiary)]'}`}>{i + 1}</span>
+                      <span className="truncate">{cat.category}</span>
+                    </span>
+                    <span className="flex-shrink-0 tabular-nums font-medium text-[var(--color-text-secondary)]">
+                      {cat.duration_hours.toFixed(1)}h <span className="text-[var(--color-text-tertiary)]">· {cat.percentage}%</span>
                     </span>
                   </div>
-                  <div className="w-full bg-[var(--color-surface-muted)] rounded-full h-1.5 overflow-hidden">
+                  <div className="w-full bg-[var(--color-surface-muted)] rounded-full h-2 overflow-hidden ring-1 ring-inset ring-[var(--color-border)]">
                     <div
-                      className="bg-[var(--color-accent)] h-full rounded-full"
+                      className={`h-full rounded-full transition-opacity duration-150 group-hover:opacity-90 ${i === 0 ? 'bg-[var(--color-accent-strong)]' : 'bg-[var(--color-accent)]'}`}
                       style={{ width: `${Math.min(100, cat.percentage)}%` }}
                     ></div>
                   </div>
@@ -640,25 +638,25 @@ function ExecutiveDashboardContent() {
 
             <div className="space-y-2.5 flex-1">
               {data.delays_summary.top_bottlenecks.map((b, i) => (
-                <div key={i} className="bg-[var(--color-surface-muted)] border border-[var(--color-border)] rounded-lg p-3 text-xs">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="w-5 h-5 rounded-full bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-secondary)] flex items-center justify-center font-semibold text-[11px]">
+                <div key={i} className="bg-[var(--color-surface-subtle)] border border-[var(--color-border)] rounded-[var(--radius-md)] p-3 text-xs transition-[border-color,background-color,box-shadow] duration-150 hover:border-[var(--color-accent-soft-border)] hover:bg-[var(--color-surface)] hover:shadow-[var(--shadow-xs)]">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <span className={`w-6 h-6 rounded-[var(--radius-sm)] flex-shrink-0 flex items-center justify-center font-bold text-[11px] ${i === 0 ? 'bg-[var(--color-accent)] text-white' : 'bg-[var(--color-surface)] border border-[var(--color-border-strong)] text-[var(--color-text-secondary)]'}`}>
                         {b.rank || i + 1}
                       </span>
-                      <span className="font-medium text-[var(--color-text-primary)]">{b.stage_or_resource}</span>
+                      <span className="truncate font-semibold text-[var(--color-text-primary)]">{b.stage_or_resource}</span>
                     </div>
-                    <span className="font-semibold text-[var(--color-accent)]">
-                      Score: {b.overall_bottleneck_score}
+                    <span className="flex flex-shrink-0 items-baseline gap-1 rounded bg-[var(--color-accent-soft)] px-2 py-1 text-[10px] uppercase tracking-[0.05em] text-[var(--color-accent-strong)]">
+                      Score <strong className="text-sm tabular-nums tracking-normal">{b.overall_bottleneck_score}</strong>
                     </span>
                   </div>
 
                   {/* Component scores breakdown */}
-                  <div className="grid grid-cols-4 gap-2 mt-2 pt-2 border-t border-[var(--color-border)] text-[11px] text-[var(--color-text-tertiary)]">
-                    <div>Dur: {b.duration_score?.toFixed(0)}</div>
-                    <div>Var: {b.variability_score?.toFixed(0)}</div>
-                    <div>Tail: {b.tail_risk_score?.toFixed(0)}</div>
-                    <div>Freq: {b.frequency_score?.toFixed(0)}</div>
+                  <div className="grid grid-cols-4 gap-1.5 mt-2.5 pt-2.5 border-t border-[var(--color-border)] text-[10px] text-[var(--color-text-tertiary)]">
+                    <div><span className="block uppercase tracking-[0.04em]">Duration</span><strong className="mt-0.5 block text-xs tabular-nums text-[var(--color-text-secondary)]">{b.duration_score?.toFixed(0)}</strong></div>
+                    <div><span className="block uppercase tracking-[0.04em]">Variance</span><strong className="mt-0.5 block text-xs tabular-nums text-[var(--color-text-secondary)]">{b.variability_score?.toFixed(0)}</strong></div>
+                    <div><span className="block uppercase tracking-[0.04em]">Tail risk</span><strong className="mt-0.5 block text-xs tabular-nums text-[var(--color-text-secondary)]">{b.tail_risk_score?.toFixed(0)}</strong></div>
+                    <div><span className="block uppercase tracking-[0.04em]">Frequency</span><strong className="mt-0.5 block text-xs tabular-nums text-[var(--color-text-secondary)]">{b.frequency_score?.toFixed(0)}</strong></div>
                   </div>
                 </div>
               ))}
@@ -682,17 +680,25 @@ function ExecutiveDashboardContent() {
             </Link>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
             {data.kpi_highlights.map((kpi) => {
               const isGreen = kpi.band === 'GREEN'
               const isAmber = kpi.band === 'AMBER'
               const isRed = kpi.band === 'RED'
 
               return (
-                <div key={kpi.code} className="bg-[var(--color-surface-muted)] border border-[var(--color-border)] rounded-lg p-3 flex flex-col justify-between">
+                <div key={kpi.code} className={`relative overflow-hidden bg-[var(--color-surface)] border rounded-[var(--radius-md)] p-3.5 flex flex-col justify-between shadow-[var(--shadow-xs)] transition-[border-color,box-shadow] duration-150 hover:shadow-[var(--shadow-sm)] before:absolute before:inset-y-0 before:left-0 before:w-0.5 ${
+                  isGreen
+                    ? 'border-[var(--color-good-border)] before:bg-[var(--color-good)]'
+                    : isAmber
+                    ? 'border-[var(--color-warning-border)] before:bg-[var(--color-warning)]'
+                    : isRed
+                    ? 'border-[var(--color-critical-border)] before:bg-[var(--color-critical)]'
+                    : 'border-[var(--color-border)] before:bg-[var(--color-border-strong)]'
+                }`}>
                   <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-[11px] font-medium text-[var(--color-text-tertiary)]">{kpi.code}</span>
+                    <div className="flex items-center justify-between gap-2 mb-1.5">
+                      <span className="text-[10px] font-semibold uppercase tracking-[0.06em] text-[var(--color-text-tertiary)]">{kpi.code}</span>
                       <span
                         className={`px-1.5 py-0.5 rounded text-[10px] font-semibold border ${
                           isGreen
@@ -707,18 +713,18 @@ function ExecutiveDashboardContent() {
                         {kpi.band}
                       </span>
                     </div>
-                    <div className="text-xs font-medium text-[var(--color-text-primary)] line-clamp-1" title={kpi.name}>
+                    <div className="min-h-8 text-xs leading-4 font-semibold text-[var(--color-text-primary)] line-clamp-2" title={kpi.name}>
                       {kpi.name}
                     </div>
-                    <div className="mt-2 text-lg font-semibold text-[var(--color-text-primary)]">
+                    <div className="mt-2 flex items-baseline gap-1.5 text-[22px] leading-7 tabular-nums font-semibold tracking-[-0.025em] text-[var(--color-text-primary)]">
                       {kpi.value != null ? kpi.value.toFixed(2) : '—'}{' '}
-                      <span className="text-xs font-normal text-[var(--color-text-tertiary)]">{kpi.unit}</span>
+                      <span className="text-[11px] font-medium tracking-normal text-[var(--color-text-secondary)]">{kpi.unit}</span>
                     </div>
                   </div>
 
-                  <div className="mt-2 pt-2 border-t border-[var(--color-border)] text-[11px] text-[var(--color-text-tertiary)] flex items-center justify-between">
-                    <span>Target: {kpi.target != null ? kpi.target : '—'}</span>
-                    <span>Var: {kpi.variance != null ? `${kpi.variance > 0 ? '+' : ''}${kpi.variance.toFixed(1)}` : '—'}</span>
+                  <div className="mt-2.5 pt-2 border-t border-[var(--color-border)] text-[11px] text-[var(--color-text-secondary)] flex items-center justify-between tabular-nums">
+                    <span><span className="text-[var(--color-text-tertiary)]">Target</span> {kpi.target != null ? kpi.target : '—'}</span>
+                    <span><span className="text-[var(--color-text-tertiary)]">Variance</span> {kpi.variance != null ? `${kpi.variance > 0 ? '+' : ''}${kpi.variance.toFixed(1)}` : '—'}</span>
                   </div>
                 </div>
               )

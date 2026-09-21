@@ -248,7 +248,6 @@ export default function IdentityPage() {
       <div className="space-y-6">
         <PageHeader
           title="Identity & Merges"
-          description="Review evidence-backed identity candidates, conflicts, survivorship previews, and merge audit history."
         />
         <LoadingState label="Loading identity resolution data…" />
       </div>
@@ -259,7 +258,6 @@ export default function IdentityPage() {
     <div className="min-h-full space-y-6 bg-[var(--color-bg)] px-6 pb-8 lg:px-8">
       <PageHeader
         title="Identity & Merges"
-        description="Review evidence-backed identity candidates, conflicts, survivorship previews, and merge audit history."
         className="-mx-6 lg:-mx-8"
         actions={
           can('merge') && (

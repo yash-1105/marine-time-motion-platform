@@ -229,7 +229,6 @@ function VesselCallsContent() {
       {/* 1. Page Header & Real Operational KPI Pills */}
       <PageHeader
         title="Vessel Calls"
-        description="Consolidated vessel calls with journey coverage, governed durations, delay signals, and quality status."
         meta={
           <div className="flex items-center gap-2 flex-wrap">
             <StatusBadge label={`${filteredCalls.length} calls`} tone="neutral" showGlyph={false} />

@@ -290,7 +290,6 @@ export default function KPIDashboardPage() {
     <div className="min-h-full bg-[var(--color-bg)]">
       <PageHeader
         title="Governed KPIs"
-        description="A traceable scorecard of governed formulas, targets, percentiles, availability, and service performance."
         actions={
           <>
             <label className="flex items-center gap-2 text-xs font-medium text-[var(--color-text-secondary)] bg-[var(--color-surface)] px-3 py-1.5 rounded-md border border-[var(--color-border)] cursor-pointer">

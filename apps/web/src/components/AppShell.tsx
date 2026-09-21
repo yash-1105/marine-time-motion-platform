@@ -193,7 +193,7 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
         <header className="h-16 flex-shrink-0 px-6 lg:px-8 flex items-center justify-between border-b border-[var(--color-border)] bg-[var(--color-surface)]">
           <div className="flex items-center gap-3">
             <span className="h-5 w-0.5 rounded-full bg-[var(--color-accent)]" aria-hidden="true" />
-            <h1 className="text-[13px] font-semibold text-[var(--color-text-primary)]">{currentTitle}</h1>
+            <h1 className="text-[17px] leading-5 font-semibold tracking-[-0.012em] text-[var(--color-text-primary)]">{currentTitle}</h1>
           </div>
 
           {/* Compact User Menu & Sign Out */}
