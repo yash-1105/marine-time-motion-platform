@@ -435,7 +435,32 @@ def test_kpi_api_endpoints_work(auth_headers):
     assert card["no_source_data"] == 17
     assert card["unavailable"] == 0
 
-    # 3. GET /kpis/KPI-01
+    # 3. Governed percentile values are served from persisted analytics, including P75.
+    r_stats = client.get("/api/v1/kpis/statistics", headers=auth_headers)
+    assert r_stats.status_code == 200
+    stats = r_stats.json()
+    assert stats["percentile_method"] == "linear_interpolation"
+    turnaround = next(item for item in stats["items"] if item["name"] == "Turnaround")
+    assert turnaround["p75"] is not None
+    assert turnaround["p90"] is not None
+    assert turnaround["p75"] <= turnaround["p90"]
+
+    # 4. Service Line is implemented from the actual Service Type source dimension.
+    r_service_lines = client.get("/api/v1/kpis/service-lines", headers=auth_headers)
+    assert r_service_lines.status_code == 200
+    lines = r_service_lines.json()
+    assert "Service Type" in lines["interpretation"]
+    assert all(item["formula"] == "mean(Served_Time − Scheduled_Time)" for item in lines["items"])
+    first_line = next(item for item in lines["items"] if item["status"] == "COMPUTED")
+    r_records = client.get(
+        "/api/v1/kpis/service-lines/records",
+        params={"service_type": first_line["service_line"], "movement_type": first_line["movement_type"]},
+        headers=auth_headers,
+    )
+    assert r_records.status_code == 200
+    assert r_records.json()["items"]
+
+    # 5. GET /kpis/KPI-01
     r_detail = client.get("/api/v1/kpis/KPI-01", headers=auth_headers)
     assert r_detail.status_code == 200
     detail = r_detail.json()
@@ -443,7 +468,7 @@ def test_kpi_api_endpoints_work(auth_headers):
     assert detail["name"] == "Number of Vessel Calls"
     assert len(detail["formula_versions"]) >= 1
 
-    # 4. POST /kpis/KPI-01/recalculate
+    # 6. POST /kpis/KPI-01/recalculate
     r_recalc = client.post(
         "/api/v1/kpis/KPI-01/recalculate",
         json={"reason": "Audited API test recalculation"},
@@ -452,6 +477,6 @@ def test_kpi_api_endpoints_work(auth_headers):
     assert r_recalc.status_code == 200
     assert r_recalc.json()["status"] == "SUCCESS"
 
-    # 5. Unauthorized access rejected
+    # 7. Unauthorized access rejected
     r_unauth = client.get("/api/v1/kpis")
     assert r_unauth.status_code == 401

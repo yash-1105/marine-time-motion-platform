@@ -29,7 +29,7 @@ class IngestionPipeline:
                 sha256_hash.update(byte_block)
         return sha256_hash.hexdigest()
 
-    def process_file(self, file_path: str, filename: str, is_synthetic: bool = False, dry_run: bool = False, force_new: bool = False) -> str:
+    def process_file(self, file_path: str, filename: str, is_synthetic: bool = False, dry_run: bool = False, force_new: bool = False, commit_canonical: bool = True) -> str:
         checksum = self.calculate_checksum(file_path)
         batch_id = str(uuid.uuid4())
         
@@ -73,8 +73,11 @@ class IngestionPipeline:
                 # Status for dry run
                 batch.status = "DRY_RUN_COMPLETED"
                 self.db.commit()
-            else:
+            elif commit_canonical:
                 self._commit_to_canonical(batch)
+            else:
+                batch.status = "VALIDATED"
+                self.db.commit()
                 
             return str(batch.batch_id)
         except Exception as e:
@@ -488,4 +491,3 @@ class IngestionPipeline:
         
         batch.status = "COMMITTED"
         self.db.commit()
-

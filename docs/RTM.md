@@ -102,7 +102,7 @@
 | REQ-098 | 20. ACCEPTANCE CRITERIA | Required chronology and logical rules flag seeded violations correctly without t... | Core | test_req_098 | NOT_STARTED |
 | REQ-099 | 20. ACCEPTANCE CRITERIA | A vessel call can be reconstructed across pre-arrival, arrival, berth/cargo, shi... | Core | test_req_099 | NOT_STARTED |
 | REQ-100 | 20. ACCEPTANCE CRITERIA | Custom lead time between any two eligible events works per call and aggregated c... | Core | test_req_100 | NOT_STARTED |
-| REQ-101 | 20. ACCEPTANCE CRITERIA | Statistical metrics and P75/P90 are correct against golden data.... | Core | test_req_101 | NOT_STARTED |
+| REQ-101 | 20. ACCEPTANCE CRITERIA | Statistical metrics and P75/P90 are correct against golden data.... | analytics / KPI UI | `test_governed_statistics_expose_p75_and_p90`, `test_statistics_percentile_method_is_linear_interpolation` | IMPLEMENTED |
 | REQ-102 | 20. ACCEPTANCE CRITERIA | Negative execution delay is shown as early service.... | Core | test_req_102 | NOT_STARTED |
 | REQ-103 | 20. ACCEPTANCE CRITERIA | Delay causes distinguish confirmed and inferred.... | Core | test_req_103 | NOT_STARTED |
 | REQ-104 | 20. ACCEPTANCE CRITERIA | Bottleneck and criticality calculations expose component scores.... | Core | test_req_104 | NOT_STARTED |
@@ -142,7 +142,7 @@
 | REQ-138 | 21A.3 Required automated dataset test harness | Confirm duplicate and variant rows do not inflate vessel-call, throughput, delay... | kpi | test_req_138 | NOT_STARTED |
 | REQ-139 | 21A.3 Required automated dataset test harness | Confirm quarantined critical records are excluded by default and disclosed if in... | Core | test_req_139 | NOT_STARTED |
 | REQ-140 | 21A.3 Required automated dataset test harness | Retain execution time, application version, formula version, rule version, datas... | Core | test_req_140 | NOT_STARTED |
-| REQ-141 | 21A.5 Dataset-specific acceptance criteria | The workbook imports through the normal ingestion UI/API without manual database... | ingestion | test_req_141 | NOT_STARTED |
+| REQ-141 | 21A.5 Dataset-specific acceptance criteria | The workbook imports through the normal ingestion UI/API without manual database... | ingestion / worker | `test_dataset_upload_queues_analytics_and_worker_commits_batch` | IMPLEMENTED |
 | REQ-142 | 21A.5 Dataset-specific acceptance criteria | Every transactional worksheet has a reusable source mapping.... | Core | test_req_142 | NOT_STARTED |
 | REQ-143 | 21A.5 Dataset-specific acceptance criteria | The base valid population is reconstructed without duplicate inflation.... | Core | test_req_143 | NOT_STARTED |
 | REQ-144 | 21A.5 Dataset-specific acceptance criteria | All ten documented DQ scenarios produce the expected system outcome.... | Core | test_req_144 | NOT_STARTED |

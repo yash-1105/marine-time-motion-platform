@@ -1,19 +1,19 @@
 import os
-import shutil
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy import desc, select, text
 from sqlalchemy.orm import Session
 
 from apps.api.auth.dependencies import require
+from apps.api.core.config import settings
 from apps.api.core.database import get_db
 from apps.api.models.ingestion import IngestionBatch
 from apps.api.services.ingestion.pipeline import IngestionPipeline
 from apps.api.services.ingestion.synthetic import reset_tenant_dataset
 from apps.api.services.pipeline_runner import run_full_analytics_pipeline
-from apps.api.core.config import settings
+from apps.worker.main import process_ingestion_analytics_task
 
 router = APIRouter(prefix="/ingestion", tags=["ingestion"])
 
@@ -24,17 +24,11 @@ def _resolve_tenant(principal) -> str:
     return principal.data_scope.tenant_id
 
 
-@router.post("/upload")
+@router.post("/upload", status_code=202)
 def upload_file(
-    background_tasks: BackgroundTasks,
-    file: UploadFile = File(...),
-    db: Session = Depends(get_db),
-    principal = Depends(require("create", "vessel_call"))
+    file: UploadFile = File(...), db: Session = Depends(get_db), principal=Depends(require("create", "vessel_call"))
 ):
-    """Uploads a vessel operations workbook, executes ingestion, runs analytical engines once,
-
-    and persists the calculated executive snapshot into PostgreSQL.
-    """
+    """Accept an authorised workbook and queue its governed downstream processing."""
     tenant_id = _resolve_tenant(principal)
     safe_name = Path(file.filename or "").name
     if not safe_name.lower().endswith((".xlsx", ".csv")):
@@ -46,7 +40,8 @@ def upload_file(
         while chunk := file.file.read(1024 * 1024):
             written += len(chunk)
             if written > settings.upload_max_bytes:
-                buffer.close(); os.remove(temp_path)
+                buffer.close()
+                os.remove(temp_path)
                 raise HTTPException(status_code=413, detail="Upload exceeds configured size limit")
             buffer.write(chunk)
     if safe_name.lower().endswith(".xlsx") and open(temp_path, "rb").read(4) != b"PK\x03\x04":
@@ -57,31 +52,29 @@ def upload_file(
         pipeline = IngestionPipeline(db, tenant_id=tenant_id)
         checksum = pipeline.calculate_checksum(temp_path)
 
-        # 1. Reset previous active dataset records for tenant (Dataset Replacement)
+        # Parse/map/validate before replacing an active dataset.  A malformed workbook
+        # therefore cannot erase a currently usable dataset.
+        batch_id = pipeline.process_file(temp_path, file.filename, force_new=True, commit_canonical=False)
+
+        # Dataset replacement deliberately uses the standard canonical path; only the
+        # expensive downstream calculation is asynchronous.
         reset_tenant_dataset(db, tenant_id, keep_batches=True)
-
-        # 2. Ingest workbook to canonical schema
-        batch_id = pipeline.process_file(temp_path, file.filename, force_new=True)
-
-        # 3. Supersede older batches and mark new batch as active
-        db.query(IngestionBatch).filter(
-            IngestionBatch.tenant_id == tenant_id,
-            IngestionBatch.batch_id != batch_id,
-        ).update({"is_active": False, "status": "SUPERSEDED"})
-
         new_batch = db.query(IngestionBatch).filter(IngestionBatch.batch_id == batch_id).first()
-        if new_batch:
-            new_batch.is_active = True
-            db.commit()
+        if not new_batch:
+            raise RuntimeError("Accepted ingestion batch could not be found")
+        pipeline._commit_to_canonical(new_batch)
+        new_batch.status = "PROCESSING"
+        new_batch.is_active = False
+        db.commit()
 
-        # 4. Run full analytical pipeline and persist executive dashboard snapshot
-        run_full_analytics_pipeline(db, tenant_id=tenant_id, batch_id=batch_id, file_checksum=checksum)
+        # Redis/Dramatiq is the durable execution boundary shared with the worker.
+        process_ingestion_analytics_task.send(batch_id, tenant_id, checksum)
 
         # Clean up temporary disk file
         if os.path.exists(temp_path):
             os.remove(temp_path)
 
-        return {"batch_id": batch_id, "file_name": safe_name, "status": "COMMITTED"}
+        return {"batch_id": batch_id, "file_name": safe_name, "status": "PROCESSING"}
     except Exception as e:
         db.rollback()
         if os.path.exists(temp_path):
@@ -93,10 +86,7 @@ def upload_file(
 
 
 @router.delete("/dataset")
-def clear_dataset(
-    db: Session = Depends(get_db),
-    principal = Depends(require("create", "vessel_call"))
-):
+def clear_dataset(db: Session = Depends(get_db), principal=Depends(require("create", "vessel_call"))):
     """Removes the tenant's currently loaded dataset (all ingested and derived
 
     data), returning it to a clean, no-dataset-loaded state.
@@ -115,21 +105,22 @@ def clear_dataset(
 
 
 @router.get("/active")
-def get_active_dataset(
-    db: Session = Depends(get_db),
-    principal = Depends(require("view", "vessel_call"))
-):
+def get_active_dataset(db: Session = Depends(get_db), principal=Depends(require("view", "vessel_call"))):
     """Returns the currently active dataset batch for the tenant, or reports that no dataset is loaded."""
     tenant_id = _resolve_tenant(principal)
-    batch = db.execute(
-        select(IngestionBatch)
-        .where(
-            IngestionBatch.tenant_id == tenant_id,
-            IngestionBatch.is_active == True,
-            IngestionBatch.status == "COMMITTED",
+    batch = (
+        db.execute(
+            select(IngestionBatch)
+            .where(
+                IngestionBatch.tenant_id == tenant_id,
+                IngestionBatch.is_active.is_(True),
+                IngestionBatch.status == "COMMITTED",
+            )
+            .order_by(desc(IngestionBatch.created_at))
         )
-        .order_by(desc(IngestionBatch.created_at))
-    ).scalars().first()
+        .scalars()
+        .first()
+    )
 
     if not batch:
         return {"has_active_dataset": False, "batch": None}
@@ -148,16 +139,17 @@ def get_active_dataset(
 
 
 @router.get("/batches")
-def list_batches(
-    db: Session = Depends(get_db),
-    principal = Depends(require("view", "vessel_call"))
-):
+def list_batches(db: Session = Depends(get_db), principal=Depends(require("view", "vessel_call"))):
     tenant_id = _resolve_tenant(principal)
-    batches = db.execute(
-        select(IngestionBatch)
-        .where(IngestionBatch.tenant_id == tenant_id)
-        .order_by(desc(IngestionBatch.created_at))
-    ).scalars().all()
+    batches = (
+        db.execute(
+            select(IngestionBatch)
+            .where(IngestionBatch.tenant_id == tenant_id)
+            .order_by(desc(IngestionBatch.created_at))
+        )
+        .scalars()
+        .all()
+    )
     return [
         {
             "batch_id": b.batch_id,
@@ -186,14 +178,18 @@ def reprocess_active_dataset(
 
     tenant_id = _resolve_tenant(principal)
 
-    active_batch = db.execute(
-        select(IngestionBatch)
-        .where(
-            IngestionBatch.tenant_id == tenant_id,
-            IngestionBatch.is_active == True,
+    active_batch = (
+        db.execute(
+            select(IngestionBatch)
+            .where(
+                IngestionBatch.tenant_id == tenant_id,
+                IngestionBatch.is_active.is_(True),
+            )
+            .order_by(desc(IngestionBatch.created_at))
         )
-        .order_by(desc(IngestionBatch.created_at))
-    ).scalars().first()
+        .scalars()
+        .first()
+    )
 
     if not active_batch:
         raise HTTPException(status_code=404, detail="No active dataset found for this tenant")

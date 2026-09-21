@@ -27,15 +27,15 @@ from apps.api.models.analytics import (
     StatisticalAggregate,
 )
 from apps.api.models.canonical import VesselCall
-from testkit.models import ExpectedOutput
 from apps.api.services.analytics.catalogue import ensure_catalogue
 from apps.api.services.analytics.custom_builder import CustomLeadTimeBuilder
 from apps.api.services.analytics.engine import AnalyticsEngine, within_tolerance
-from testkit.reconciliation import reconcile_expected_outputs
 from apps.api.services.identity.engine import IdentityEngine
-from testkit.loader import load_synthetic_dataset
 from apps.api.services.journey.reconstructor import JourneyReconstructionEngine
 from apps.api.services.quality.engine import DataQualityEngine
+from testkit.loader import load_synthetic_dataset
+from testkit.models import ExpectedOutput
+from testkit.reconciliation import reconcile_expected_outputs
 
 
 @pytest.fixture(scope="module")
@@ -65,6 +65,7 @@ def analytics_fixture(db_session):
 # 1. 8 Reconciliation Targets Coverage & Accuracy
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 def test_all_8_reconciliation_metrics_compute(db_session, analytics_fixture):
     """Verifies that all 8 reconciliation target definitions exist and have computed results."""
     catalogue = ensure_catalogue(db_session)
@@ -84,9 +85,9 @@ def test_all_8_reconciliation_metrics_compute(db_session, analytics_fixture):
         defn = catalogue[target]
         assert defn.availability_status == "COMPUTABLE"
 
-        results = db_session.execute(
-            select(LeadTimeResult).where(LeadTimeResult.definition_id == defn.id)
-        ).scalars().all()
+        results = (
+            db_session.execute(select(LeadTimeResult).where(LeadTimeResult.definition_id == defn.id)).scalars().all()
+        )
 
         assert len(results) == 72, f"Expected 72 base calls for {target}, got {len(results)}"
         available_cnt = sum(1 for r in results if r.status == "AVAILABLE")
@@ -98,20 +99,20 @@ def test_repeated_metric_compute_is_idempotent(db_session, analytics_fixture):
     engine = AnalyticsEngine(db_session, tenant_id="synthetic-tenant")
     engine.compute_all_metrics()
     engine.compute_all_metrics()
-    definition = db_session.execute(select(LeadTimeDefinition).where(LeadTimeDefinition.name == "Turnaround")).scalar_one()
-    rows = db_session.execute(select(LeadTimeResult).where(LeadTimeResult.definition_id == definition.id)).scalars().all()
+    definition = db_session.execute(
+        select(LeadTimeDefinition).where(LeadTimeDefinition.name == "Turnaround")
+    ).scalar_one()
+    rows = (
+        db_session.execute(select(LeadTimeResult).where(LeadTimeResult.definition_id == definition.id)).scalars().all()
+    )
     assert len(rows) == len({row.vessel_call_id for row in rows}) == 72
 
 
 def test_turnaround_matches_expected_within_tolerance(db_session, analytics_fixture):
     """Verifies Turnaround calculation against ExpectedOutputs oracle within ±0.02h tolerance."""
-    defn = db_session.execute(
-        select(LeadTimeDefinition).where(LeadTimeDefinition.name == "Turnaround")
-    ).scalar_one()
+    defn = db_session.execute(select(LeadTimeDefinition).where(LeadTimeDefinition.name == "Turnaround")).scalar_one()
 
-    results = db_session.execute(
-        select(LeadTimeResult).where(LeadTimeResult.definition_id == defn.id)
-    ).scalars().all()
+    results = db_session.execute(select(LeadTimeResult).where(LeadTimeResult.definition_id == defn.id)).scalars().all()
 
     passed = 0
     for r in results:
@@ -132,10 +133,15 @@ def test_turnaround_matches_expected_within_tolerance(db_session, analytics_fixt
 
 def test_berth_stay_and_cargo_working_reconcile_100_percent(db_session, analytics_fixture):
     """Verifies Berth Stay, Cargo Working, and Outward Movement achieve 100% reconciliation."""
-    engine = AnalyticsEngine(db_session, tenant_id="synthetic-tenant", exclude_quarantined=True)
     report = reconcile_expected_outputs(db_session, tolerance=0.02)
 
-    for target in ["Berth Stay", "Cargo Working", "Outward Movement", "Arrival Execution Delay", "Sailing Execution Delay"]:
+    for target in [
+        "Berth Stay",
+        "Cargo Working",
+        "Outward Movement",
+        "Arrival Execution Delay",
+        "Sailing Execution Delay",
+    ]:
         m = report["metrics_reconciled"][target]
         assert m["passed"] == 72, f"{target} failed to reach 72/72: {m['passed']} passed, {m['failed']} failed"
 
@@ -143,6 +149,7 @@ def test_berth_stay_and_cargo_working_reconcile_100_percent(db_session, analytic
 # ──────────────────────────────────────────────────────────────────────────────
 # 2. Negative Execution Delays & Early Service (spec §2.4, §10.1)
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 def test_negative_execution_delay_preserved_as_early_service(db_session, analytics_fixture):
     """Verifies that negative execution delays are preserved with sign as valid early service.
@@ -156,15 +163,23 @@ def test_negative_execution_delay_preserved_as_early_service(db_session, analyti
         select(LeadTimeDefinition).where(LeadTimeDefinition.name == "Sailing Execution Delay")
     ).scalar_one()
 
-    arr_results = db_session.execute(
-        select(LeadTimeResult).where(LeadTimeResult.definition_id == arrival_defn.id)
-    ).scalars().all()
-    sail_results = db_session.execute(
-        select(LeadTimeResult).where(LeadTimeResult.definition_id == sailing_defn.id)
-    ).scalars().all()
+    arr_results = (
+        db_session.execute(select(LeadTimeResult).where(LeadTimeResult.definition_id == arrival_defn.id))
+        .scalars()
+        .all()
+    )
+    sail_results = (
+        db_session.execute(select(LeadTimeResult).where(LeadTimeResult.definition_id == sailing_defn.id))
+        .scalars()
+        .all()
+    )
 
-    arr_neg = [r for r in arr_results if r.status == "AVAILABLE" and r.duration_hours is not None and r.duration_hours < 0]
-    sail_neg = [r for r in sail_results if r.status == "AVAILABLE" and r.duration_hours is not None and r.duration_hours < 0]
+    arr_neg = [
+        r for r in arr_results if r.status == "AVAILABLE" and r.duration_hours is not None and r.duration_hours < 0
+    ]
+    sail_neg = [
+        r for r in sail_results if r.status == "AVAILABLE" and r.duration_hours is not None and r.duration_hours < 0
+    ]
 
     # Verify counts match fixture facts
     assert len(arr_neg) == 7, f"Expected 7 negative arrival execution delays, got {len(arr_neg)}"
@@ -180,6 +195,7 @@ def test_negative_execution_delay_preserved_as_early_service(db_session, analyti
 # 3. Unavailable Semantics (spec §2.8: Unavailable, not fabricated)
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 def test_unavailable_when_event_missing_not_zero(db_session, analytics_fixture):
     """Verifies that missing events produce status=UNAVAILABLE with reason, never fabricated zero."""
     # When quarantined events are excluded, SYNVCN2600045 (DQ-006) has missing PILOT_ON_BOARD_ARRIVAL
@@ -187,12 +203,16 @@ def test_unavailable_when_event_missing_not_zero(db_session, analytics_fixture):
         select(LeadTimeDefinition).where(LeadTimeDefinition.name == "Anchorage Wait")
     ).scalar_one()
 
-    unavail_row = db_session.execute(
-        select(LeadTimeResult).where(
-            LeadTimeResult.definition_id == anchorage_defn.id,
-            LeadTimeResult.status != "AVAILABLE",
+    unavail_row = (
+        db_session.execute(
+            select(LeadTimeResult).where(
+                LeadTimeResult.definition_id == anchorage_defn.id,
+                LeadTimeResult.status != "AVAILABLE",
+            )
         )
-    ).scalars().first()
+        .scalars()
+        .first()
+    )
 
     assert unavail_row is not None
     assert unavail_row.status == "UNAVAILABLE"
@@ -204,6 +224,7 @@ def test_unavailable_when_event_missing_not_zero(db_session, analytics_fixture):
 # ──────────────────────────────────────────────────────────────────────────────
 # 4. Polars Statistics & Percentile Method (spec §10.3)
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 def test_statistics_percentile_method_is_linear_interpolation(db_session, analytics_fixture):
     """Verifies that statistical aggregates disclose 'linear_interpolation' as the percentile method."""
@@ -217,6 +238,19 @@ def test_statistics_percentile_method_is_linear_interpolation(db_session, analyt
             assert agg.median_hours is not None
             assert agg.min_hours <= agg.median_hours <= agg.max_hours
             assert agg.p25_hours <= agg.median_hours <= agg.p75_hours <= agg.p90_hours <= agg.p95_hours
+
+
+def test_governed_statistics_expose_p75_and_p90(db_session, analytics_fixture):
+    """P75/P90 are persisted by the one governed Polars calculation, never a UI formula."""
+    from apps.api.services.analytics.catalogue import ensure_catalogue
+    from apps.api.services.analytics.engine import AnalyticsEngine
+
+    definition = ensure_catalogue(db_session)["Turnaround"]
+    aggregate = AnalyticsEngine(db_session, tenant_id="synthetic-tenant").compute_statistics(definition.id)
+    assert aggregate.p75_hours is not None
+    assert aggregate.p90_hours is not None
+    assert aggregate.p75_hours <= aggregate.p90_hours
+    assert aggregate.percentile_method == "linear_interpolation"
 
 
 def test_cv_guarded_for_zero_mean():
@@ -245,11 +279,12 @@ def test_tail_risk_ratio_guarded_for_zero_median():
 # 5. Traceability Envelope (spec §2 & §10.5)
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 def test_traceability_envelope_present(db_session, analytics_fixture):
     """Verifies that every LeadTimeResult row carries the required traceability envelope."""
-    results = db_session.execute(
-        select(LeadTimeResult).where(LeadTimeResult.status == "AVAILABLE").limit(20)
-    ).scalars().all()
+    results = (
+        db_session.execute(select(LeadTimeResult).where(LeadTimeResult.status == "AVAILABLE").limit(20)).scalars().all()
+    )
 
     for r in results:
         assert r.formula_version is not None
@@ -265,11 +300,14 @@ def test_traceability_envelope_present(db_session, analytics_fixture):
 # 6. NO_SOURCE_DATA Catalogue Registration (spec §10.2)
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 def test_no_source_data_metrics_registered_unavailable(db_session, analytics_fixture):
     """Verifies that metrics requiring unrecorded events are registered with NO_SOURCE_DATA."""
-    no_source_defs = db_session.execute(
-        select(LeadTimeDefinition).where(LeadTimeDefinition.availability_status == "NO_SOURCE_DATA")
-    ).scalars().all()
+    no_source_defs = (
+        db_session.execute(select(LeadTimeDefinition).where(LeadTimeDefinition.availability_status == "NO_SOURCE_DATA"))
+        .scalars()
+        .all()
+    )
 
     assert len(no_source_defs) >= 5, "Expected at least 5 NO_SOURCE_DATA registered definitions"
     names = [d.name for d in no_source_defs]
@@ -290,6 +328,7 @@ def test_no_source_data_metrics_registered_unavailable(db_session, analytics_fix
 # ──────────────────────────────────────────────────────────────────────────────
 # 7. Custom Lead-Time Builder (spec §10.2)
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 def test_custom_builder_handles_event_pairs_and_repeated_occurrences(db_session, analytics_fixture):
     """Verifies that CustomLeadTimeBuilder computes ad-hoc event durations and handles occurrence selection."""
@@ -319,6 +358,7 @@ def test_custom_builder_handles_event_pairs_and_repeated_occurrences(db_session,
 # ──────────────────────────────────────────────────────────────────────────────
 # 8. REST API Endpoints & RBAC (spec §16)
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 def test_analytics_api_endpoints_work(db_session, analytics_fixture):
     """Verifies that analytics endpoints return valid JSON and enforce data scope."""
@@ -356,6 +396,7 @@ def test_analytics_api_endpoints_work(db_session, analytics_fixture):
 # ──────────────────────────────────────────────────────────────────────────────
 # 9. Governed Duration Semantics (spec §10.1, 9 distinct concepts)
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 def test_all_9_duration_semantics_concepts():
     """Verifies that all 9 duration concepts from spec §10.1 are distinct, independently tested,
@@ -444,6 +485,7 @@ def test_all_9_duration_semantics_concepts():
 # ──────────────────────────────────────────────────────────────────────────────
 # 10. Daylight-Saving Boundaries & Overlapping Stages
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 def test_daylight_saving_boundary_duration():
     """Verifies that UTC timestamp envelope arithmetic preserves exact physical durations across DST changes."""

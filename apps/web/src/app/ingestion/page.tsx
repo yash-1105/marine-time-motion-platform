@@ -44,6 +44,18 @@ export default function IngestionPage() {
     return batches.find((b) => b.batch_id === batchId) || null
   }
 
+  const waitForBatchOutcome = async (batchId: string) => {
+    // Processing happens on the durable worker so the upload request is not held
+    // open across a browser/proxy timeout.  Keep the user informed until the
+    // persisted batch reaches a terminal state.
+    for (let attempt = 0; attempt < 300; attempt += 1) {
+      const outcome = await resolveBatchOutcome(batchId)
+      if (outcome?.status === 'COMMITTED' || outcome?.status === 'FAILED') return outcome
+      await new Promise((resolve) => window.setTimeout(resolve, 2000))
+    }
+    throw new Error('Upload was accepted but processing is still running. Refresh this page to check its persisted batch status.')
+  }
+
   const processUpload = async (targetFile: File) => {
     setUploadState('uploading')
     setErrorMessage('')
@@ -88,7 +100,7 @@ export default function IngestionPage() {
         throw new Error(parsedMessage)
       }
       const data = await res.json()
-      const outcome = await resolveBatchOutcome(data.batch_id)
+      const outcome = await waitForBatchOutcome(data.batch_id)
       if (outcome?.status === 'FAILED') {
         setUploadState('error')
         setErrorMessage(outcome.error_message || 'Dataset processing failed.')

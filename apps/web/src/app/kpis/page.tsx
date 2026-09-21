@@ -82,6 +82,41 @@ interface KPIBenchmarkData {
   absent_notice?: string
 }
 
+interface GovernedStatistic {
+  definition_id: string
+  name: string
+  unit: string
+  observation_count: number | null
+  missing_count: number | null
+  p75: number | null
+  p90: number | null
+  small_sample_warning: boolean
+  status: 'AVAILABLE' | 'UNAVAILABLE'
+}
+
+interface ServiceLineItem {
+  service_line: string
+  movement_type: string
+  value: number | null
+  unit: string
+  status: 'COMPUTED' | 'UNAVAILABLE'
+  numerator: number | null
+  denominator: number | null
+  observation_count: number
+  missing_count: number
+  formula: string
+}
+
+interface ServiceLineRecord {
+  vessel_call_id: string
+  vcn: string | null
+  vessel_name: string
+  scheduled_time: string | null
+  served_time: string | null
+  execution_delay_hours: number | null
+  status: string
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 /** Maps a governance band (GREEN/AMBER/RED/GRAY) to a StatusBadge tone. Distinct from statusToTone, which maps lifecycle status. */
@@ -123,6 +158,11 @@ export default function KPIDashboardPage() {
   const [recalcModalOpen, setRecalcModalOpen] = useState(false)
   const [recalcReason, setRecalcReason] = useState('')
   const [actionMessage, setActionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [governedStats, setGovernedStats] = useState<GovernedStatistic[]>([])
+  const [percentileMethod, setPercentileMethod] = useState('linear_interpolation')
+  const [serviceLines, setServiceLines] = useState<ServiceLineItem[]>([])
+  const [selectedServiceLine, setSelectedServiceLine] = useState<string | null>(null)
+  const [serviceLineRecords, setServiceLineRecords] = useState<ServiceLineRecord[]>([])
 
   // Fetch Scorecard
   const fetchScorecard = useCallback(async () => {
@@ -142,10 +182,52 @@ export default function KPIDashboardPage() {
     }
   }, [includeAliases, token])
 
+  const fetchGovernedInsights = useCallback(async () => {
+    try {
+      const [statsRes, serviceLinesRes] = await Promise.all([
+        fetch(`${API}/api/v1/kpis/statistics`, { headers: { Authorization: `Bearer ${token || 'dev-token'}` } }),
+        fetch(`${API}/api/v1/kpis/service-lines`, { headers: { Authorization: `Bearer ${token || 'dev-token'}` } }),
+      ])
+      if (statsRes.ok) {
+        const data = await statsRes.json()
+        setGovernedStats(data.items || [])
+        setPercentileMethod(data.percentile_method || 'linear_interpolation')
+      }
+      if (serviceLinesRes.ok) {
+        const data = await serviceLinesRes.json()
+        setServiceLines(data.items || [])
+      }
+    } catch {
+      // The scorecard remains usable if a supporting governed view is unavailable.
+    }
+  }, [token])
+
   useEffect(() => {
     if (authLoading) return
     fetchScorecard()
-  }, [authLoading, fetchScorecard])
+    fetchGovernedInsights()
+  }, [authLoading, fetchScorecard, fetchGovernedInsights])
+
+  const drillIntoServiceLine = async (item: ServiceLineItem) => {
+    const key = `${item.service_line}:${item.movement_type}`
+    if (selectedServiceLine === key) {
+      setSelectedServiceLine(null)
+      setServiceLineRecords([])
+      return
+    }
+    setSelectedServiceLine(key)
+    try {
+      const params = new URLSearchParams({ service_type: item.service_line })
+      if (item.movement_type !== 'Unspecified') params.set('movement_type', item.movement_type)
+      const res = await fetch(`${API}/api/v1/kpis/service-lines/records?${params.toString()}`, { headers })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = await res.json()
+      setServiceLineRecords(data.items || [])
+    } catch (err) {
+      setActionMessage({ type: 'error', text: `Failed to load service-line records: ${String(err)}` })
+      setServiceLineRecords([])
+    }
+  }
 
   // Select KPI for detail drawer
   const handleSelectKPI = async (item: ScorecardItem) => {
@@ -219,7 +301,7 @@ export default function KPIDashboardPage() {
               Show Alias Concepts (11/53, 14/51)
             </label>
             <button
-              onClick={() => fetchScorecard()}
+              onClick={() => { fetchScorecard(); fetchGovernedInsights() }}
               className="text-xs font-semibold px-3 py-2 bg-[var(--color-accent)] text-white rounded-md hover:bg-[var(--color-accent-hover)] transition cursor-pointer"
             >
               Refresh Scorecard
@@ -282,6 +364,30 @@ export default function KPIDashboardPage() {
               status="UNAVAILABLE"
               context="Missing inputs named explicitly"
             />
+          </div>
+        )}
+
+        {(governedStats.length > 0 || serviceLines.length > 0) && (
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            <Card padded={false} className="overflow-hidden">
+              <div className="px-5 py-3.5 bg-[var(--color-surface-muted)] border-b border-[var(--color-border)]">
+                <h2 className="text-sm font-bold text-[var(--color-text-primary)]">Governed percentile statistics</h2>
+                <p className="text-xs text-[var(--color-text-secondary)] mt-1">P75 and P90 use the persisted analytics result · {percentileMethod.replace('_', ' ')}</p>
+              </div>
+              <div className="max-h-80 overflow-auto">
+                <table className="w-full text-xs">
+                  <thead className="sticky top-0 bg-[var(--color-surface)] text-[var(--color-text-secondary)]"><tr><th className="p-3 text-left">Metric</th><th className="p-3 text-right">n / missing</th><th className="p-3 text-right">P75</th><th className="p-3 text-right">P90</th></tr></thead>
+                  <tbody className="divide-y divide-[var(--color-border)]">{governedStats.map((stat) => <tr key={stat.definition_id}><td className="p-3 font-medium text-[var(--color-text-primary)]">{stat.name}{stat.small_sample_warning && <span className="ml-1 text-[10px] text-[var(--color-warning)]">small sample</span>}</td><td className="p-3 text-right">{stat.observation_count ?? '—'} / {stat.missing_count ?? '—'}</td><td className="p-3 text-right font-mono">{stat.p75 == null ? '—' : fmtValue(stat.p75, stat.unit)}</td><td className="p-3 text-right font-mono">{stat.p90 == null ? '—' : fmtValue(stat.p90, stat.unit)}</td></tr>)}</tbody>
+                </table>
+              </div>
+            </Card>
+            <Card padded={false} className="overflow-hidden">
+              <div className="px-5 py-3.5 bg-[var(--color-surface-muted)] border-b border-[var(--color-border)]"><h2 className="text-sm font-bold text-[var(--color-text-primary)]">Service Type performance</h2><p className="text-xs text-[var(--color-text-secondary)] mt-1">“Service Line” is represented by source-backed Service Type; Shipping Line is separate.</p></div>
+              <div className="max-h-80 overflow-auto">
+                <table className="w-full text-xs"><thead className="sticky top-0 bg-[var(--color-surface)] text-[var(--color-text-secondary)]"><tr><th className="p-3 text-left">Service type</th><th className="p-3 text-left">Movement</th><th className="p-3 text-right">Mean delay</th><th className="p-3 text-right">n</th><th className="p-3"></th></tr></thead><tbody className="divide-y divide-[var(--color-border)]">{serviceLines.map((line) => <tr key={`${line.service_line}:${line.movement_type}`}><td className="p-3 font-medium text-[var(--color-text-primary)]">{line.service_line}</td><td className="p-3">{line.movement_type}</td><td className="p-3 text-right font-mono">{line.value == null ? '—' : fmtValue(line.value, line.unit)}</td><td className="p-3 text-right">{line.observation_count}</td><td className="p-3 text-right"><button onClick={() => drillIntoServiceLine(line)} className="text-[var(--color-accent)] hover:underline cursor-pointer">{selectedServiceLine === `${line.service_line}:${line.movement_type}` ? 'Hide' : 'Records'}</button></td></tr>)}</tbody></table>
+                {selectedServiceLine && <div className="border-t border-[var(--color-border)] p-3"><p className="text-xs font-semibold mb-2">Underlying execution records</p>{serviceLineRecords.length === 0 ? <p className="text-xs text-[var(--color-text-tertiary)]">No eligible records.</p> : <div className="space-y-1 text-xs">{serviceLineRecords.map((record) => <div key={`${record.vessel_call_id}:${record.scheduled_time}`} className="flex justify-between gap-3"><span>{record.vcn || record.vessel_name}</span><span className="font-mono">{record.execution_delay_hours == null ? '—' : fmtValue(record.execution_delay_hours, 'hours')}</span></div>)}</div>}</div>}
+              </div>
+            </Card>
           </div>
         )}
 

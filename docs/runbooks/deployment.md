@@ -2,9 +2,9 @@
 
 ## Railway and Vercel
 
-The API deployment uses `railway.json`; Railway must provide `DATABASE_URL`, `REDIS_URL`, `JWT_SECRET_KEY`, OIDC configuration, `CORS_ORIGINS` containing the exact Vercel production domain, report/GCS storage settings, and optional Sarvam credentials. The worker uses the same Redis URL and must be deployed separately from `apps/worker`. Vercel receives only `NEXT_PUBLIC_API_URL`; it must not receive backend secrets.
+The API deployment uses `railway.json`; Railway must provide `DATABASE_URL`, `REDIS_URL`, `JWT_SECRET_KEY`, OIDC configuration, `CORS_ORIGINS` containing the exact Vercel production domain, report/GCS storage settings, and optional Sarvam credentials. The worker uses the same Redis URL and must be deployed separately from `apps/worker`. Vercel receives only `NEXT_PUBLIC_API_URL`; it must be the public HTTPS Railway API origin (without `/api/v1`) and must not receive backend secrets. Railway must allow the configured upload size at its proxy; the API enforces `UPLOAD_MAX_BYTES` and validates OOXML containers itself.
 
-Before release: run migrations, confirm `/live`, `/ready`, and `/health`, verify Redis worker connectivity, then exercise login → authorised upload → ingestion status → dashboard → Vessel Calls/Journey → approved report artifact → Copilot tool call → audit event. Confirm report delivery failure/retry in a non-production recipient.
+Before release: run migrations, confirm `/live`, `/ready`, and `/health`, verify Redis worker connectivity, then exercise login → authorised upload → `PROCESSING` batch → `COMMITTED` batch → dashboard → Vessel Calls/Journey → approved report artifact → Copilot tool call → audit event. The upload returns `202` after raw/staging/canonical processing and the worker makes the batch active only after analytics/dashboard persistence succeeds. Confirm report delivery failure/retry in a non-production recipient.
 
 The repository cannot verify the live Vercel/Railway domain, GCS IAM policy, mail/notification adapter, or scheduler deployment without those environment credentials. Do not mark a release ready until those checks are recorded.
 

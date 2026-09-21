@@ -1,6 +1,7 @@
 """Tests for Dataset Ingestion, Persistence, and Replacement (spec Phase 12 / Change 1 & 2)."""
 
 import time
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, desc, select
@@ -10,6 +11,7 @@ from apps.api.core.config import settings
 from apps.api.main import app
 from apps.api.models.analytics import DashboardSnapshot
 from apps.api.models.ingestion import IngestionBatch
+from apps.worker.main import process_ingestion_analytics_task
 from testkit.loader import load_synthetic_dataset
 
 client = TestClient(app)
@@ -48,15 +50,19 @@ def test_active_dataset_endpoint(auth_headers):
 def test_dashboard_persisted_snapshot_reuse(auth_headers, db_session):
     """Verifies that Executive Dashboard reads from persisted PostgreSQL snapshot rapidly (<50ms)."""
     # 1. Verify snapshot exists in database
-    snapshot = db_session.execute(
-        select(DashboardSnapshot)
-        .where(
-            DashboardSnapshot.tenant_id == "synthetic-tenant",
-            DashboardSnapshot.is_active == True,
-            DashboardSnapshot.filters_hash == "unfiltered",
+    snapshot = (
+        db_session.execute(
+            select(DashboardSnapshot)
+            .where(
+                DashboardSnapshot.tenant_id == "synthetic-tenant",
+                DashboardSnapshot.is_active.is_(True),
+                DashboardSnapshot.filters_hash == "unfiltered",
+            )
+            .order_by(desc(DashboardSnapshot.created_at))
         )
-        .order_by(desc(DashboardSnapshot.created_at))
-    ).scalars().first()
+        .scalars()
+        .first()
+    )
 
     assert snapshot is not None, "Active dashboard snapshot should exist in analytics.dashboard_snapshot"
     assert snapshot.snapshot_data is not None
@@ -75,37 +81,55 @@ def test_dashboard_persisted_snapshot_reuse(auth_headers, db_session):
     assert elapsed < 0.5, f"Dashboard read took {elapsed}s, should be fast read operation without recalculation"
 
 
-def test_dataset_upload_and_replacement(auth_headers, db_session):
-    """Verifies that uploading a new workbook replaces the active dataset and persists fresh results."""
+def test_dataset_upload_queues_analytics_and_worker_commits_batch(auth_headers, db_session, monkeypatch):
+    """The normal upload returns promptly and the durable worker activates only a completed batch."""
+    monkeypatch.setattr(
+        "apps.api.routers.ingestion.process_ingestion_analytics_task.send",
+        lambda batch_id, tenant_id, checksum: process_ingestion_analytics_task.fn(batch_id, tenant_id, checksum),
+    )
     fixture_path = "fixtures/Synthetic_Marine_Time_Motion_Test_Data.xlsx"
     with open(fixture_path, "rb") as f:
         file_content = f.read()
 
     # Upload replacement workbook
-    files = {"file": ("replacement_workbook.xlsx", file_content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
+    files = {
+        "file": (
+            "replacement_workbook.xlsx",
+            file_content,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+    }
     upload_resp = client.post("/api/v1/ingestion/upload", headers=auth_headers, files=files)
-    assert upload_resp.status_code == 200
+    assert upload_resp.status_code == 202
     upload_data = upload_resp.json()
     new_batch_id = upload_data["batch_id"]
-    assert upload_data["status"] == "COMMITTED"
+    assert upload_data["status"] == "PROCESSING"
 
     # Verify that the new batch is the only active batch for the tenant
-    active_batches = db_session.execute(
-        select(IngestionBatch).where(
-            IngestionBatch.tenant_id == "synthetic-tenant",
-            IngestionBatch.is_active == True,
+    active_batches = (
+        db_session.execute(
+            select(IngestionBatch).where(
+                IngestionBatch.tenant_id == "synthetic-tenant",
+                IngestionBatch.is_active.is_(True),
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     assert len(active_batches) == 1
     assert active_batches[0].batch_id == new_batch_id
 
     # Verify that the active dashboard snapshot now points to the new batch
-    active_snapshot = db_session.execute(
-        select(DashboardSnapshot).where(
-            DashboardSnapshot.tenant_id == "synthetic-tenant",
-            DashboardSnapshot.is_active == True,
+    active_snapshot = (
+        db_session.execute(
+            select(DashboardSnapshot).where(
+                DashboardSnapshot.tenant_id == "synthetic-tenant",
+                DashboardSnapshot.is_active.is_(True),
+            )
         )
-    ).scalars().first()
+        .scalars()
+        .first()
+    )
     assert active_snapshot is not None
     assert active_snapshot.batch_id == new_batch_id
 
@@ -134,7 +158,5 @@ def test_dataset_removal_clears_active_state(auth_headers, db_session):
 
     # Restore test state through the validation-only fixture loader.  Production
     # routes never load governed test fixtures.
-    restored_batch = load_synthetic_dataset(
-        db_session, "fixtures/Synthetic_Marine_Time_Motion_Test_Data.xlsx"
-    )
+    restored_batch = load_synthetic_dataset(db_session, "fixtures/Synthetic_Marine_Time_Motion_Test_Data.xlsx")
     assert restored_batch is not None

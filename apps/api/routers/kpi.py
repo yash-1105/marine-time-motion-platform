@@ -17,7 +17,8 @@ from sqlalchemy.orm import Session
 from apps.api.auth.dependencies import require
 from apps.api.auth.principal import UserPrincipal
 from apps.api.core.database import get_db
-from apps.api.models.analytics import KPI, KPIFormulaVersion, KPIResult
+from apps.api.models.analytics import KPI, KPIFormulaVersion, KPIResult, LeadTimeDefinition, StatisticalAggregate
+from apps.api.models.canonical import ServiceAssignment, ServiceExecution, ServiceRequest, VesselCall
 from apps.api.models.ingestion import IngestionBatch
 from apps.api.services.kpi.benchmarks import KPIBenchmarkService
 from apps.api.services.kpi.engine import KPIEngine
@@ -29,6 +30,7 @@ router = APIRouter(prefix="/kpis", tags=["KPI Engine & Scorecard"])
 # ──────────────────────────────────────────────────────────────────────────────
 # Pydantic Schemas
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 class KPICalculateRequest(BaseModel):
     cohort_filters: dict[str, Any] | None = Field(None, description="Filters such as vessel_type, terminal_code, unit")
@@ -54,6 +56,40 @@ class PrimarySwapRequest(BaseModel):
     make_primary: bool = Field(True, description="Whether to designate this KPI as primary")
 
 
+def _service_line_rows(
+    db: Session,
+    tenant_id: str,
+    service_type: str | None = None,
+    movement_type: str | None = None,
+    vessel_type: str | None = None,
+    cargo_type: str | None = None,
+) -> list[tuple[ServiceRequest, ServiceAssignment, ServiceExecution, VesselCall]]:
+    """Return source records for the governed Service Type performance view."""
+    stmt = (
+        select(ServiceRequest, ServiceAssignment, ServiceExecution, VesselCall)
+        .join(ServiceAssignment, ServiceAssignment.service_request_id == ServiceRequest.id)
+        .join(ServiceExecution, ServiceExecution.service_assignment_id == ServiceAssignment.id)
+        .join(VesselCall, VesselCall.id == ServiceRequest.vessel_call_id)
+        .where(VesselCall.is_merged.is_(False))
+        .order_by(
+            ServiceRequest.service_type.asc(),
+            ServiceRequest.movement_type.asc(),
+            ServiceAssignment.scheduled_time.asc(),
+        )
+    )
+    if tenant_id != "*":
+        stmt = stmt.where(VesselCall.tenant_id == tenant_id)
+    if service_type:
+        stmt = stmt.where(ServiceRequest.service_type == service_type)
+    if movement_type:
+        stmt = stmt.where(ServiceRequest.movement_type == movement_type)
+    if vessel_type:
+        stmt = stmt.where(VesselCall.vessel_type == vessel_type)
+    if cargo_type:
+        stmt = stmt.where(VesselCall.cargo_type == cargo_type)
+    return db.execute(stmt).all()
+
+
 def _resolve_tenant(principal: UserPrincipal, explicit_tenant: str | None = None) -> str:
     if explicit_tenant:
         return explicit_tenant
@@ -65,6 +101,7 @@ def _resolve_tenant(principal: UserPrincipal, explicit_tenant: str | None = None
 # ──────────────────────────────────────────────────────────────────────────────
 # Registry & Catalogue Endpoints
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 @router.get("")
 def list_kpis(
@@ -132,31 +169,50 @@ def get_scorecard(
     # data loads) on every page request.  Fall back to the engine when a complete
     # snapshot is not available or predates the active committed batch.
     kpi_map = engine.ensure_registry()
-    persisted_rows = db.execute(
-        select(KPIResult)
-        .where(
-            KPIResult.period_start.is_(None),
-            KPIResult.period_end.is_(None),
-            KPIResult.grain == "ALL",
-            KPIResult.cohort_key == "all",
-            KPIResult.cohort_filters.is_(None),
-            KPIResult.is_recalculation == False,
-            KPIResult.kpi_id.in_([k.id for k in kpi_map.values()]),
+    persisted_rows = (
+        db.execute(
+            select(KPIResult)
+            .where(
+                KPIResult.period_start.is_(None),
+                KPIResult.period_end.is_(None),
+                KPIResult.grain == "ALL",
+                KPIResult.cohort_key == "all",
+                KPIResult.cohort_filters.is_(None),
+                KPIResult.is_recalculation.is_(False),
+                KPIResult.kpi_id.in_([k.id for k in kpi_map.values()]),
+            )
+            .order_by(KPIResult.calculated_at.desc())
         )
-        .order_by(KPIResult.calculated_at.desc())
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     latest_by_kpi: dict[Any, KPIResult] = {}
     for row in persisted_rows:
         latest_by_kpi.setdefault(row.kpi_id, row)
 
-    active_batch = db.execute(
-        select(IngestionBatch)
-        .where(IngestionBatch.tenant_id == target_tenant, IngestionBatch.is_active == True, IngestionBatch.status == "COMMITTED")
-        .order_by(IngestionBatch.created_at.desc())
-    ).scalars().first()
-    snapshot_is_current = bool(latest_by_kpi) and len(latest_by_kpi) == len(kpi_map) and (
-        not active_batch
-        or all(row.calculated_at is not None and row.calculated_at >= active_batch.created_at for row in latest_by_kpi.values())
+    active_batch = (
+        db.execute(
+            select(IngestionBatch)
+            .where(
+                IngestionBatch.tenant_id == target_tenant,
+                IngestionBatch.is_active.is_(True),
+                IngestionBatch.status == "COMMITTED",
+            )
+            .order_by(IngestionBatch.created_at.desc())
+        )
+        .scalars()
+        .first()
+    )
+    snapshot_is_current = (
+        bool(latest_by_kpi)
+        and len(latest_by_kpi) == len(kpi_map)
+        and (
+            not active_batch
+            or all(
+                row.calculated_at is not None and row.calculated_at >= active_batch.created_at
+                for row in latest_by_kpi.values()
+            )
+        )
     )
 
     if snapshot_is_current:
@@ -201,21 +257,23 @@ def get_scorecard(
         if cat not in categories:
             categories[cat] = []
 
-        categories[cat].append({
-            "kpi_number": kpi.kpi_number,
-            "code": kpi.code,
-            "name": kpi.name,
-            "value": item.get("value"),
-            "status": item.get("status"),
-            "band": item.get("band"),
-            "unit": kpi.unit,
-            "target": kpi.target,
-            "target_direction": kpi.target_direction,
-            "thresholds": kpi.thresholds,
-            "is_primary": kpi.is_primary,
-            "availability_status": kpi.availability_status,
-            "required_source_systems": kpi.required_source_systems or [],
-        })
+        categories[cat].append(
+            {
+                "kpi_number": kpi.kpi_number,
+                "code": kpi.code,
+                "name": kpi.name,
+                "value": item.get("value"),
+                "status": item.get("status"),
+                "band": item.get("band"),
+                "unit": kpi.unit,
+                "target": kpi.target,
+                "target_direction": kpi.target_direction,
+                "thresholds": kpi.thresholds,
+                "is_primary": kpi.is_primary,
+                "availability_status": kpi.availability_status,
+                "required_source_systems": kpi.required_source_systems or [],
+            }
+        )
 
     return {
         "tenant_id": target_tenant,
@@ -231,6 +289,7 @@ def get_scorecard(
 # ──────────────────────────────────────────────────────────────────────────────
 # Calculation & Recalculation Endpoints
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 @router.post("/calculate")
 def calculate_kpis(
@@ -303,6 +362,161 @@ def recalculate_kpi_endpoint(
 # KPI Detail, Results, Trends, and Benchmarks
 # ──────────────────────────────────────────────────────────────────────────────
 
+
+@router.get("/statistics")
+def list_governed_statistics(
+    db: Session = Depends(get_db),
+    principal: UserPrincipal = Depends(require("view", "kpi")),
+):
+    """Expose persisted governed percentile aggregates in the KPI experience.
+
+    These are produced by AnalyticsEngine/Polars during the ingestion pipeline; this
+    route intentionally never recalculates a percentile in a second implementation.
+    """
+    rows = db.execute(
+        select(StatisticalAggregate, LeadTimeDefinition)
+        .join(LeadTimeDefinition, LeadTimeDefinition.id == StatisticalAggregate.definition_id)
+        .where(StatisticalAggregate.cohort_key == "all")
+        .order_by(LeadTimeDefinition.name.asc())
+    ).all()
+    return {
+        "percentile_method": "linear_interpolation",
+        "items": [
+            {
+                "definition_id": str(definition.id),
+                "name": definition.name,
+                "unit": definition.unit,
+                "observation_count": aggregate.observation_count,
+                "missing_count": aggregate.missing_count,
+                "p75": aggregate.p75_hours,
+                "p90": aggregate.p90_hours,
+                "small_sample_warning": aggregate.small_sample_warning,
+                "status": "UNAVAILABLE" if not aggregate.observation_count else "AVAILABLE",
+                "traceability": {
+                    "formula_version": aggregate.formula_version,
+                    "filters_applied": aggregate.cohort_filters or {},
+                    "quarantine_excluded": aggregate.quarantine_excluded,
+                    "percentile_method": aggregate.percentile_method,
+                    "outlier_vcns": aggregate.outlier_vcns or [],
+                    "calculated_at": aggregate.calculated_at.isoformat() if aggregate.calculated_at else None,
+                },
+            }
+            for aggregate, definition in rows
+        ],
+    }
+
+
+@router.get("/service-lines")
+def get_service_line_kpis(
+    service_type: str | None = Query(None),
+    movement_type: str | None = Query(None),
+    vessel_type: str | None = Query(None),
+    cargo_type: str | None = Query(None),
+    db: Session = Depends(get_db),
+    principal: UserPrincipal = Depends(require("view", "kpi")),
+):
+    """Service Type performance view, using only ServiceRequest/Assignment/Execution data.
+
+    The requested term "Service Line" has no governed source field.  The data model's
+    actual equivalent is ServiceRequest.service_type, so each row reports the mean
+    scheduled-to-served execution delay for one real service type/movement cohort.
+    """
+    tenant_id = _resolve_tenant(principal)
+    rows = _service_line_rows(db, tenant_id, service_type, movement_type, vessel_type, cargo_type)
+    groups: dict[tuple[str, str], dict[str, Any]] = {}
+    for request, assignment, execution, vessel_call in rows:
+        key = (request.service_type, request.movement_type or "Unspecified")
+        group = groups.setdefault(key, {"delays": [], "missing_count": 0, "record_ids": [], "vessel_call_ids": []})
+        group["record_ids"].extend([str(request.id), str(assignment.id), str(execution.id)])
+        group["vessel_call_ids"].append(str(vessel_call.id))
+        if assignment.scheduled_time is None or execution.served_time is None:
+            group["missing_count"] += 1
+            continue
+        group["delays"].append((execution.served_time - assignment.scheduled_time).total_seconds() / 3600.0)
+
+    items = []
+    for (line, movement), group in sorted(groups.items()):
+        delays = group["delays"]
+        count = len(delays)
+        value = round(sum(delays) / count, 6) if count else None
+        items.append(
+            {
+                "service_line": line,
+                "movement_type": movement,
+                "value": value,
+                "unit": "hours",
+                "status": "COMPUTED" if count else "UNAVAILABLE",
+                "unavailable_reason": None
+                if count
+                else "Scheduled_Time and Served_Time are required for execution delay.",
+                "numerator": round(sum(delays), 6) if count else None,
+                "denominator": count if count else None,
+                "observation_count": count,
+                "missing_count": group["missing_count"],
+                "formula": "mean(Served_Time − Scheduled_Time)",
+                "aggregation_method": "arithmetic mean within service type and movement cohort",
+                "source_fields": [
+                    "ServiceRequest.service_type",
+                    "ServiceRequest.movement_type",
+                    "ServiceAssignment.scheduled_time",
+                    "ServiceExecution.served_time",
+                ],
+                "exclusions": ["merged vessel calls", "records with missing scheduled or served time"],
+                "filters_applied": {
+                    k: v
+                    for k, v in {
+                        "service_type": service_type,
+                        "movement_type": movement_type,
+                        "vessel_type": vessel_type,
+                        "cargo_type": cargo_type,
+                    }.items()
+                    if v
+                },
+                "source_record_ids": group["record_ids"],
+                "vessel_call_ids": sorted(set(group["vessel_call_ids"])),
+            }
+        )
+    return {
+        "interpretation": "Service Line is represented by the source-backed Service Type dimension; Shipping Line is a separate vessel-call dimension.",
+        "items": items,
+    }
+
+
+@router.get("/service-lines/records")
+def get_service_line_records(
+    service_type: str = Query(...),
+    movement_type: str | None = Query(None),
+    db: Session = Depends(get_db),
+    principal: UserPrincipal = Depends(require("view", "kpi")),
+):
+    """Drill through a Service Type KPI cohort to its underlying execution records."""
+    tenant_id = _resolve_tenant(principal)
+    rows = _service_line_rows(db, tenant_id, service_type, movement_type)
+    return {
+        "service_type": service_type,
+        "movement_type": movement_type,
+        "items": [
+            {
+                "vessel_call_id": str(vessel.id),
+                "vcn": vessel.vcn,
+                "vessel_name": vessel.vessel_name,
+                "service_request_id": str(request.id),
+                "service_assignment_id": str(assignment.id),
+                "service_execution_id": str(execution.id),
+                "scheduled_time": assignment.scheduled_time.isoformat() if assignment.scheduled_time else None,
+                "served_time": execution.served_time.isoformat() if execution.served_time else None,
+                "execution_delay_hours": round(
+                    (execution.served_time - assignment.scheduled_time).total_seconds() / 3600.0, 6
+                )
+                if assignment.scheduled_time and execution.served_time
+                else None,
+                "status": "AVAILABLE" if assignment.scheduled_time and execution.served_time else "UNAVAILABLE",
+            }
+            for request, assignment, execution, vessel in rows
+        ],
+    }
+
+
 @router.get("/benchmarks")
 def list_benchmarks(
     db: Session = Depends(get_db),
@@ -358,15 +572,13 @@ def get_kpi_detail(
     if not kpi:
         raise HTTPException(status_code=404, detail=f"KPI '{id_or_code}' not found.")
 
-    formula_versions = db.execute(
-        select(KPIFormulaVersion).where(KPIFormulaVersion.kpi_id == kpi.id)
-    ).scalars().all()
+    formula_versions = db.execute(select(KPIFormulaVersion).where(KPIFormulaVersion.kpi_id == kpi.id)).scalars().all()
 
-    latest_result = db.execute(
-        select(KPIResult)
-        .where(KPIResult.kpi_id == kpi.id)
-        .order_by(desc(KPIResult.calculated_at))
-    ).scalars().first()
+    latest_result = (
+        db.execute(select(KPIResult).where(KPIResult.kpi_id == kpi.id).order_by(desc(KPIResult.calculated_at)))
+        .scalars()
+        .first()
+    )
 
     return {
         "id": str(kpi.id),
@@ -392,18 +604,19 @@ def get_kpi_detail(
         "alias_of_id": str(kpi.alias_of_id) if kpi.alias_of_id else None,
         "availability_status": kpi.availability_status,
         "required_source_systems": kpi.required_source_systems,
-        "formula_versions": [
-            {"version": fv.version, "expression": fv.expression}
-            for fv in formula_versions
-        ],
+        "formula_versions": [{"version": fv.version, "expression": fv.expression} for fv in formula_versions],
         "latest_result": {
             "value": latest_result.value if latest_result else None,
             "status": latest_result.status if latest_result else None,
             "band": latest_result.band if latest_result else None,
-            "calculated_at": latest_result.calculated_at.isoformat() if latest_result and latest_result.calculated_at else None,
+            "calculated_at": latest_result.calculated_at.isoformat()
+            if latest_result and latest_result.calculated_at
+            else None,
             "is_recalculation": latest_result.is_recalculation if latest_result else False,
             "data_quality_summary": latest_result.data_quality_summary if latest_result else None,
-        } if latest_result else None,
+        }
+        if latest_result
+        else None,
     }
 
 
@@ -425,12 +638,13 @@ def get_kpi_results(
     if not kpi:
         raise HTTPException(status_code=404, detail=f"KPI '{id_or_code}' not found.")
 
-    results = db.execute(
-        select(KPIResult)
-        .where(KPIResult.kpi_id == kpi.id)
-        .order_by(desc(KPIResult.calculated_at))
-        .limit(limit)
-    ).scalars().all()
+    results = (
+        db.execute(
+            select(KPIResult).where(KPIResult.kpi_id == kpi.id).order_by(desc(KPIResult.calculated_at)).limit(limit)
+        )
+        .scalars()
+        .all()
+    )
 
     return [
         {
