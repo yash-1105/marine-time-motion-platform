@@ -34,9 +34,14 @@ from apps.api.models.canonical import (
     VesselCall,
 )
 from apps.api.models.config import EventDefinition
+from apps.api.services.analytics.engine import AnalyticsEngine
+from apps.api.services.identity.engine import IdentityEngine
+from apps.api.services.journey.reconstructor import JourneyReconstructionEngine
 from apps.api.services.kpi.benchmarks import KPIBenchmarkService
 from apps.api.services.kpi.engine import KPIEngine
 from apps.api.services.kpi.registry import ensure_kpi_registry
+from apps.api.services.quality.engine import DataQualityEngine
+from testkit.loader import load_synthetic_dataset
 
 
 @pytest.fixture(scope="function")
@@ -56,6 +61,29 @@ def auth_headers():
     assert resp.status_code == 200
     token = resp.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture(scope="module")
+def governed_kpi_api_dataset():
+    """Give KPI API assertions their own persisted governed population.
+
+    The ingestion test module deliberately removes the active dataset, so an API
+    test must not depend on percentile rows left behind by an earlier module.
+    """
+    engine = create_engine(settings.database_url)
+    Session = sessionmaker(bind=engine)
+    session = Session()
+    try:
+        load_synthetic_dataset(session, "fixtures/Synthetic_Marine_Time_Motion_Test_Data.xlsx")
+        DataQualityEngine(session).run_all()
+        IdentityEngine(session, tenant_id="synthetic-tenant").auto_merge_candidates()
+        JourneyReconstructionEngine(session, tenant_id="synthetic-tenant").reconstruct_all()
+        analytics = AnalyticsEngine(session, tenant_id="synthetic-tenant", exclude_quarantined=True)
+        analytics.compute_all_metrics()
+        analytics.compute_all_statistics()
+        yield
+    finally:
+        session.close()
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -417,7 +445,7 @@ def test_benchmark_admin_creation(db_session):
 # 6. REST API Endpoints with Auth
 # ──────────────────────────────────────────────────────────────────────────────
 
-def test_kpi_api_endpoints_work(auth_headers):
+def test_kpi_api_endpoints_work(auth_headers, governed_kpi_api_dataset):
     """Verifies that REST API endpoints return governed responses and enforce RBAC."""
     client = TestClient(app)
 
