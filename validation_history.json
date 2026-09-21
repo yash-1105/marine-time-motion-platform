@@ -178,5 +178,15 @@
     "base_calls": 72,
     "metrics_reconciled": "8 of 8",
     "dq_cases_passed": "10 of 10"
+  },
+  {
+    "run_timestamp": "2026-09-21T08:14:34.684286+00:00",
+    "execution_time_seconds": 164.8,
+    "app_version": "1.0.0",
+    "overall_status": "FAIL",
+    "dataset_checksum": "90919984816264e44f0e83bf47a6ef11cc98f000ca375bebc77bf3f7e49b0763",
+    "base_calls": 72,
+    "metrics_reconciled": "8 of 8",
+    "dq_cases_passed": "2 of 10"
   }
 ]
