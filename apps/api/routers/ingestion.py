@@ -2,7 +2,7 @@ import os
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
 from sqlalchemy import desc, select, text
 from sqlalchemy.orm import Session
 
@@ -26,7 +26,10 @@ def _resolve_tenant(principal) -> str:
 
 @router.post("/upload", status_code=202)
 def upload_file(
-    file: UploadFile = File(...), db: Session = Depends(get_db), principal=Depends(require("create", "vessel_call"))
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    principal=Depends(require("create", "vessel_call")),
 ):
     """Accept an authorised workbook and queue its governed downstream processing."""
     tenant_id = _resolve_tenant(principal)

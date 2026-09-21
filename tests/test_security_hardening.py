@@ -6,9 +6,9 @@ from fastapi import BackgroundTasks, HTTPException
 from fastapi.testclient import TestClient
 from starlette.datastructures import UploadFile
 
+from apps.api.core.config import Settings
 from apps.api.main import app
 from apps.api.routers.ingestion import upload_file
-from apps.api.core.config import Settings
 
 PRINCIPAL = SimpleNamespace(data_scope=SimpleNamespace(tenant_id="tenant-security"))
 
