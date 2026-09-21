@@ -59,13 +59,12 @@ def upload_file(
         # therefore cannot erase a currently usable dataset.
         batch_id = pipeline.process_file(temp_path, file.filename, force_new=True, commit_canonical=False)
 
-        # Dataset replacement deliberately uses the standard canonical path; only the
-        # expensive downstream calculation is asynchronous.
-        reset_tenant_dataset(db, tenant_id, keep_batches=True)
+        # Do not delete the active canonical dataset in the request.  A prior worker
+        # may still be calculating it; replacement is serialized by the worker so a
+        # newer upload cannot race a running analytics transaction.
         new_batch = db.query(IngestionBatch).filter(IngestionBatch.batch_id == batch_id).first()
         if not new_batch:
             raise RuntimeError("Accepted ingestion batch could not be found")
-        pipeline._commit_to_canonical(new_batch)
         new_batch.status = "PROCESSING"
         new_batch.is_active = False
         db.commit()

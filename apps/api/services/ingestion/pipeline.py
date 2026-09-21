@@ -193,7 +193,7 @@ class IngestionPipeline:
     def _validate_staging(self, batch: IngestionBatch):
         pass
 
-    def _commit_to_canonical(self, batch: IngestionBatch):
+    def _commit_to_canonical(self, batch: IngestionBatch, completion_status: str = "COMMITTED"):
         vessel_records = (
             self.db.execute(
                 select(StagingRecord).where(
@@ -531,5 +531,5 @@ class IngestionPipeline:
                 if parse_flt(pd_data.get("Actual_Quantity")) is not None:
                     vc.quantity_value = parse_flt(pd_data.get("Actual_Quantity"))
 
-        batch.status = "COMMITTED"
+        batch.status = completion_status
         self.db.commit()
