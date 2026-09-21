@@ -69,7 +69,7 @@ class AnalyticsEngine:
 
         # Fetch active, non-merged vessel calls for this tenant (or all if wildcard)
         vc_stmt = select(VesselCall).where(
-            VesselCall.is_merged == False,  # Exclude duplicate-merged calls
+            VesselCall.is_merged.is_(False),  # Exclude duplicate-merged calls
         )
         if self.tenant_id and self.tenant_id != "*":
             vc_stmt = vc_stmt.where(VesselCall.tenant_id == self.tenant_id)
@@ -78,7 +78,7 @@ class AnalyticsEngine:
         vessel_calls = self.db.execute(vc_stmt).scalars().all()
 
         # Purge any stale LeadTimeResult rows associated with merged calls
-        merged_q = select(VesselCall.id).where(VesselCall.is_merged == True)
+        merged_q = select(VesselCall.id).where(VesselCall.is_merged.is_(True))
         if self.tenant_id and self.tenant_id != "*":
             merged_q = merged_q.where(VesselCall.tenant_id == self.tenant_id)
         self.db.execute(delete(LeadTimeResult).where(LeadTimeResult.vessel_call_id.in_(merged_q)))
@@ -290,10 +290,10 @@ class AnalyticsEngine:
         stmt = select(EventOccurrence).where(
             EventOccurrence.vessel_call_id == vessel_call_id,
             EventOccurrence.event_definition_id == event_def.id,
-            EventOccurrence.is_superseded == False,
+            EventOccurrence.is_superseded.is_(False),
         )
         if self.exclude_quarantined:
-            stmt = stmt.where(EventOccurrence.is_quarantined == False)
+            stmt = stmt.where(EventOccurrence.is_quarantined.is_(False))
 
         if occurrence_selection == "last":
             stmt = stmt.order_by(EventOccurrence.occurrence_index.desc(), EventOccurrence.utc_value.desc())
