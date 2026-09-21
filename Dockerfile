@@ -6,4 +6,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 ENV PYTHONUNBUFFERED=1
 ENV PORT=8000
-CMD ["sh", "-c", "alembic upgrade head && python seed.py && uvicorn apps.api.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+CMD ["sh", "-c", "if [ \"${SERVICE_ROLE:-api}\" = \"worker\" ]; then exec dramatiq apps.worker.main; else alembic upgrade head && python seed.py && exec uvicorn apps.api.main:app --host 0.0.0.0 --port ${PORT:-8000}; fi"]
