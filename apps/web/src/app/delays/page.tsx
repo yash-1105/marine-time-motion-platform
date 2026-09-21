@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '../../lib/auth-context'
+import { X } from 'lucide-react'
 import {
   PageHeader,
   SectionHeader,
@@ -566,7 +567,7 @@ export default function DelaysAndBottlenecksPage() {
 
   return (
     <div className="flex flex-col min-h-full">
-      <PageHeader title="Delays & Bottlenecks" />
+      <PageHeader title="Delays & Bottlenecks" description="Understand delay causes, operational constraints, outliers, criticality, and resulting actions." />
 
       <div className="px-6 py-6 space-y-6">
         {/* KPI Row */}
@@ -1224,7 +1225,7 @@ export default function DelaysAndBottlenecksPage() {
                 onClick={() => setSelectedDelay(null)}
                 className="text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] text-sm cursor-pointer"
               >
-                ✕
+                <X size={15} aria-hidden="true" />
               </button>
             </div>
 

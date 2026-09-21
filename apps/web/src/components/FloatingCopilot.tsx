@@ -3,6 +3,8 @@
 import { FormEvent, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useAuth } from '@/lib/auth-context'
+import { ExternalLink, Send, Sparkles, X } from 'lucide-react'
+import { BrandMark } from './BrandMark'
 
 const API = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000') + '/api/v1'
 
@@ -109,37 +111,41 @@ export function FloatingCopilot() {
       {open && (
         <section
           aria-label="Copilot assistant"
-          className="flex h-[min(600px,calc(100vh-7rem))] w-[min(390px,calc(100vw-2rem))] flex-col overflow-hidden rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-surface)] shadow-2xl"
+          className="flex h-[min(620px,calc(100vh-7rem))] w-[min(410px,calc(100vw-2rem))] flex-col overflow-hidden rounded-[var(--radius-lg)] border border-[var(--color-border-strong)] bg-[var(--color-surface)] shadow-[var(--shadow-panel)]"
         >
-          <header className="flex items-center justify-between border-b border-[var(--color-border)] bg-[var(--color-accent)] px-4 py-3 text-white">
-            <div>
-              <h2 className="text-sm font-semibold">Copilot</h2>
-              <p className="text-[11px] text-white/80">Governed answers, scoped to your access</p>
+          <header className="flex items-center justify-between border-b border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3.5">
+            <div className="flex items-center gap-3">
+              <BrandMark className="h-8 w-8" />
+              <div>
+                <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">Copilot</h2>
+                <p className="text-[11px] text-[var(--color-text-secondary)]">Governed intelligence · access scoped</p>
+              </div>
             </div>
-            <button onClick={() => setOpen(false)} aria-label="Close Copilot" className="rounded p-1 text-lg leading-none hover:bg-white/15">×</button>
+            <button onClick={() => setOpen(false)} aria-label="Close Copilot" className="flex h-8 w-8 items-center justify-center rounded-[var(--radius-md)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-muted)] hover:text-[var(--color-text-primary)]"><X size={17} aria-hidden="true" /></button>
           </header>
 
-          <div className="flex-1 space-y-3 overflow-y-auto p-3 text-xs">
+          <div className="flex-1 space-y-4 overflow-y-auto bg-[var(--color-surface-subtle)] p-4 text-xs">
             {messages.length === 0 && (
-              <div className="rounded-lg bg-[var(--color-surface-muted)] p-3 text-[var(--color-text-secondary)]">
-                Ask about delays, lead times, KPIs, vessel journeys, or trends. Every answer is grounded in governed data.
+              <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)] p-4 text-[var(--color-text-secondary)] shadow-[var(--shadow-xs)]">
+                <div className="mb-2 flex items-center gap-2 font-semibold text-[var(--color-text-primary)]"><Sparkles size={14} className="text-[var(--color-accent)]" /> Governed operational assistant</div>
+                <p className="leading-5">Ask about delays, lead times, KPIs, vessel journeys, or trends. Every answer is grounded in governed data.</p>
               </div>
             )}
             {messages.map((item, index) => (
               <div key={`${item.question}-${index}`} className="space-y-2">
-                <div className="rounded-lg bg-[var(--color-accent-soft)] px-3 py-2 text-[var(--color-text-primary)]">{item.question}</div>
+                <div className="ml-8 rounded-[var(--radius-lg)] rounded-br-sm border border-[var(--color-accent-soft-border)] bg-[var(--color-accent-soft)] px-3.5 py-2.5 leading-5 text-[var(--color-text-primary)]">{item.question}</div>
                 {item.error ? (
                   <div role="alert" className="rounded-lg border border-[var(--color-critical-border)] bg-[var(--color-critical-bg)] px-3 py-2 text-[var(--color-critical)]">{item.error}</div>
                 ) : item.reply ? (
-                  <div className="rounded-lg border border-[var(--color-border)] px-3 py-2 text-[var(--color-text-primary)]">
-                    <p className="whitespace-pre-wrap">{item.reply.answer}</p>
+                  <div className="mr-5 rounded-[var(--radius-lg)] rounded-tl-sm border border-[var(--color-border)] bg-[var(--color-surface)] px-3.5 py-3 text-[var(--color-text-primary)] shadow-[var(--shadow-xs)]">
+                    <p className="whitespace-pre-wrap leading-5">{item.reply.answer}</p>
                     {describeResult(item.reply) && <p className="mt-2 leading-relaxed text-[var(--color-text-primary)]">{describeResult(item.reply)}</p>}
                     <p className="mt-2 text-[10px] text-[var(--color-text-tertiary)]">Tool: {item.reply.tool} · {item.reply.method}</p>
                     <p className="mt-1 text-[10px] text-[var(--color-text-secondary)]">{item.reply.data_quality_caveat}</p>
                     {item.reply.result?.status === 'UNAVAILABLE' && <p className="mt-1 font-medium text-[var(--color-warning)]">UNAVAILABLE: {item.reply.result.reason || 'Required data is not available.'}</p>}
                     <div className="mt-3 flex flex-wrap items-center gap-3">
-                      {(item.reply.tool === 'delay_analysis' || item.reply.tool === 'cohort_statistics') && <Link href="/delays" className="rounded-md bg-[var(--color-accent)] px-2.5 py-1.5 text-[10px] font-medium text-white hover:opacity-90">View delays &amp; bottlenecks →</Link>}
-                      {item.reply.evidence.length > 0 && <span className="flex items-center gap-2 text-[10px] text-[var(--color-text-tertiary)]">Evidence: {item.reply.evidence.slice(0, 4).map((href) => <Link key={href} href={href} className="text-[var(--color-accent)] underline">Open</Link>)}</span>}
+                      {(item.reply.tool === 'delay_analysis' || item.reply.tool === 'cohort_statistics') && <Link href="/delays" className="inline-flex items-center gap-1 rounded-md bg-[var(--color-accent)] px-2.5 py-1.5 text-[10px] font-semibold text-white hover:bg-[var(--color-accent-hover)]">View analysis <ExternalLink size={11} /></Link>}
+                      {item.reply.evidence.length > 0 && <span className="flex items-center gap-2 text-[10px] text-[var(--color-text-tertiary)]">Evidence: {item.reply.evidence.slice(0, 4).map((href) => <Link key={href} href={href} className="inline-flex items-center gap-0.5 font-medium text-[var(--color-accent)] hover:underline">Open <ExternalLink size={9} /></Link>)}</span>}
                     </div>
                   </div>
                 ) : (
@@ -150,13 +156,13 @@ export function FloatingCopilot() {
             {busy && <div className="text-[var(--color-text-tertiary)]" role="status">Copilot is checking governed data…</div>}
           </div>
 
-          <form onSubmit={send} className="flex gap-2 border-t border-[var(--color-border)] p-3">
-            <input value={question} onChange={(event) => setQuestion(event.target.value)} aria-label="Ask Copilot" placeholder="Ask a question…" className="min-w-0 flex-1 rounded-md border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-3 py-2 text-xs text-[var(--color-text-primary)] outline-none focus:ring-2 focus:ring-[var(--color-accent)]" />
-            <button type="submit" disabled={busy || !question.trim()} className="rounded-md bg-[var(--color-accent)] px-3 py-2 text-xs font-medium text-white disabled:cursor-not-allowed disabled:opacity-50">Send</button>
+          <form onSubmit={send} className="flex gap-2 border-t border-[var(--color-border)] bg-[var(--color-surface)] p-3.5">
+            <input value={question} onChange={(event) => setQuestion(event.target.value)} aria-label="Ask Copilot" placeholder="Ask a governed question…" className="min-w-0 flex-1 rounded-[var(--radius-md)] border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-3 py-2 text-xs text-[var(--color-text-primary)] outline-none focus:border-[var(--color-accent)]" />
+            <button type="submit" disabled={busy || !question.trim()} className="inline-flex items-center gap-1.5 rounded-[var(--radius-md)] bg-[var(--color-accent)] px-3 py-2 text-xs font-semibold text-white hover:bg-[var(--color-accent-hover)] disabled:cursor-not-allowed disabled:opacity-50"><Send size={13} /> Send</button>
           </form>
         </section>
       )}
-      <button onClick={() => setOpen((value) => !value)} aria-expanded={open} aria-label={open ? 'Close Copilot assistant' : 'Open Copilot assistant'} className="flex h-14 w-14 items-center justify-center rounded-full bg-[var(--color-accent)] text-2xl text-white shadow-lg transition-transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-[var(--color-accent-soft-border)]">{open ? '×' : '✦'}</button>
+      <button onClick={() => setOpen((value) => !value)} aria-expanded={open} aria-label={open ? 'Close Copilot assistant' : 'Open Copilot assistant'} className="flex h-12 w-12 items-center justify-center rounded-full border border-[var(--color-accent-strong)] bg-[var(--color-accent)] text-white shadow-[0_7px_20px_rgba(7,92,87,0.25)] hover:-translate-y-0.5 hover:bg-[var(--color-accent-hover)]">{open ? <X size={20} aria-hidden="true" /> : <Sparkles size={19} aria-hidden="true" />}</button>
     </div>
   )
 }

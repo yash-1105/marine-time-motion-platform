@@ -42,21 +42,22 @@ export const KpiCard: React.FC<KpiCardProps> = ({
   className = '',
 }) => {
   const body = (
-    <Card className={`h-full ${href ? 'transition-shadow hover:shadow-[0_2px_8px_rgba(15,23,42,0.08)]' : ''} ${className}`}>
-      <div className="flex items-center justify-between mb-2 gap-2">
-        <span className="text-xs font-medium uppercase tracking-wide text-[var(--color-text-secondary)]">
+    <Card className={`relative h-full overflow-hidden ${href ? 'hover:-translate-y-px hover:border-[var(--color-accent-soft-border)] hover:shadow-[var(--shadow-sm)]' : ''} ${className}`}>
+      <span className="absolute inset-x-0 top-0 h-0.5 bg-[var(--color-accent)] opacity-75" aria-hidden="true" />
+      <div className="flex items-start justify-between mb-3 gap-2">
+        <span className="text-[11px] font-semibold uppercase tracking-[0.055em] text-[var(--color-text-secondary)]">
           {label}
         </span>
         {status && <StatusBadge status={status} tone={tone} showGlyph={false} />}
       </div>
 
       <div className="flex items-baseline gap-1.5">
-        <span className="text-3xl font-semibold tabular-nums text-[var(--color-text-primary)]">{value}</span>
+        <span className="text-[30px] leading-none font-semibold tracking-[-0.035em] tabular-nums text-[var(--color-text-primary)]">{value}</span>
         {unit && <span className="text-sm text-[var(--color-text-secondary)]">{unit}</span>}
       </div>
 
       {(sampleSize || target || variance || context) && (
-        <div className="mt-2 text-xs text-[var(--color-text-tertiary)] flex items-center gap-2 flex-wrap">
+        <div className="mt-3 pt-3 border-t border-[var(--color-border)] text-xs text-[var(--color-text-secondary)] flex items-center gap-x-3 gap-y-1 flex-wrap">
           {sampleSize && <span>{sampleSize}</span>}
           {target && <span>{target}</span>}
           {variance && <span>{variance}</span>}
@@ -68,7 +69,7 @@ export const KpiCard: React.FC<KpiCardProps> = ({
 
   if (href) {
     return (
-      <Link href={href} className="block focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] rounded-lg">
+      <Link href={href} className="block rounded-[var(--radius-lg)]">
         {body}
       </Link>
     )

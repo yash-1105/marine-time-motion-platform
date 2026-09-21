@@ -23,7 +23,7 @@ export const FilterChip: React.FC<FilterChipProps> = ({ ariaLabel, value, onChan
     value={value}
     onChange={(e) => onChange(e.target.value)}
     aria-label={ariaLabel}
-    className={`bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-primary)] text-xs rounded-md px-2.5 py-1.5 focus:ring-2 focus:ring-[var(--color-accent)] focus:outline-none cursor-pointer ${className}`}
+    className={`min-h-9 bg-[var(--color-surface)] border border-[var(--color-border-strong)] text-[var(--color-text-primary)] text-xs font-medium rounded-[var(--radius-md)] px-3 py-2 hover:border-[var(--color-accent-soft-border)] focus:border-[var(--color-accent)] focus:outline-none cursor-pointer ${className}`}
   >
     {allLabel && <option value="">{allLabel}</option>}
     {options.map((opt) => (
@@ -43,7 +43,7 @@ export interface FilterFieldProps {
 /** Labeled wrapper for a filter control in the filter bar's expanded secondary panel. */
 export const FilterField: React.FC<FilterFieldProps> = ({ label, children, className = '' }) => (
   <div className={className}>
-    <label className="block text-[10px] uppercase text-[var(--color-text-tertiary)] font-semibold mb-1">
+    <label className="block text-[10px] uppercase tracking-[0.06em] text-[var(--color-text-secondary)] font-semibold mb-1.5">
       {label}
     </label>
     {children}

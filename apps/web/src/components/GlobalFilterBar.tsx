@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { FilterChip, FilterField } from './ui/FilterChip'
+import { ChevronDown, ChevronUp, SlidersHorizontal, X } from 'lucide-react'
 
 export interface FilterState {
   startDate: string
@@ -72,12 +73,12 @@ export const GlobalFilterBar: React.FC = () => {
   const activeFilterCount = Object.values(filters).filter(Boolean).length
 
   return (
-    <div className="bg-[var(--color-surface)] border-b border-[var(--color-border)] px-6 py-2.5 flex-shrink-0">
+    <div className="bg-[var(--color-surface-subtle)] border-b border-[var(--color-border)] px-6 lg:px-8 py-3 flex-shrink-0 shadow-[inset_0_-1px_0_rgba(15,35,42,0.015)]">
       <div className="flex items-center justify-between gap-2 flex-wrap">
         {/* Left: Quick Summary & Key Filters */}
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-xs font-semibold uppercase tracking-wide text-[var(--color-text-tertiary)] flex items-center gap-1.5 mr-1">
-            <span className="inline-block w-1.5 h-1.5 rounded-full bg-[var(--color-accent)]" aria-hidden="true" />
+          <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--color-text-secondary)] flex items-center gap-1.5 mr-1">
+            <SlidersHorizontal size={14} strokeWidth={1.8} className="text-[var(--color-accent)]" aria-hidden="true" />
             Scope
           </span>
 
@@ -129,16 +130,16 @@ export const GlobalFilterBar: React.FC = () => {
           {activeFilterCount > 0 && (
             <button
               onClick={handleReset}
-              className="text-xs text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] underline cursor-pointer"
+              className="inline-flex items-center gap-1 text-xs font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-critical)] cursor-pointer"
             >
-              Clear ({activeFilterCount})
+              <X size={13} aria-hidden="true" /> Clear ({activeFilterCount})
             </button>
           )}
 
           <button
             onClick={() => setIsExpanded(!isExpanded)}
             aria-expanded={isExpanded}
-            className="px-2.5 py-1.5 bg-[var(--color-surface)] hover:bg-[var(--color-surface-muted)] text-[var(--color-text-secondary)] rounded-md border border-[var(--color-border)] text-xs flex items-center gap-1.5 cursor-pointer"
+            className="min-h-9 px-3 py-2 bg-[var(--color-surface)] hover:bg-[var(--color-surface-muted)] text-[var(--color-text-secondary)] rounded-[var(--radius-md)] border border-[var(--color-border-strong)] text-xs font-medium flex items-center gap-1.5 cursor-pointer"
           >
             <span>More filters</span>
             {activeFilterCount > 0 && (
@@ -146,7 +147,7 @@ export const GlobalFilterBar: React.FC = () => {
                 {activeFilterCount}
               </span>
             )}
-            <span className="text-[10px]" aria-hidden="true">{isExpanded ? '▲' : '▼'}</span>
+            {isExpanded ? <ChevronUp size={13} aria-hidden="true" /> : <ChevronDown size={13} aria-hidden="true" />}
           </button>
         </div>
       </div>
@@ -159,7 +160,7 @@ export const GlobalFilterBar: React.FC = () => {
               type="date"
               value={filters.startDate}
               onChange={(e) => handleChange('startDate', e.target.value)}
-              className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-primary)] text-xs rounded-md px-2.5 py-1.5 focus:ring-2 focus:ring-[var(--color-accent)] focus:outline-none"
+              className="w-full bg-[var(--color-surface)] border border-[var(--color-border-strong)] text-[var(--color-text-primary)] text-xs rounded-[var(--radius-md)] px-3 py-2 focus:border-[var(--color-accent)] focus:outline-none"
             />
           </FilterField>
 
@@ -168,7 +169,7 @@ export const GlobalFilterBar: React.FC = () => {
               type="date"
               value={filters.endDate}
               onChange={(e) => handleChange('endDate', e.target.value)}
-              className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-primary)] text-xs rounded-md px-2.5 py-1.5 focus:ring-2 focus:ring-[var(--color-accent)] focus:outline-none"
+              className="w-full bg-[var(--color-surface)] border border-[var(--color-border-strong)] text-[var(--color-text-primary)] text-xs rounded-[var(--radius-md)] px-3 py-2 focus:border-[var(--color-accent)] focus:outline-none"
             />
           </FilterField>
         </div>

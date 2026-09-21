@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { useAuth } from '../lib/auth-context'
+import { Anchor, CircleCheck, Info, RefreshCw, TriangleAlert, X } from 'lucide-react'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
@@ -290,8 +291,8 @@ function ExecutiveDashboardContent() {
         </div>
         <div className="flex-1 flex items-center justify-center p-8">
           <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg p-8 max-w-md w-full text-center space-y-4 shadow-sm">
-            <div className="w-12 h-12 rounded-full bg-[var(--color-accent-soft)] text-[var(--color-accent)] flex items-center justify-center mx-auto text-xl font-semibold">
-              ⚓
+            <div className="w-12 h-12 rounded-[var(--radius-lg)] bg-[var(--color-accent-soft)] text-[var(--color-accent)] flex items-center justify-center mx-auto">
+              <Anchor size={23} strokeWidth={1.7} aria-hidden="true" />
             </div>
             <div>
               <h2 className="text-base font-semibold text-[var(--color-text-primary)]">No dataset loaded</h2>
@@ -314,9 +315,10 @@ function ExecutiveDashboardContent() {
   return (
     <div className="flex-1 flex flex-col h-full bg-[var(--color-bg)] overflow-y-auto">
       {/* Page header */}
-      <div className="bg-[var(--color-surface)] border-b border-[var(--color-border)] px-6 py-5 flex flex-wrap items-start justify-between gap-4 flex-shrink-0">
+      <div className="bg-[var(--color-surface)] border-b border-[var(--color-border)] px-6 lg:px-8 py-5 flex flex-wrap items-start justify-between gap-4 flex-shrink-0">
         <div>
-          <h1 className="text-xl font-semibold text-[var(--color-text-primary)] tracking-tight">Executive Dashboard</h1>
+          <h1 className="text-[26px] leading-8 font-semibold text-[var(--color-text-primary)] tracking-[-0.025em]">Executive Dashboard</h1>
+          <p className="mt-1 text-sm text-[var(--color-text-secondary)]">A governed operational view of vessel flow, quality, throughput, and performance.</p>
         </div>
 
         <div className="flex items-center gap-2.5">
@@ -333,7 +335,7 @@ function ExecutiveDashboardContent() {
           >
             {recon ? (
               <>
-                <span aria-hidden="true">{recon.all_combinations_reconciled ? '✓' : '⚠'}</span>
+                {recon.all_combinations_reconciled ? <CircleCheck size={13} aria-hidden="true" /> : <TriangleAlert size={13} aria-hidden="true" />}
                 <span>Reconciliation: {recon.total_combinations_tested}/{recon.total_combinations_tested} matched</span>
               </>
             ) : (
@@ -343,9 +345,9 @@ function ExecutiveDashboardContent() {
 
           <button
             onClick={fetchDashboard}
-            className="px-3 py-1.5 bg-[var(--color-surface)] hover:bg-[var(--color-surface-muted)] text-[var(--color-text-secondary)] rounded-md text-xs font-medium border border-[var(--color-border)] cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3 py-2 bg-[var(--color-surface)] hover:bg-[var(--color-surface-muted)] text-[var(--color-text-secondary)] rounded-[var(--radius-md)] text-xs font-semibold border border-[var(--color-border-strong)] cursor-pointer"
           >
-            Refresh
+            <RefreshCw size={13} aria-hidden="true" /> Refresh
           </button>
         </div>
       </div>
@@ -374,11 +376,11 @@ function ExecutiveDashboardContent() {
       )}
 
       {/* Main Dashboard Canvas */}
-      <div className="p-6 space-y-6 flex-1">
+      <div className="p-6 lg:p-8 space-y-6 flex-1">
         {/* 2. Top Metric Cards (Calls & Cleanliness) */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           {/* Total Calls */}
-          <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg p-4 flex flex-col justify-between">
+          <div className="relative overflow-hidden bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[var(--radius-lg)] p-5 flex flex-col justify-between shadow-[var(--shadow-xs)] before:absolute before:inset-x-0 before:top-0 before:h-0.5 before:bg-[var(--color-accent)]">
             <div className="flex items-center justify-between text-[var(--color-text-secondary)] text-xs font-medium">
               <span>Active Vessel Calls</span>
               <span className="text-[11px] text-[var(--color-text-tertiary)]">Non-merged</span>
@@ -395,7 +397,7 @@ function ExecutiveDashboardContent() {
           </div>
 
           {/* Clean Quality */}
-          <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg p-4 flex flex-col justify-between">
+          <div className="relative overflow-hidden bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[var(--radius-lg)] p-5 flex flex-col justify-between shadow-[var(--shadow-xs)] before:absolute before:inset-x-0 before:top-0 before:h-0.5 before:bg-[var(--color-good)]">
             <div className="flex items-center justify-between text-[var(--color-text-secondary)] text-xs font-medium">
               <span>Clean Calls</span>
               <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-[var(--color-good-bg)] text-[var(--color-good)] border border-[var(--color-good-border)]">
@@ -412,7 +414,7 @@ function ExecutiveDashboardContent() {
           </div>
 
           {/* Flagged Quality */}
-          <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg p-4 flex flex-col justify-between">
+          <div className="relative overflow-hidden bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[var(--radius-lg)] p-5 flex flex-col justify-between shadow-[var(--shadow-xs)] before:absolute before:inset-x-0 before:top-0 before:h-0.5 before:bg-[var(--color-warning)]">
             <div className="flex items-center justify-between text-[var(--color-text-secondary)] text-xs font-medium">
               <span>Flagged Calls</span>
               <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-[var(--color-warning-bg)] text-[var(--color-warning)] border border-[var(--color-warning-border)]">
@@ -431,7 +433,7 @@ function ExecutiveDashboardContent() {
           </div>
 
           {/* Quarantined Quality */}
-          <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg p-4 flex flex-col justify-between">
+          <div className="relative overflow-hidden bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[var(--radius-lg)] p-5 flex flex-col justify-between shadow-[var(--shadow-xs)] before:absolute before:inset-x-0 before:top-0 before:h-0.5 before:bg-[var(--color-critical)]">
             <div className="flex items-center justify-between text-[var(--color-text-secondary)] text-xs font-medium">
               <span>Quarantined Calls</span>
               <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-[var(--color-critical-bg)] text-[var(--color-critical)] border border-[var(--color-critical-border)]">
@@ -726,7 +728,7 @@ function ExecutiveDashboardContent() {
           {/* NO_SOURCE_DATA Disclosure */}
           <div className="mt-4 p-3 bg-[var(--color-surface-muted)] border border-[var(--color-border)] rounded-lg flex items-center justify-between text-xs gap-3 flex-wrap">
             <div className="flex items-center gap-2 text-[var(--color-text-secondary)]">
-              <span className="text-[var(--color-warning)]" aria-hidden="true">ℹ</span>
+              <Info size={14} className="text-[var(--color-warning)] flex-shrink-0" aria-hidden="true" />
               <span>
                 <strong className="text-[var(--color-text-primary)]">17 KPIs</strong> classified as{' '}
                 <span className="font-medium text-[var(--color-text-primary)]">NO_SOURCE_DATA</span> (yard dwell, gate queues, crane telemetry) — values are never fabricated as zero.
@@ -756,7 +758,7 @@ function ExecutiveDashboardContent() {
                 onClick={() => setShowReconModal(false)}
                 className="text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] font-semibold text-sm px-2 cursor-pointer"
               >
-                ✕
+                <X size={16} aria-hidden="true" />
               </button>
             </div>
 

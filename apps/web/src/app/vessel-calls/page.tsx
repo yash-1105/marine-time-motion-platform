@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { useAuth } from '../../lib/auth-context'
 import { PageHeader, StatusBadge, EmptyState, ErrorState, LoadingState } from '@/components/ui'
+import { CircleMinus, Search, X } from 'lucide-react'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
@@ -228,6 +229,7 @@ function VesselCallsContent() {
       {/* 1. Page Header & Real Operational KPI Pills */}
       <PageHeader
         title="Vessel Calls"
+        description="Consolidated vessel calls with journey coverage, governed durations, delay signals, and quality status."
         meta={
           <div className="flex items-center gap-2 flex-wrap">
             <StatusBadge label={`${filteredCalls.length} calls`} tone="neutral" showGlyph={false} />
@@ -256,13 +258,14 @@ function VesselCallsContent() {
               }}
               className="w-full text-xs bg-[var(--color-surface)] border border-[var(--color-border)] rounded-md px-3 py-1.5 pl-8 focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] text-[var(--color-text-primary)]"
             />
-            <span className="absolute left-2.5 top-1.5 text-[var(--color-text-tertiary)] text-xs">🔍</span>
+            <Search size={14} className="absolute left-2.5 top-2.5 text-[var(--color-text-tertiary)]" aria-hidden="true" />
             {searchTerm && (
               <button
                 onClick={() => setSearchTerm('')}
-                className="absolute right-2.5 top-1.5 text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] text-xs cursor-pointer"
+                aria-label="Clear search"
+                className="absolute right-2 top-1.5 flex h-6 w-6 items-center justify-center rounded text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-muted)] hover:text-[var(--color-text-primary)] cursor-pointer"
               >
-                ✕
+                <X size={13} aria-hidden="true" />
               </button>
             )}
           </div>
@@ -494,7 +497,7 @@ function VesselCallsContent() {
                           {fmtHours(c.anchorage_wait_hours)}
                         </button>
                       ) : (
-                        <span className="text-[10px] text-[var(--color-text-tertiary)]">⊘ UNAVAIL</span>
+                        <span className="inline-flex items-center gap-1 text-[10px] text-[var(--color-text-tertiary)]"><CircleMinus size={11} /> UNAVAIL</span>
                       )}
                     </td>
 
@@ -534,7 +537,7 @@ function VesselCallsContent() {
                           {fmtHours(c.inward_movement_hours)}
                         </button>
                       ) : (
-                        <span className="text-[10px] text-[var(--color-text-tertiary)]">⊘ UNAVAIL</span>
+                        <span className="inline-flex items-center gap-1 text-[10px] text-[var(--color-text-tertiary)]"><CircleMinus size={11} /> UNAVAIL</span>
                       )}
                     </td>
 
@@ -625,7 +628,7 @@ function VesselCallsContent() {
                 className="text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] text-lg font-bold p-1 cursor-pointer"
                 aria-label="Close Traceability Drawer"
               >
-                ✕
+                <X size={15} aria-hidden="true" />
               </button>
             </div>
 

@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useAuth } from '@/lib/auth-context'
 import { useDatasetStatus } from '@/lib/dataset-context'
 import { PageHeader, Card, SectionHeader, StatusBadge, ErrorState, LoadingState } from '@/components/ui'
+import { CheckCircle2, FileSpreadsheet, LayoutDashboard, Plus, Trash2, UploadCloud } from 'lucide-react'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
@@ -153,7 +154,7 @@ export default function IngestionPage() {
 
   return (
     <div className="flex-1 flex flex-col h-full bg-[var(--color-bg)] overflow-y-auto">
-      <PageHeader title="Data Ingestion" />
+      <PageHeader title="Data Ingestion" description="Manage the governed operations dataset used across dashboards and analytics." />
 
       {/* Hidden file input for "Add New" action */}
       <input
@@ -165,7 +166,8 @@ export default function IngestionPage() {
         aria-hidden="true"
       />
 
-      <div className="p-6 max-w-3xl w-full mx-auto space-y-6">
+      <div className="flex-1 flex items-start justify-center p-6 lg:p-8">
+      <div className="max-w-3xl w-full space-y-6">
         {uploadState === 'uploading' ? (
           <Card>
             <LoadingState label="Uploading and processing dataset…" />
@@ -179,66 +181,71 @@ export default function IngestionPage() {
             <LoadingState label="Checking dataset status…" />
           </Card>
         ) : datasetStatus === 'ready' ? (
-          <Card className="border-[var(--color-good-border)] bg-[var(--color-good-bg)]">
-            <div className="flex items-center justify-between gap-4 flex-wrap">
-              <div>
-                <p className="text-sm font-semibold text-[var(--color-text-primary)]">Dataset uploaded</p>
-                <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">{displayFileName}</p>
+          <Card className="overflow-hidden border-[var(--color-good-border)]">
+            <div className="flex items-start justify-between gap-5 flex-wrap">
+              <div className="flex items-center gap-4 min-w-0">
+                <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-[var(--radius-lg)] border border-[var(--color-good-border)] bg-[var(--color-good-bg)] text-[var(--color-good)]">
+                  <FileSpreadsheet size={23} strokeWidth={1.7} aria-hidden="true" />
+                </div>
+                <div className="min-w-0">
+                  <div className="mb-1 flex items-center gap-2">
+                    <p className="text-sm font-semibold text-[var(--color-text-primary)]">Active dataset</p>
+                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[var(--color-good)]"><CheckCircle2 size={12} /> Ready</span>
+                  </div>
+                  <p className="truncate text-xs text-[var(--color-text-secondary)]" title={displayFileName}>{displayFileName}</p>
+                  <p className="mt-1 text-[11px] text-[var(--color-text-tertiary)]">Available to all governed analytics experiences</p>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <button
                   onClick={() => addNewInputRef.current?.click()}
-                  className="px-3.5 py-1.5 bg-[var(--color-surface)] hover:bg-[var(--color-surface-muted)] text-[var(--color-text-primary)] rounded-md text-sm font-medium border border-[var(--color-border)] cursor-pointer transition-colors shadow-sm"
+                  className="inline-flex min-h-9 items-center gap-1.5 px-3.5 py-2 bg-[var(--color-surface)] hover:bg-[var(--color-surface-muted)] text-[var(--color-text-primary)] rounded-[var(--radius-md)] text-xs font-semibold border border-[var(--color-border-strong)] cursor-pointer"
                   title="Select another Excel workbook to replace the active dataset"
                 >
-                  Add New
+                  <Plus size={14} aria-hidden="true" /> Add New
                 </button>
                 <Link
                   href="/"
-                  className="px-3.5 py-1.5 bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-white rounded-md text-sm font-medium shadow-sm transition-colors"
+                  className="inline-flex min-h-9 items-center gap-1.5 px-3.5 py-2 bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-white rounded-[var(--radius-md)] text-xs font-semibold shadow-sm"
                 >
-                  View Executive Dashboard
+                  <LayoutDashboard size={14} aria-hidden="true" /> View Dashboard
                 </Link>
                 <button
                   onClick={() => setConfirmingRemoval(true)}
-                  className="px-3.5 py-1.5 bg-[var(--color-surface)] hover:bg-[var(--color-critical-bg)] hover:text-[var(--color-critical)] text-[var(--color-text-secondary)] rounded-md text-sm font-medium border border-[var(--color-border)] cursor-pointer transition-colors"
+                  className="inline-flex min-h-9 items-center gap-1.5 px-3.5 py-2 bg-[var(--color-surface)] hover:bg-[var(--color-critical-bg)] hover:text-[var(--color-critical)] text-[var(--color-text-secondary)] rounded-[var(--radius-md)] text-xs font-semibold border border-[var(--color-border-strong)] cursor-pointer"
                 >
-                  Remove Dataset
+                  <Trash2 size={14} aria-hidden="true" /> Remove
                 </button>
               </div>
             </div>
           </Card>
         ) : (
           <div className="space-y-4">
-            <div className="p-4 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] flex items-center justify-between">
-              <div>
-                <p className="text-sm font-semibold text-[var(--color-text-primary)]">No dataset loaded</p>
-                <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
-                  Upload an Excel operations workbook to populate analytics.
-                </p>
+            <Card className="text-center">
+              <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-[14px] border border-[var(--color-accent-soft-border)] bg-[var(--color-accent-soft)] text-[var(--color-accent)]">
+                <UploadCloud size={26} strokeWidth={1.6} aria-hidden="true" />
               </div>
-            </div>
-
-            <Card>
-              <SectionHeader title="Upload vessel operations dataset" description="Supported format: Excel (.xlsx)" />
-              <div className="space-y-4">
+              <SectionHeader className="justify-center" title="Upload vessel operations dataset" description="Select a governed Excel workbook to begin ingestion and analytics processing." />
+              <div className="mx-auto mt-6 max-w-xl space-y-4 text-left">
                 <input
                   type="file"
                   accept=".xlsx"
                   onChange={(e) => setFile(e.target.files?.[0] || null)}
-                  className="block w-full text-sm text-[var(--color-text-secondary)] border border-[var(--color-border)] rounded-md p-2 file:mr-3 file:px-3 file:py-1.5 file:rounded-md file:border-0 file:text-xs file:font-medium file:bg-[var(--color-accent-soft)] file:text-[var(--color-accent)] cursor-pointer"
+                  className="block w-full text-sm text-[var(--color-text-secondary)] border border-dashed border-[var(--color-border-strong)] rounded-[var(--radius-lg)] bg-[var(--color-surface-subtle)] p-3 file:mr-3 file:px-3 file:py-2 file:rounded-[var(--radius-md)] file:border-0 file:text-xs file:font-semibold file:bg-[var(--color-accent-soft)] file:text-[var(--color-accent-strong)] cursor-pointer hover:border-[var(--color-accent-soft-border)]"
                 />
                 <button
                   onClick={handleInitialUpload}
                   disabled={!file}
-                  className="px-4 py-1.5 bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-white rounded-md text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors shadow-sm"
+                  className="inline-flex min-h-10 w-full items-center justify-center gap-2 px-4 py-2 bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-white rounded-[var(--radius-md)] text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shadow-sm"
                 >
-                  Upload &amp; Process
+                  <UploadCloud size={16} aria-hidden="true" /> Upload &amp; Process
                 </button>
+                <p className="text-center text-[11px] text-[var(--color-text-tertiary)]">Excel (.xlsx) · validated, lineage-tracked, and processed through the governed pipeline</p>
               </div>
             </Card>
           </div>
         )}
+      </div>
       </div>
 
       {confirmingRemoval && (

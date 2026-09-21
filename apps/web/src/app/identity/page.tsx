@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react'
 import { useAuth } from '../../lib/auth-context'
 import { PageHeader, SectionHeader, Card, KpiCard, StatusBadge, EmptyState, LoadingState, FilterChip } from '@/components/ui'
+import { TriangleAlert } from 'lucide-react'
 
 interface Candidate {
   id: string
@@ -247,6 +248,7 @@ export default function IdentityPage() {
       <div className="space-y-6">
         <PageHeader
           title="Identity & Merges"
+          description="Review evidence-backed identity candidates, conflicts, survivorship previews, and merge audit history."
         />
         <LoadingState label="Loading identity resolution data…" />
       </div>
@@ -254,9 +256,11 @@ export default function IdentityPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="min-h-full space-y-6 bg-[var(--color-bg)] px-6 pb-8 lg:px-8">
       <PageHeader
         title="Identity & Merges"
+        description="Review evidence-backed identity candidates, conflicts, survivorship previews, and merge audit history."
+        className="-mx-6 lg:-mx-8"
         actions={
           can('merge') && (
             <button
@@ -458,7 +462,7 @@ export default function IdentityPage() {
                   {candidateDetail.conflict_detected && (
                     <div className="p-2.5 bg-[var(--color-critical-bg)] border border-[var(--color-critical-border)] rounded-md text-[var(--color-critical)] text-xs">
                       <div className="font-semibold flex items-center gap-1.5">
-                        <span aria-hidden="true">⚠</span> Hard Rule Conflict: Auto-Merge Blocked
+                        <TriangleAlert size={14} aria-hidden="true" /> Hard Rule Conflict: Auto-Merge Blocked
                       </div>
                       <ul className="list-disc list-inside mt-1 space-y-0.5">
                         {candidateDetail.conflict_reasons?.map((r, i) => (

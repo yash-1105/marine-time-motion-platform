@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+import { CircleCheck, CircleMinus, CircleX, Sparkles, TriangleAlert, type LucideIcon } from 'lucide-react'
 
 export type StatusTone = 'good' | 'warning' | 'critical' | 'inferred' | 'neutral'
 
@@ -12,12 +13,12 @@ const TONE_STYLES: Record<StatusTone, string> = {
   neutral: 'text-[var(--color-neutral)] bg-[var(--color-neutral-bg)] border-[var(--color-neutral-border)]',
 }
 
-const TONE_GLYPH: Record<StatusTone, string> = {
-  good: '✓',
-  warning: '⚠',
-  critical: '✕',
-  inferred: '⚡',
-  neutral: '⊘',
+const TONE_GLYPH: Record<StatusTone, LucideIcon> = {
+  good: CircleCheck,
+  warning: TriangleAlert,
+  critical: CircleX,
+  inferred: Sparkles,
+  neutral: CircleMinus,
 }
 
 /**
@@ -27,13 +28,13 @@ const TONE_GLYPH: Record<StatusTone, string> = {
  */
 export function statusToTone(status: string | null | undefined): StatusTone {
   const s = (status || '').toUpperCase()
-  if (['GOOD', 'CLEAN', 'PASS', 'ON_TARGET', 'HEALTHY', 'COMPUTED', 'CONFIRMED', 'ACTIVE'].includes(s)) {
+  if (['GOOD', 'GREEN', 'CLEAN', 'PASS', 'ON_TARGET', 'HEALTHY', 'COMPUTED', 'CONFIRMED', 'ACTIVE', 'READY', 'AVAILABLE', 'RESOLVED', 'MERGED', 'RECONCILED'].includes(s)) {
     return 'good'
   }
-  if (['WARNING', 'FLAGGED', 'WATCH', 'MEDIUM', 'HOLD', 'DELAYED', 'AT_RISK'].includes(s)) {
+  if (['WARNING', 'AMBER', 'FLAGGED', 'WATCH', 'MEDIUM', 'HOLD', 'PASSIVE_WAIT', 'UNCLASSIFIED', 'PENDING', 'DELAYED', 'AT_RISK'].includes(s)) {
     return 'warning'
   }
-  if (['CRITICAL', 'QUARANTINED', 'FAIL', 'HIGH', 'OFF_TARGET', 'OVERDUE', 'STALE'].includes(s)) {
+  if (['CRITICAL', 'RED', 'QUARANTINED', 'FAIL', 'FAILED', 'ERROR', 'HIGH', 'OFF_TARGET', 'OVERDUE', 'STALE', 'BLOCKED_CONFLICT', 'SEQUENCE_VIOLATION'].includes(s)) {
     return 'critical'
   }
   if (['INFERRED', 'ESTIMATED', 'AI_INFERRED'].includes(s)) {
@@ -71,12 +72,13 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
 }) => {
   const resolvedTone = tone ?? statusToTone(status)
   const resolvedLabel = label ?? (status ? humanize(status) : '')
+  const Glyph = TONE_GLYPH[resolvedTone]
 
   return (
     <span
-      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-xs font-medium whitespace-nowrap ${TONE_STYLES[resolvedTone]} ${className}`}
+      className={`inline-flex min-h-6 items-center gap-1.5 px-2 py-0.5 rounded-md border text-[11px] leading-4 font-semibold whitespace-nowrap ${TONE_STYLES[resolvedTone]} ${className}`}
     >
-      {showGlyph && <span aria-hidden="true">{TONE_GLYPH[resolvedTone]}</span>}
+      {showGlyph && <Glyph size={12} strokeWidth={2} aria-hidden="true" />}
       {resolvedLabel}
     </span>
   )

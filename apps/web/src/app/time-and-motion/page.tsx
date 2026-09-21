@@ -314,6 +314,7 @@ function TimeAndMotionContent() {
       {/* ── Top Header ──────────────────────────────────────────────────────── */}
       <PageHeader
         title="Time & Motion Explorer"
+        description="Explore governed lead-time definitions, population statistics, per-call results, and source lineage."
         meta={
           <StatusBadge label="Polars Engine · Linear Interpolation" tone="good" showGlyph={false} />
         }

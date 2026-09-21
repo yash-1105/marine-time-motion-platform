@@ -8,6 +8,22 @@ import { useDatasetStatus } from '../lib/dataset-context'
 import { GlobalFilterBar } from './GlobalFilterBar'
 import { EmptyState, LoadingState, ErrorState } from './ui'
 import { FloatingCopilot } from './FloatingCopilot'
+import { BrandMark } from './BrandMark'
+import {
+  Activity,
+  Anchor,
+  DatabaseZap,
+  FileChartColumn,
+  Gauge,
+  GitMerge,
+  LayoutDashboard,
+  LogOut,
+  Route,
+  ShieldCheck,
+  Sparkles,
+  Timer,
+  type LucideIcon,
+} from 'lucide-react'
 
 // Pages whose data is actually driven by the global Scope filter bar.
 // Other pages either use their own local filters or are record/detail-specific,
@@ -18,7 +34,7 @@ interface NavItem {
   label: string
   path: string
   requiredAction: string
-  glyph: string
+  icon: LucideIcon
 }
 
 interface NavGroup {
@@ -29,33 +45,33 @@ interface NavGroup {
 const NAV_GROUPS: NavGroup[] = [
   {
     label: 'Overview',
-    items: [{ label: 'Executive Dashboard', path: '/', requiredAction: 'view', glyph: '▦' }],
+    items: [{ label: 'Executive Dashboard', path: '/', requiredAction: 'view', icon: LayoutDashboard }],
   },
   {
     label: 'Operations',
     items: [
-      { label: 'Vessel Calls', path: '/vessel-calls', requiredAction: 'view', glyph: '⚓' },
-      { label: 'Vessel Journey', path: '/vessel-journey', requiredAction: 'view', glyph: '⇄' },
-      { label: 'Data Ingestion', path: '/ingestion', requiredAction: 'view', glyph: '⤓' },
+      { label: 'Vessel Calls', path: '/vessel-calls', requiredAction: 'view', icon: Anchor },
+      { label: 'Vessel Journey', path: '/vessel-journey', requiredAction: 'view', icon: Route },
+      { label: 'Data Ingestion', path: '/ingestion', requiredAction: 'view', icon: DatabaseZap },
     ],
   },
   {
     label: 'Analytics',
     items: [
-      { label: 'Time & Motion Explorer', path: '/time-and-motion', requiredAction: 'view', glyph: '◰' },
-      { label: 'Governed KPIs', path: '/kpis', requiredAction: 'view', glyph: '◎' },
-      { label: 'Delays & Bottlenecks', path: '/delays', requiredAction: 'view', glyph: '⏳' },
-      { label: 'Reports', path: '/reports', requiredAction: 'view', glyph: '▤' },
+      { label: 'Time & Motion Explorer', path: '/time-and-motion', requiredAction: 'view', icon: Activity },
+      { label: 'Governed KPIs', path: '/kpis', requiredAction: 'view', icon: Gauge },
+      { label: 'Delays & Bottlenecks', path: '/delays', requiredAction: 'view', icon: Timer },
+      { label: 'Reports', path: '/reports', requiredAction: 'view', icon: FileChartColumn },
     ],
   },
   {
     label: 'Data Governance',
     items: [
-      { label: 'Data Quality', path: '/data-quality', requiredAction: 'view', glyph: '✔' },
-      { label: 'Identity & Merges', path: '/identity', requiredAction: 'view', glyph: '⧉' },
+      { label: 'Data Quality', path: '/data-quality', requiredAction: 'view', icon: ShieldCheck },
+      { label: 'Identity & Merges', path: '/identity', requiredAction: 'view', icon: GitMerge },
     ],
   },
-  { label: 'Intelligence', items: [{ label: 'Copilot', path: '/copilot', requiredAction: 'view', glyph: '✦' }] },
+  { label: 'Intelligence', items: [{ label: 'Copilot', path: '/copilot', requiredAction: 'view', icon: Sparkles }] },
 ]
 
 const ALL_NAV_ITEMS = NAV_GROUPS.flatMap((g) => g.items)
@@ -117,40 +133,39 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[var(--color-bg)] text-[var(--color-text-primary)]">
       {/* Sidebar */}
-      <aside className="w-64 bg-[var(--color-surface)] border-r border-[var(--color-border)] flex flex-col flex-shrink-0">
-        <div className="h-14 px-4 flex items-center gap-2 border-b border-[var(--color-border)]">
-          <span className="w-2 h-2 rounded-full bg-[var(--color-accent)] inline-block" aria-hidden="true" />
-          <span className="font-semibold text-sm tracking-tight text-[var(--color-text-primary)]">
+      <aside className="w-[252px] bg-[var(--color-surface)] border-r border-[var(--color-border)] flex flex-col flex-shrink-0">
+        <div className="h-16 px-4 flex items-center gap-2.5 border-b border-[var(--color-border)]">
+          <BrandMark className="h-7 w-7 flex-shrink-0" />
+          <span className="font-semibold text-[13px] tracking-[-0.015em] text-[var(--color-text-primary)]">
             Marine Time &amp; Motion
           </span>
         </div>
 
-        <nav className="flex-1 py-3 overflow-y-auto" aria-label="Primary Navigation">
+        <nav className="flex-1 py-4 overflow-y-auto" aria-label="Primary Navigation">
           {NAV_GROUPS.map((group) => {
             const visibleItems = group.items.filter((item) => can(item.requiredAction))
             if (visibleItems.length === 0) return null
             return (
-              <div key={group.label} className="mb-4 px-3">
-                <div className="px-2 mb-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--color-text-tertiary)]">
+              <div key={group.label} className="mb-5 px-3">
+                <div className="px-2.5 mb-1.5 text-[10px] font-semibold uppercase tracking-[0.09em] text-[var(--color-text-tertiary)]">
                   {group.label}
                 </div>
                 <ul className="space-y-0.5">
                   {visibleItems.map((item) => {
                     const isActive = pathname === item.path
+                    const Icon = item.icon
                     return (
                       <li key={item.path}>
                         <Link
                           href={item.path}
                           aria-current={isActive ? 'page' : undefined}
-                          className={`flex items-center gap-2.5 px-2.5 py-1.5 text-sm rounded-md transition-colors ${
+                          className={`relative flex min-h-9 items-center gap-2.5 px-2.5 py-2 text-[13px] rounded-[var(--radius-md)] ${
                             isActive
-                              ? 'bg-[var(--color-accent-soft)] text-[var(--color-accent)] font-medium'
+                              ? 'bg-[var(--color-accent-soft)] text-[var(--color-accent-strong)] font-semibold before:absolute before:left-0 before:top-2 before:bottom-2 before:w-0.5 before:rounded-full before:bg-[var(--color-accent)]'
                               : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-muted)] hover:text-[var(--color-text-primary)]'
                           }`}
                         >
-                          <span className="text-sm w-4 text-center flex-shrink-0" aria-hidden="true">
-                            {item.glyph}
-                          </span>
+                          <Icon size={17} strokeWidth={isActive ? 2 : 1.75} className="flex-shrink-0" aria-hidden="true" />
                           <span className="truncate">{item.label}</span>
                         </Link>
                       </li>
@@ -163,9 +178,9 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
         </nav>
 
         {/* Bottom sidebar status indicator (clean, unobtrusive, no large role selector) */}
-        <div className="px-4 py-3 border-t border-[var(--color-border)] text-[11px] text-[var(--color-text-tertiary)] flex items-center justify-between">
+        <div className="px-4 py-3.5 border-t border-[var(--color-border)] bg-[var(--color-surface-subtle)] text-[11px] text-[var(--color-text-secondary)] flex items-center justify-between">
           <span className="flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-good)] inline-block" />
+            <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-good)] inline-block shadow-[0_0_0_3px_var(--color-good-bg)]" />
             <span>Operational System</span>
           </span>
           <span className="font-mono text-[10px]">v1.0</span>
@@ -175,13 +190,16 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
       {/* Main workspace */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Header with Title on Left, Compact User Identity & Sign Out on Right */}
-        <header className="h-14 flex-shrink-0 px-6 flex items-center justify-between border-b border-[var(--color-border)] bg-[var(--color-surface)]">
-          <h1 className="text-sm font-semibold text-[var(--color-text-primary)]">{currentTitle}</h1>
+        <header className="h-16 flex-shrink-0 px-6 lg:px-8 flex items-center justify-between border-b border-[var(--color-border)] bg-[var(--color-surface)]">
+          <div className="flex items-center gap-3">
+            <span className="h-5 w-0.5 rounded-full bg-[var(--color-accent)]" aria-hidden="true" />
+            <h1 className="text-[13px] font-semibold text-[var(--color-text-primary)]">{currentTitle}</h1>
+          </div>
 
           {/* Compact User Menu & Sign Out */}
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2.5 py-1 px-2.5 rounded-md bg-[var(--color-surface-muted)] border border-[var(--color-border)]">
-              <span className="w-6 h-6 rounded-full bg-[var(--color-accent-soft)] border border-[var(--color-accent-soft-border)] text-[var(--color-accent)] font-semibold text-[11px] flex items-center justify-center flex-shrink-0">
+            <div className="flex items-center gap-2.5 py-1.5 px-2.5 rounded-[var(--radius-md)] hover:bg-[var(--color-surface-muted)]">
+              <span className="w-7 h-7 rounded-full bg-[var(--color-accent-soft)] border border-[var(--color-accent-soft-border)] text-[var(--color-accent-strong)] font-semibold text-[11px] flex items-center justify-center flex-shrink-0">
                 {initials}
               </span>
               <div className="flex flex-col text-left">
@@ -199,10 +217,11 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
                 await logout()
                 router.push('/login')
               }}
-              className="text-xs font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-critical)] px-2.5 py-1.5 rounded-md hover:bg-[var(--color-surface-muted)] transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-critical)] px-2.5 py-2 rounded-[var(--radius-md)] hover:bg-[var(--color-critical-bg)] cursor-pointer"
               title="Sign out of active session"
             >
-              Sign out
+              <LogOut size={14} strokeWidth={1.8} aria-hidden="true" />
+              <span>Sign out</span>
             </button>
           </div>
         </header>
@@ -213,7 +232,7 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
           </React.Suspense>
         )}
 
-        <main className="flex-1 overflow-y-auto min-w-0 flex flex-col">
+        <main className="app-workspace flex-1 overflow-y-auto min-w-0 flex flex-col">
           {showDatasetGate ? (
             <div className="flex-1 flex items-center justify-center p-8">
               {datasetStatus === 'processing' ? (

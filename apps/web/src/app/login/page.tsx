@@ -3,6 +3,8 @@
 import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth, ALL_ROLES } from '@/lib/auth-context'
+import { ChevronDown, LogIn, ShieldCheck } from 'lucide-react'
+import { BrandMark } from '@/components/BrandMark'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -47,28 +49,37 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen w-screen flex items-center justify-center bg-[#f8fafc] px-6 py-12">
-      <div className="w-full max-w-4xl grid grid-cols-1 md:grid-cols-2 gap-10 md:gap-16 items-center">
+    <div className="min-h-screen w-screen flex items-center justify-center bg-[var(--color-bg)] px-6 py-12 relative overflow-hidden">
+      <div className="absolute inset-y-0 left-0 hidden w-[42%] bg-[var(--color-accent-strong)] lg:block" aria-hidden="true" />
+      <div className="absolute left-[8%] top-[16%] hidden h-64 w-64 rounded-full border border-white/10 lg:block" aria-hidden="true" />
+      <div className="relative w-full max-w-5xl grid grid-cols-1 md:grid-cols-2 gap-10 md:gap-20 items-center">
         {/* Left column: Brand and product purpose */}
-        <div className="md:pr-6">
-          <div className="inline-flex items-center gap-2 mb-4 px-2.5 py-1 rounded-full bg-slate-100 border border-slate-200/80">
-            <span className="w-2 h-2 rounded-full bg-[#0f766e]" />
-            <span className="text-[11px] font-medium tracking-wide uppercase text-slate-600">
+        <div className="md:pr-6 lg:text-white">
+          <div className="mb-6 flex items-center gap-3">
+            <BrandMark className="h-10 w-10" />
+            <span className="text-sm font-semibold tracking-tight">Marine Time &amp; Motion</span>
+          </div>
+          <div className="inline-flex items-center gap-2 mb-4 px-2.5 py-1 rounded-md bg-white/10 border border-white/15">
+            <ShieldCheck size={13} aria-hidden="true" />
+            <span className="text-[10px] font-semibold tracking-[0.09em] uppercase lg:text-white/80 text-[var(--color-text-secondary)]">
               Port Marine Operations
             </span>
           </div>
-          <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight text-slate-900 leading-tight">
-            Marine Time &amp; Motion
+          <h1 className="text-3xl sm:text-4xl font-semibold tracking-[-0.035em] text-[var(--color-text-primary)] lg:text-white leading-tight">
+            Operational clarity,<br />from arrival to departure.
           </h1>
-          <p className="mt-3 text-base text-slate-500 max-w-sm leading-relaxed">
-            Operational time &amp; motion analytics for marine port operations.
+          <p className="mt-4 text-sm lg:text-white/70 text-[var(--color-text-secondary)] max-w-sm leading-6">
+            Governed time-and-motion analytics for precise, traceable port operations decisions.
           </p>
         </div>
 
         {/* Right column: Clean, light SaaS Login Card */}
         <div className="w-full max-w-md mx-auto md:mx-0">
-          <div className="bg-white rounded-xl border border-slate-200/80 shadow-[0_4px_24px_-4px_rgba(0,0,0,0.06)] p-8 sm:p-10">
-            <h2 className="text-xl font-semibold text-slate-900 mb-6">Sign in</h2>
+          <div className="bg-white rounded-[var(--radius-lg)] border border-[var(--color-border)] shadow-[var(--shadow-panel)] p-8 sm:p-10">
+            <div className="mb-7">
+              <h2 className="text-xl font-semibold tracking-[-0.02em] text-[var(--color-text-primary)]">Sign in</h2>
+              <p className="mt-1 text-xs text-[var(--color-text-secondary)]">Continue to your operational workspace</p>
+            </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
               {error && (
@@ -83,7 +94,7 @@ export default function LoginPage() {
               <div>
                 <label
                   htmlFor="name"
-                  className="block text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-1.5"
+                  className="block text-[11px] font-semibold uppercase tracking-wider text-[var(--color-text-secondary)] mb-1.5"
                 >
                   Name
                 </label>
@@ -97,14 +108,14 @@ export default function LoginPage() {
                     setName(e.target.value)
                     if (error) setError(null)
                   }}
-                  className="w-full bg-[#f8fafc] border border-slate-200 rounded-md px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900 focus:bg-white transition-all"
+                  className="w-full bg-[var(--color-surface-subtle)] border border-[var(--color-border-strong)] rounded-[var(--radius-md)] px-3.5 py-2.5 text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-tertiary)] focus:outline-none focus:border-[var(--color-accent)] focus:bg-white"
                 />
               </div>
 
               <div>
                 <label
                   htmlFor="role"
-                  className="block text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-1.5"
+                  className="block text-[11px] font-semibold uppercase tracking-wider text-[var(--color-text-secondary)] mb-1.5"
                 >
                   Role
                 </label>
@@ -113,7 +124,7 @@ export default function LoginPage() {
                     id="role"
                     value={role}
                     onChange={(e) => setRole(e.target.value)}
-                    className="w-full bg-[#f8fafc] border border-slate-200 rounded-md px-3.5 py-2.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900 focus:bg-white transition-all cursor-pointer appearance-none pr-10"
+                    className="w-full bg-[var(--color-surface-subtle)] border border-[var(--color-border-strong)] rounded-[var(--radius-md)] px-3.5 py-2.5 text-sm text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-accent)] focus:bg-white cursor-pointer appearance-none pr-10"
                   >
                     {ALL_ROLES.map((r) => (
                       <option key={r} value={r}>
@@ -121,10 +132,8 @@ export default function LoginPage() {
                       </option>
                     ))}
                   </select>
-                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-slate-500">
-                    <svg className="w-4 h-4 fill-current" viewBox="0 0 20 20" aria-hidden="true">
-                      <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
-                    </svg>
+                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-[var(--color-text-secondary)]">
+                    <ChevronDown size={16} aria-hidden="true" />
                   </div>
                 </div>
               </div>
@@ -132,7 +141,7 @@ export default function LoginPage() {
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="w-full mt-6 py-2.5 px-4 bg-[#0d3b37] hover:bg-[#082825] active:bg-[#051c1a] text-white rounded-md text-sm font-medium transition-colors shadow-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="w-full mt-6 py-2.5 px-4 bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-white rounded-[var(--radius-md)] text-sm font-semibold shadow-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 {isSubmitting ? (
                   <>
@@ -140,7 +149,7 @@ export default function LoginPage() {
                     <span>Signing in…</span>
                   </>
                 ) : (
-                  <span>Login</span>
+                  <><LogIn size={15} aria-hidden="true" /><span>Login</span></>
                 )}
               </button>
             </form>

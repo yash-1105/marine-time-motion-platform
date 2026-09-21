@@ -353,8 +353,8 @@ function VesselJourneyContent() {
   return (
     <div className="h-full flex gap-0 overflow-hidden bg-[var(--color-bg)]">
       {/* ── LEFT: Vessel Call List ─────────────────────────────────────── */}
-      <aside className="w-64 flex-shrink-0 bg-[var(--color-surface)] border-r border-[var(--color-border)] flex flex-col overflow-hidden">
-        <div className="p-3 border-b border-[var(--color-border)]">
+      <aside className="w-[276px] flex-shrink-0 bg-[var(--color-surface)] border-r border-[var(--color-border)] flex flex-col overflow-hidden">
+        <div className="p-4 border-b border-[var(--color-border)] bg-[var(--color-surface-subtle)]">
           <h2 className="text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wide mb-2">
             Vessel Calls
           </h2>
@@ -378,7 +378,7 @@ function VesselJourneyContent() {
                 onClick={() => handleSelect(vc.id)}
                 className={`w-full text-left px-3 py-2.5 border-b border-[var(--color-border)] text-xs transition-colors cursor-pointer ${
                   selectedVcId === vc.id
-                    ? 'bg-[var(--color-accent-soft)] border-l-2 border-l-[var(--color-accent)]'
+                    ? 'bg-[var(--color-accent-soft)] border-l-[3px] border-l-[var(--color-accent)]'
                     : 'hover:bg-[var(--color-surface-muted)]'
                 }`}
               >
@@ -412,6 +412,7 @@ function VesselJourneyContent() {
             {/* Header */}
             <PageHeader
               title={`${journey.vcn} — ${journey.vessel_name}`}
+              description="Reconstructed operational journey with stage timing, evidence, handovers, and exception context."
               meta={
                 <div className="flex flex-col gap-1.5">
                   <div className="flex gap-4 flex-wrap items-center">
@@ -548,20 +549,20 @@ function VesselJourneyContent() {
                         return (
                           <div
                             key={s.id}
-                            className={`relative rounded-lg border p-4 flex flex-col justify-between bg-[var(--color-surface)] text-xs shadow-[0_1px_2px_rgba(15,23,42,0.04)] ${
+                            className={`relative min-h-44 overflow-visible rounded-[var(--radius-lg)] border p-4 flex flex-col justify-between bg-[var(--color-surface)] text-xs shadow-[var(--shadow-xs)] before:absolute before:inset-x-0 before:top-0 before:h-0.5 before:rounded-t-[var(--radius-lg)] ${
                               isViolation
-                                ? 'border-[var(--color-critical-border)]'
+                                ? 'border-[var(--color-critical-border)] before:bg-[var(--color-critical)]'
                                 : !isAvail
-                                ? 'border-[var(--color-border)] opacity-70'
+                                ? 'border-[var(--color-border)] opacity-70 before:bg-[var(--color-border-strong)]'
                                 : isShift
-                                ? 'border-[var(--color-warning-border)]'
-                                : 'border-[var(--color-border)]'
+                                ? 'border-[var(--color-warning-border)] before:bg-[var(--color-warning)]'
+                                : 'border-[var(--color-border)] before:bg-[var(--color-accent)]'
                             }`}
                           >
                             {/* Connector to next stage on wide layouts */}
                             {idx < journey.stages.length - 1 && (
                               <div
-                                className="hidden lg:block absolute top-1/2 -right-4 w-4 h-0.5 bg-[var(--color-accent-soft-border)]"
+                                className="hidden lg:block absolute top-1/2 -right-4 w-4 h-px bg-[var(--color-accent-soft-border)] after:absolute after:-right-px after:-top-[3px] after:h-2 after:w-2 after:rotate-45 after:border-r after:border-t after:border-[var(--color-accent-soft-border)]"
                                 aria-hidden="true"
                               />
                             )}

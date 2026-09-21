@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { useAuth } from '../../lib/auth-context'
+import { RefreshCw, Search, X } from 'lucide-react'
 import {
   PageHeader,
   KpiCard,
@@ -168,13 +169,14 @@ function DataQualityContent() {
     <div className="flex-1 flex flex-col h-full overflow-hidden bg-[var(--color-bg)] text-[var(--color-text-primary)]">
       <PageHeader
         title="Data Quality"
+        description="Monitor governed validation issues, severity, quarantine state, and steward remediation workflows."
         meta={`${filteredIssues.length} issue${filteredIssues.length === 1 ? '' : 's'} shown`}
         actions={
           <button
             onClick={fetchQualityData}
             className="px-3 py-1.5 bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-white rounded-md text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
           >
-            <span aria-hidden="true">↺</span> Refresh Status
+            <RefreshCw size={13} aria-hidden="true" /> Refresh Status
           </button>
         }
       />
@@ -279,16 +281,14 @@ function DataQualityContent() {
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full text-xs bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-primary)] rounded-md px-3 py-1.5 pl-8 focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
           />
-          <span className="absolute left-2.5 top-1.5 text-[var(--color-text-tertiary)] text-xs" aria-hidden="true">
-            🔍
-          </span>
+          <Search size={14} className="absolute left-2.5 top-2.5 text-[var(--color-text-tertiary)]" aria-hidden="true" />
           {searchTerm && (
             <button
               onClick={() => setSearchTerm('')}
-              className="absolute right-2.5 top-1.5 text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] text-xs cursor-pointer"
+              className="absolute right-2 top-1.5 flex h-6 w-6 items-center justify-center rounded text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-muted)] hover:text-[var(--color-text-primary)] cursor-pointer"
               aria-label="Clear search"
             >
-              ✕
+              <X size={13} aria-hidden="true" />
             </button>
           )}
         </div>
@@ -450,7 +450,7 @@ function DataQualityContent() {
                 className="text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] text-base font-bold cursor-pointer"
                 aria-label="Close"
               >
-                ✕
+                <X size={15} aria-hidden="true" />
               </button>
             </div>
 

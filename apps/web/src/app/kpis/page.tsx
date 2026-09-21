@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '../../lib/auth-context'
+import { X } from 'lucide-react'
 import {
   PageHeader,
   SectionHeader,
@@ -289,6 +290,7 @@ export default function KPIDashboardPage() {
     <div className="min-h-full bg-[var(--color-bg)]">
       <PageHeader
         title="Governed KPIs"
+        description="A traceable scorecard of governed formulas, targets, percentiles, availability, and service performance."
         actions={
           <>
             <label className="flex items-center gap-2 text-xs font-medium text-[var(--color-text-secondary)] bg-[var(--color-surface)] px-3 py-1.5 rounded-md border border-[var(--color-border)] cursor-pointer">
@@ -587,7 +589,7 @@ export default function KPIDashboardPage() {
                 }}
                 className="text-sm font-bold text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] cursor-pointer"
               >
-                ✕ Close
+                <X size={13} aria-hidden="true" /> Close
               </button>
             </div>
 

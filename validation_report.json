@@ -4,11 +4,11 @@
     "file_size_bytes": 173374,
     "sha256": "90919984816264e44f0e83bf47a6ef11cc98f000ca375bebc77bf3f7e49b0763",
     "manifest_verified": true,
-    "execution_time_seconds": 52.75,
+    "execution_time_seconds": 58.3,
     "app_version": "1.0.0",
     "rule_version": "1.0",
     "formula_version": "1.0",
-    "run_timestamp": "2026-09-21T08:19:43.773925+00:00"
+    "run_timestamp": "2026-09-21T17:45:30.677853+00:00"
   },
   "row_counts": {
     "VesselCalls": {
