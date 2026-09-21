@@ -166,6 +166,7 @@ class KPIEngine:
         period_end: datetime | None = None,
         grain: str = "ALL",
         is_recalculation: bool = False,
+        persist: bool = True,
     ) -> KPIResult:
         """Calculates a single KPI by its spec code (e.g., 'KPI-01')."""
         self.ensure_registry()
@@ -198,7 +199,8 @@ class KPIEngine:
                 is_recalculation=is_recalculation,
             )
             self.db.add(result)
-            self.db.commit()
+            if persist:
+                self.db.commit()
             return result
 
         # Handle alias relationship (e.g. KPI-53 is alias of KPI-11; KPI-51 is alias of KPI-14)
@@ -212,7 +214,11 @@ class KPIEngine:
                     period_end=period_end,
                     grain=grain,
                     is_recalculation=is_recalculation,
+                    persist=persist,
                 )
+                if not persist:
+                    # Alias provenance requires the primary result identifier.
+                    self.db.flush()
                 result = KPIResult(
                     kpi_id=kpi.id,
                     value=primary_res.value,
@@ -237,7 +243,8 @@ class KPIEngine:
                     is_recalculation=is_recalculation,
                 )
                 self.db.add(result)
-                self.db.commit()
+                if persist:
+                    self.db.commit()
                 return result
 
         # Fetch eligible vessel calls
@@ -277,7 +284,8 @@ class KPIEngine:
             is_recalculation=is_recalculation,
         )
         self.db.add(result)
-        self.db.commit()
+        if persist:
+            self.db.commit()
         return result
 
     def calculate_all_kpis(
@@ -304,6 +312,7 @@ class KPIEngine:
                     period_end=period_end,
                     grain=grain,
                     is_recalculation=False,
+                    persist=False,
                 )
                 results[code] = {
                     "kpi_id": str(res.kpi_id),
@@ -332,6 +341,10 @@ class KPIEngine:
                     "error": str(e),
                 }
                 unavail_count += 1
+
+        # This is a batch operation invoked by ingestion.  Committing every KPI
+        # incurred dozens of remote PostgreSQL round trips for one workbook.
+        self.db.commit()
 
         return {
             "total_kpis": len(results),
