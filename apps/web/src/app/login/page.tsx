@@ -49,12 +49,12 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen w-screen flex items-center justify-center bg-[var(--color-bg)] px-6 py-12 relative overflow-hidden">
+    <div className="min-h-screen w-screen flex items-center justify-center bg-[var(--color-bg)] px-6 py-12 lg:px-0 relative overflow-hidden">
       <div className="absolute inset-y-0 left-0 hidden w-[42%] bg-[var(--color-accent-strong)] lg:block" aria-hidden="true" />
       <div className="absolute left-[8%] top-[16%] hidden h-64 w-64 rounded-full border border-white/10 lg:block" aria-hidden="true" />
-      <div className="relative w-full max-w-5xl grid grid-cols-1 md:grid-cols-2 gap-10 md:gap-20 items-center">
+      <div className="relative grid w-full grid-cols-1 items-center gap-10 md:grid-cols-2 md:gap-12 lg:grid-cols-[42%_58%] lg:gap-0">
         {/* Left column: Brand and product purpose */}
-        <div className="md:pr-6 lg:text-white">
+        <div className="w-full max-w-sm justify-self-center md:px-4 lg:px-0 lg:text-white">
           <div className="mb-6 flex items-center gap-3">
             <BrandMark className="h-10 w-10" />
             <span className="text-sm font-semibold tracking-tight">Marine Time &amp; Motion</span>
@@ -74,7 +74,7 @@ export default function LoginPage() {
         </div>
 
         {/* Right column: Clean, light SaaS Login Card */}
-        <div className="w-full max-w-md mx-auto md:mx-0">
+        <div className="w-full max-w-md justify-self-center md:px-4 lg:px-0">
           <div className="bg-white rounded-[var(--radius-lg)] border border-[var(--color-border)] shadow-[var(--shadow-panel)] p-8 sm:p-10">
             <div className="mb-7">
               <h2 className="text-xl font-semibold tracking-[-0.02em] text-[var(--color-text-primary)]">Sign in</h2>
