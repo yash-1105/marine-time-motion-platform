@@ -97,8 +97,7 @@ retirement/migration plan.
 
 All 55 entries now have a defensible terminal availability/compliance status:
 `IMPLEMENTED`, `NO_SOURCE_DATA`, or `UNAVAILABLE` for an empty/missing-input
-cohort. The earlier `PARTIALLY_IMPLEMENTED` and `IMPLEMENTED_DIFFERENTLY` rows
-were resolved without proxies: KPI-08 is now `NO_SOURCE_DATA` pending a tug
+cohort. All prior non-terminal findings were resolved without proxies: KPI-08 is now `NO_SOURCE_DATA` pending a tug
 release feed; KPI-19/20 use repeat occurrence pairing; and the FRD ambiguities
 are explicit in the assumptions register and formula v2.1. The positive checks
 below are release evidence, not a replacement for the full regression run:
