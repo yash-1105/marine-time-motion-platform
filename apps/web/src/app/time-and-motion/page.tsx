@@ -386,9 +386,14 @@ function TimeAndMotionContent() {
                         <th className="py-2.5 px-3 text-right">Obs Count</th>
                         <th className="py-2.5 px-3 text-right">Mean</th>
                         <th className="py-2.5 px-3 text-right">Median</th>
+                        <th className="py-2.5 px-3 text-right">Std Dev</th>
+                        <th className="py-2.5 px-3 text-right">P75</th>
                         <th className="py-2.5 px-3 text-right">P90</th>
+                        <th className="py-2.5 px-3 text-right">Min / Fastest</th>
+                        <th className="py-2.5 px-3 text-right">Max / Slowest</th>
                         <th className="py-2.5 px-3 text-right">CV (σ/μ)</th>
                         <th className="py-2.5 px-3 text-right">Tail Risk (P90/Med)</th>
+                        <th className="py-2.5 px-3">Outlier Vessels</th>
                         <th className="py-2.5 px-3 text-center">Action</th>
                       </tr>
                     </thead>
@@ -422,13 +427,28 @@ function TimeAndMotionContent() {
                               {isNoSource ? '—' : st?.median_hours != null ? `${st.median_hours.toFixed(2)}h` : '—'}
                             </td>
                             <td className="py-2.5 px-3 text-right font-mono text-[var(--color-text-primary)]">
+                              {isNoSource ? '—' : st?.std_hours != null ? `${st.std_hours.toFixed(2)}h` : '—'}
+                            </td>
+                            <td className="py-2.5 px-3 text-right font-mono text-[var(--color-text-primary)]">
+                              {isNoSource ? '—' : st?.p75_hours != null ? `${st.p75_hours.toFixed(2)}h` : '—'}
+                            </td>
+                            <td className="py-2.5 px-3 text-right font-mono text-[var(--color-text-primary)]">
                               {isNoSource ? '—' : st?.p90_hours != null ? `${st.p90_hours.toFixed(2)}h` : '—'}
+                            </td>
+                            <td className="py-2.5 px-3 text-right font-mono text-[var(--color-text-primary)]">
+                              {isNoSource || st?.min_hours == null ? '—' : <><span>{st.min_hours.toFixed(2)}h</span><span className="block text-[10px] text-[var(--color-text-tertiary)]">{st.fastest_vcn || 'Call unavailable'}</span></>}
+                            </td>
+                            <td className="py-2.5 px-3 text-right font-mono text-[var(--color-text-primary)]">
+                              {isNoSource || st?.max_hours == null ? '—' : <><span>{st.max_hours.toFixed(2)}h</span><span className="block text-[10px] text-[var(--color-text-tertiary)]">{st.slowest_vcn || 'Call unavailable'}</span></>}
                             </td>
                             <td className="py-2.5 px-3 text-right font-mono text-[var(--color-text-primary)]">
                               {isNoSource ? '—' : st?.cv != null ? st.cv.toFixed(2) : '—'}
                             </td>
                             <td className="py-2.5 px-3 text-right font-mono text-[var(--color-text-primary)]">
                               {isNoSource ? '—' : st?.tail_risk_ratio != null ? `${st.tail_risk_ratio.toFixed(2)}x` : '—'}
+                            </td>
+                            <td className="py-2.5 px-3 text-[10px] text-[var(--color-text-secondary)]">
+                              {isNoSource ? '—' : st?.outlier_vcns?.length ? st.outlier_vcns.join(', ') : 'None'}
                             </td>
                             <td className="py-2.5 px-3 text-center">
                               {!isNoSource && (

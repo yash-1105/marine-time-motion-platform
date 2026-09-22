@@ -15,6 +15,11 @@ from sqlalchemy.orm import Session
 
 from apps.api.models.analytics import KPI, KPIFormulaVersion
 
+# v1.0 and v2.0 results remain historical records.  v2.1 is the release
+# remediation version: it removes the tug-to-berth proxy, makes repeat shift
+# pairing explicit, and aligns cargo/equipment formula metadata with execution.
+CURRENT_FORMULA_VERSION = "2.1"
+
 # Governed catalogue of all 55 KPIs from spec §11
 KPI_REGISTRY_DEFINITIONS: list[dict[str, Any]] = [
     # ── Pre-arrival and anchorage ─────────────────────────────────────────────
@@ -151,7 +156,6 @@ KPI_REGISTRY_DEFINITIONS: list[dict[str, Any]] = [
         "required_source_systems": ["VTS_RADAR_LOG"],
         "is_primary": True,
     },
-
     # ── Inward movement ───────────────────────────────────────────────────────
     {
         "kpi_number": 7,
@@ -180,21 +184,22 @@ KPI_REGISTRY_DEFINITIONS: list[dict[str, Any]] = [
         "code": "KPI-08",
         "name": "Average Inward Towage Duration",
         "category": "Inward movement",
-        "description": "Summed inward tug service duration divided by assisted vessels or service instances. Denominator choice is disclosed on result.",
+        "description": "Summed inward tug service duration divided by assisted vessels. Requires an explicit tug release/end event; berth arrival is not used as a proxy.",
         "formula": "SUM(tug_duration) / COUNT(assisted_vessels)",
         "numerator": "Total tug service hours on arrival",
         "denominator": "Count of assisted vessel calls (default)",
         "unit": "hours",
         "aggregation_method": "AVG",
         "eligible_population": "Arrival movements requiring towage assistance",
-        "required_events": ["TUG_SERVICE_START_ARRIVAL", "ALL_FAST_ARRIVAL"],
+        "required_events": ["TUG_SERVICE_START_ARRIVAL", "TUG_SERVICE_END_ARRIVAL"],
         "required_fields": ["service_type"],
         "exclusions": ["Unassisted berthing calls"],
         "target": 1.0,
         "target_direction": "LOWER_IS_BETTER",
         "thresholds": {"green": 1.2, "amber": 2.0, "red": 3.0},
         "owner": "Towage Operations",
-        "availability_status": "COMPUTED",
+        "availability_status": "NO_SOURCE_DATA",
+        "required_source_systems": ["TUG_SERVICE_RELEASE_LOG"],
         "is_primary": True,
     },
     {
@@ -216,7 +221,8 @@ KPI_REGISTRY_DEFINITIONS: list[dict[str, Any]] = [
         "target_direction": "HIGHER_IS_BETTER",
         "thresholds": {"green": 95.0, "amber": 90.0, "red": 80.0},
         "owner": "Towage Operations",
-        "availability_status": "COMPUTED",
+        "availability_status": "NO_SOURCE_DATA",
+        "required_source_systems": ["TUG_FLEET_AVAILABILITY"],
         "is_primary": True,
     },
     {
@@ -238,7 +244,8 @@ KPI_REGISTRY_DEFINITIONS: list[dict[str, Any]] = [
         "target_direction": "HIGHER_IS_BETTER",
         "thresholds": {"green": 95.0, "amber": 90.0, "red": 80.0},
         "owner": "Marine Pilotage",
-        "availability_status": "COMPUTED",
+        "availability_status": "NO_SOURCE_DATA",
+        "required_source_systems": ["PILOT_ROSTER_OR_AVAILABILITY"],
         "is_primary": True,
     },
     {
@@ -260,7 +267,8 @@ KPI_REGISTRY_DEFINITIONS: list[dict[str, Any]] = [
         "target_direction": "LOWER_IS_BETTER",
         "thresholds": {"green": 0.8, "amber": 1.5, "red": 2.5},
         "owner": "Towage Operations",
-        "availability_status": "COMPUTED",
+        "availability_status": "NO_SOURCE_DATA",
+        "required_source_systems": ["TUG_POSITION_OR_ARRIVAL_LOG"],
         "is_primary": True,
     },
     {
@@ -307,7 +315,6 @@ KPI_REGISTRY_DEFINITIONS: list[dict[str, Any]] = [
         "availability_status": "COMPUTED",
         "is_primary": True,
     },
-
     # ── Berthing and at berth ─────────────────────────────────────────────────
     {
         "kpi_number": 14,
@@ -328,7 +335,8 @@ KPI_REGISTRY_DEFINITIONS: list[dict[str, Any]] = [
         "target_direction": "BAND",
         "thresholds": {"green": 70.0, "amber": 80.0, "red": 90.0},
         "owner": "Terminal Operations",
-        "availability_status": "COMPUTED",
+        "availability_status": "NO_SOURCE_DATA",
+        "required_source_systems": ["BERTH_INVENTORY_AND_AVAILABILITY"],
         "is_primary": True,
     },
     {
@@ -468,8 +476,8 @@ KPI_REGISTRY_DEFINITIONS: list[dict[str, Any]] = [
         "code": "KPI-21",
         "name": "Berth Productivity",
         "category": "Berthing and at berth",
-        "description": "Total container moves divided by crane-hours. (Ensures the formula does not multiply by crane count twice if crane-hours are already summed per spec §11).",
-        "formula": "SUM(container_moves) / SUM(working_hours)",
+        "description": "Total container moves divided by summed individual crane-hours.",
+        "formula": "SUM(container_moves) / SUM(working_hours * resources_deployed)",
         "numerator": "Total container moves (or TEU)",
         "denominator": "Summed crane working hours across all deployed resources",
         "unit": "moves/crane-hr",
@@ -504,10 +512,10 @@ KPI_REGISTRY_DEFINITIONS: list[dict[str, Any]] = [
         "target_direction": "HIGHER_IS_BETTER",
         "thresholds": {"green": 55.0, "amber": 40.0, "red": 30.0},
         "owner": "Terminal Operations",
-        "availability_status": "COMPUTED",
+        "availability_status": "NO_SOURCE_DATA",
+        "required_source_systems": ["BERTH_INVENTORY_AND_AVAILABILITY"],
         "is_primary": True,
     },
-
     # ── Cargo handling ────────────────────────────────────────────────────────
     {
         "kpi_number": 23,
@@ -537,15 +545,15 @@ KPI_REGISTRY_DEFINITIONS: list[dict[str, Any]] = [
         "name": "Container Traffic in TEUs",
         "category": "Cargo handling",
         "description": "Total container traffic in TEUs (loaded + unloaded + transshipped, with configured treatment of restows).",
-        "formula": "SUM(actual_quantity) WHERE unit = 'TEU'",
+        "formula": "SUM(actual_quantity) WHERE unit = 'TEU' AND operation_type IN (Load, Discharge, Transshipment)",
         "numerator": "Summed container TEU moves",
         "denominator": "None (sum)",
         "unit": "TEU",
         "aggregation_method": "SUM",
         "eligible_population": "Container cargo operations",
         "required_events": ["CARGO_START", "CARGO_END"],
-        "required_fields": ["actual_quantity", "unit"],
-        "exclusions": ["Bulk MT operations"],
+        "required_fields": ["actual_quantity", "unit", "operation_type"],
+        "exclusions": ["Bulk MT operations", "Restows and TEU rows without an FRD traffic operation type"],
         "target": 50000.0,
         "target_direction": "HIGHER_IS_BETTER",
         "thresholds": {"green": 50000.0, "amber": 35000.0, "red": 20000.0},
@@ -648,7 +656,7 @@ KPI_REGISTRY_DEFINITIONS: list[dict[str, Any]] = [
         "name": "Equipment Downtime",
         "category": "Cargo handling",
         "description": "Validated crane/equipment downtime divided by total equipment operating time * 100.",
-        "formula": "(SUM(downtime_hours) / SUM(working_hours)) * 100",
+        "formula": "(SUM(downtime_hours) / SUM(working_hours + downtime_hours)) * 100",
         "numerator": "Total recorded downtime hours",
         "denominator": "Total gross operating hours",
         "unit": "%",
@@ -686,7 +694,6 @@ KPI_REGISTRY_DEFINITIONS: list[dict[str, Any]] = [
         "availability_status": "COMPUTED",
         "is_primary": True,
     },
-
     # ── Yard operations (NO_SOURCE_DATA in fixture) ───────────────────────────
     {
         "kpi_number": 31,
@@ -803,7 +810,6 @@ KPI_REGISTRY_DEFINITIONS: list[dict[str, Any]] = [
         "required_source_systems": ["YARD_TOS_EQUIPMENT"],
         "is_primary": True,
     },
-
     # ── Gate and landside (NO_SOURCE_DATA in fixture) ─────────────────────────
     {
         "kpi_number": 36,
@@ -920,7 +926,6 @@ KPI_REGISTRY_DEFINITIONS: list[dict[str, Any]] = [
         "required_source_systems": ["RAIL_OPERATOR_TOS"],
         "is_primary": True,
     },
-
     # ── Departure and turnaround ──────────────────────────────────────────────
     {
         "kpi_number": 41,
@@ -1007,7 +1012,8 @@ KPI_REGISTRY_DEFINITIONS: list[dict[str, Any]] = [
         "target_direction": "LOWER_IS_BETTER",
         "thresholds": {"green": 0.8, "amber": 1.5, "red": 2.5},
         "owner": "Towage Operations",
-        "availability_status": "COMPUTED",
+        "availability_status": "NO_SOURCE_DATA",
+        "required_source_systems": ["TUG_SERVICE_START_AND_RELEASE_LOG"],
         "is_primary": True,
     },
     {
@@ -1032,7 +1038,6 @@ KPI_REGISTRY_DEFINITIONS: list[dict[str, Any]] = [
         "availability_status": "COMPUTED",
         "is_primary": True,
     },
-
     # ── Operational efficiency and coordination (NO_SOURCE_DATA) ───────────────
     {
         "kpi_number": 46,
@@ -1103,7 +1108,6 @@ KPI_REGISTRY_DEFINITIONS: list[dict[str, Any]] = [
         "required_source_systems": ["TOS_CRANE_LOG"],
         "is_primary": True,
     },
-
     # ── Resource utilisation ──────────────────────────────────────────────────
     {
         "kpi_number": 49,
@@ -1124,7 +1128,8 @@ KPI_REGISTRY_DEFINITIONS: list[dict[str, Any]] = [
         "target_direction": "BAND",
         "thresholds": {"green": 75.0, "amber": 85.0, "red": 92.0},
         "owner": "Marine Pilotage",
-        "availability_status": "COMPUTED",
+        "availability_status": "NO_SOURCE_DATA",
+        "required_source_systems": ["PILOT_ROSTER_OR_AVAILABILITY"],
         "is_primary": True,
     },
     {
@@ -1146,7 +1151,8 @@ KPI_REGISTRY_DEFINITIONS: list[dict[str, Any]] = [
         "target_direction": "BAND",
         "thresholds": {"green": 65.0, "amber": 75.0, "red": 88.0},
         "owner": "Towage Operations",
-        "availability_status": "COMPUTED",
+        "availability_status": "NO_SOURCE_DATA",
+        "required_source_systems": ["TUG_FLEET_AVAILABILITY"],
         "is_primary": True,
     },
     {
@@ -1168,7 +1174,8 @@ KPI_REGISTRY_DEFINITIONS: list[dict[str, Any]] = [
         "target_direction": "BAND",
         "thresholds": {"green": 70.0, "amber": 80.0, "red": 90.0},
         "owner": "Terminal Operations",
-        "availability_status": "COMPUTED",
+        "availability_status": "NO_SOURCE_DATA",
+        "required_source_systems": ["BERTH_INVENTORY_AND_AVAILABILITY"],
         "is_primary": False,
         "alias_of_code": "KPI-14",
     },
@@ -1214,7 +1221,8 @@ KPI_REGISTRY_DEFINITIONS: list[dict[str, Any]] = [
         "target_direction": "LOWER_IS_BETTER",
         "thresholds": {"green": 0.8, "amber": 1.5, "red": 2.5},
         "owner": "Towage Operations",
-        "availability_status": "COMPUTED",
+        "availability_status": "NO_SOURCE_DATA",
+        "required_source_systems": ["TUG_POSITION_OR_ARRIVAL_LOG"],
         "is_primary": False,
         "alias_of_code": "KPI-11",
     },
@@ -1309,6 +1317,7 @@ def ensure_kpi_registry(db: Session) -> dict[str, KPI]:
                 availability_status=item.get("availability_status", "COMPUTED"),
                 required_source_systems=item.get("required_source_systems", []),
                 effective_from=datetime(2026, 1, 1, tzinfo=UTC),
+                is_active=True,
             )
             db.add(kpi)
             db.flush()
@@ -1336,20 +1345,23 @@ def ensure_kpi_registry(db: Session) -> dict[str, KPI]:
             kpi.is_primary = item.get("is_primary", True)
             kpi.availability_status = item.get("availability_status", "COMPUTED")
             kpi.required_source_systems = item.get("required_source_systems", [])
+            kpi.is_active = True
+            kpi.retired_at = None
+            kpi.retirement_reason = None
             db.flush()
 
         # Ensure initial formula version
         formula_ver = db.execute(
             select(KPIFormulaVersion).where(
                 KPIFormulaVersion.kpi_id == kpi.id,
-                KPIFormulaVersion.version == "1.0",
+                KPIFormulaVersion.version == CURRENT_FORMULA_VERSION,
             )
         ).scalar_one_or_none()
 
         if not formula_ver:
             formula_ver = KPIFormulaVersion(
                 kpi_id=kpi.id,
-                version="1.0",
+                version=CURRENT_FORMULA_VERSION,
                 expression=item["formula"],
             )
             db.add(formula_ver)

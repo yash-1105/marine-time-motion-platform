@@ -14,6 +14,7 @@ class RawRecord(BaseModel):
     original_value = Column(String, nullable=True)
     ingestion_batch_id = Column(String, nullable=False)
     source_record_id = Column(String, nullable=True)
+    source_file_id = Column(String, nullable=True)
 
 class StagingRecord(BaseModel):
     __tablename__ = "record"
@@ -28,6 +29,22 @@ class StagingRecord(BaseModel):
     validation_status = Column(String, nullable=False, default="PENDING")
     source_record_id = Column(String, nullable=True)
     canonical_table = Column(String, nullable=False) # e.g., 'vessel_call', 'event_occurrence'
+    source_file_id = Column(String, nullable=True)
+
+
+class IngestionFile(BaseModel):
+    """Immutable per-file manifest for a governed multi-workbook dataset group."""
+    __tablename__ = "file"
+    __table_args__ = {"schema": "raw"}
+
+    group_batch_id = Column(String, nullable=False, index=True)
+    original_filename = Column(String, nullable=False)
+    file_checksum = Column(String, nullable=False)
+    byte_size = Column(Integer, nullable=False)
+    storage_reference = Column(String, nullable=True)
+    parse_status = Column(String, nullable=False, default="QUEUED")
+    validation_status = Column(String, nullable=False, default="PENDING")
+    error_message = Column(String, nullable=True)
 
 class IngestionBatch(BaseModel):
     __tablename__ = "batch"

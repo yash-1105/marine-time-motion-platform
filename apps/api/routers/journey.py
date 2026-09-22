@@ -195,6 +195,20 @@ def get_vessel_events(
     ]
 
 
+@router.get("/{vessel_call_id}/service-timings")
+def get_service_timings(
+    vessel_call_id: str,
+    db: Session = Depends(get_db),
+    principal: UserPrincipal = Depends(require("view", "vessel_call")),
+):
+    """Compact journey drill-down for Requested, Scheduled, Served and FRD delays."""
+    from apps.api.services.delays.service import DelayService
+
+    tenant = "synthetic-tenant" if principal.data_scope.tenant_id in ("*", "tenant-synthetic-01") else principal.data_scope.tenant_id
+    items = DelayService(db, tenant_id=tenant).list_service_timings()["items"]
+    return [item for item in items if item["vessel_call_id"] == vessel_call_id]
+
+
 @router.post("/{vessel_call_id}/corrections")
 def create_correction(
     vessel_call_id: str,

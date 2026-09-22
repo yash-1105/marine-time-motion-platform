@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { useAuth } from '../../lib/auth-context'
-import { RefreshCw, Search, X } from 'lucide-react'
+import { RefreshCw, Search, X, Ban } from 'lucide-react'
 import {
   PageHeader,
   KpiCard,
@@ -33,6 +33,16 @@ interface QualityIssue {
   disposition?: string | null
   workflow_state?: string | null
   created_at?: string | null
+  issue_class?: 'QUALITY' | 'OUTLIER'
+  source_file?: string | null
+  source_sheet?: string | null
+  source_row?: number | null
+  source_field?: string | null
+  original_values?: Record<string, unknown> | null
+  reason?: string | null
+  movement_scope?: string | null
+  service_type?: string | null
+  is_excluded?: boolean
 }
 
 interface QualitySummary {
@@ -46,6 +56,14 @@ interface QualitySummary {
   clean_calls_count: number
   cleanliness_percentage: number
   by_severity: Record<string, number>
+  total_rows?: number
+  clean_rows?: number
+  incomplete_rows?: number
+  sequence_errors?: number
+  duplicate_rows?: number
+  outliers?: number
+  excluded_rows?: number
+  quarantined_rows?: number
 }
 
 function DataQualityContent() {
@@ -62,6 +80,13 @@ function DataQualityContent() {
   const [statusFilter, setStatusFilter] = useState<string>(searchParams.get('status') || 'ALL')
   const [ruleFilter, setRuleFilter] = useState<string>(searchParams.get('rule') || 'ALL')
   const [searchTerm, setSearchTerm] = useState<string>('')
+  const [fileFilter, setFileFilter] = useState<string>('ALL')
+  const [serviceFilter, setServiceFilter] = useState<string>('ALL')
+  const [movementFilter, setMovementFilter] = useState<string>('ALL')
+  const [reviewFilter, setReviewFilter] = useState<string>('ALL')
+  const [selectedIssueIds, setSelectedIssueIds] = useState<string[]>([])
+  const [excludeReason, setExcludeReason] = useState('')
+  const [excluding, setExcluding] = useState(false)
 
   // Resolve dialog state
   const [resolveTarget, setResolveTarget] = useState<QualityIssue | null>(null)
@@ -76,7 +101,7 @@ function DataQualityContent() {
     try {
       const [summaryRes, issuesRes] = await Promise.all([
         fetch(`${API}/api/v1/quality/summary`, { headers }),
-        fetch(`${API}/api/v1/quality/issues`, { headers }),
+        fetch(`${API}/api/v1/quality/issues${reviewFilter === 'OUTLIERS' ? '?outliers_only=true' : reviewFilter === 'INCOMPLETE' ? '?incomplete_only=true' : reviewFilter === 'CHRONOLOGY' ? '?chronological_only=true' : ''}`, { headers }),
       ])
 
       if (summaryRes.ok) {
@@ -94,7 +119,7 @@ function DataQualityContent() {
     } finally {
       setLoading(false)
     }
-  }, [headers])
+  }, [headers, reviewFilter])
 
   useEffect(() => {
     if (authLoading) return
@@ -143,6 +168,9 @@ function DataQualityContent() {
       if (ruleFilter !== 'ALL' && iss.rule_id !== ruleFilter) {
         return false
       }
+      if (fileFilter !== 'ALL' && iss.source_file !== fileFilter) return false
+      if (serviceFilter !== 'ALL' && iss.service_type !== serviceFilter) return false
+      if (movementFilter !== 'ALL' && (iss.movement_scope || '').toUpperCase() !== movementFilter) return false
       if (searchTerm.trim()) {
         const q = searchTerm.toLowerCase().trim()
         const matchesVcn = (iss.vcn || '').toLowerCase().includes(q)
@@ -156,7 +184,7 @@ function DataQualityContent() {
       }
       return true
     })
-  }, [issues, severityFilter, statusFilter, ruleFilter, searchTerm])
+  }, [issues, severityFilter, statusFilter, ruleFilter, fileFilter, serviceFilter, movementFilter, searchTerm])
 
   const distinctRules = useMemo(() => {
     const rules = new Set(issues.map((i) => i.rule_id))
@@ -164,6 +192,33 @@ function DataQualityContent() {
   }, [issues])
 
   const hasActiveFilters = severityFilter !== 'ALL' || statusFilter !== 'ALL' || ruleFilter !== 'ALL'
+
+  const distinctFiles = useMemo(() => Array.from(new Set(issues.map((i) => i.source_file).filter(Boolean) as string[])).sort(), [issues])
+  const distinctServices = useMemo(() => Array.from(new Set(issues.map((i) => i.service_type).filter(Boolean) as string[])).sort(), [issues])
+
+  const toggleSelected = (issueId: string) => {
+    setSelectedIssueIds((current) => current.includes(issueId) ? current.filter((id) => id !== issueId) : [...current, issueId])
+  }
+
+  const excludeSelected = async () => {
+    const selected = filteredIssues.filter((issue) => selectedIssueIds.includes(issue.id) && issue.issue_class !== 'OUTLIER')
+    if (!selected.length || !excludeReason.trim()) return
+    setExcluding(true)
+    try {
+      const response = await fetch(`${API}/api/v1/quality/exclusions`, {
+        method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ issue_ids: selected.map((issue) => issue.id), reason: excludeReason.trim() }),
+      })
+      if (!response.ok) throw new Error((await response.json()).message || response.statusText)
+      setSelectedIssueIds([])
+      setExcludeReason('')
+      await fetchQualityData()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to exclude selected source rows')
+    } finally {
+      setExcluding(false)
+    }
+  }
 
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden bg-[var(--color-bg)] text-[var(--color-text-primary)]">
@@ -183,11 +238,18 @@ function DataQualityContent() {
       {/* KPI Summary */}
       {summary && (
         <div className="border-b border-[var(--color-border)] bg-[var(--color-surface-muted)] px-6 py-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 flex-shrink-0">
+          <KpiCard label="Total Rows" value={summary.total_rows ?? 0} context={<span>Current dataset staging</span>} />
+          <KpiCard label="Clean Rows" value={summary.clean_rows ?? 0} tone="good" context={<span>Eligible source rows</span>} />
           <KpiCard
             label="Total Issues"
             value={summary.total_issues}
             context={<span>{summary.open_issues} active</span>}
           />
+          <KpiCard label="Incomplete" value={summary.incomplete_rows ?? 0} context={<span>Missing governed inputs</span>} />
+          <KpiCard label="Sequence Errors" value={summary.sequence_errors ?? 0} tone="warning" context={<span>DAG/service chronology</span>} />
+          <KpiCard label="Duplicates" value={summary.duplicate_rows ?? 0} context={<span>Not double-counted</span>} />
+          <KpiCard label="Outliers" value={summary.outliers ?? 0} context={<span>Review, not auto-deleted</span>} />
+          <KpiCard label="Excluded" value={summary.excluded_rows ?? 0} context={<span>Audited analytical rows</span>} />
           <KpiCard
             label="Critical"
             value={summary.critical_issues}
@@ -200,6 +262,7 @@ function DataQualityContent() {
             tone="warning"
             context={<span>Requires review</span>}
           />
+          <KpiCard label="Warnings" value={(summary.by_severity?.MEDIUM || 0) + (summary.by_severity?.LOW || 0)} context={<span>Reviewable issues</span>} />
           <KpiCard
             label="Quarantined Calls"
             value={summary.quarantined_calls_count}
@@ -234,6 +297,19 @@ function DataQualityContent() {
               { value: 'LOW', label: 'Low' },
             ]}
           />
+          <FilterChip ariaLabel="Review class" value={reviewFilter} onChange={setReviewFilter} options={[
+            { value: 'ALL', label: 'Quality Issues' }, { value: 'INCOMPLETE', label: 'Incomplete Rows' },
+            { value: 'CHRONOLOGY', label: 'Chronology Violations' }, { value: 'OUTLIERS', label: 'Outliers Only' },
+          ]} />
+          <FilterChip ariaLabel="File" value={fileFilter} onChange={setFileFilter} options={[
+            { value: 'ALL', label: 'All Files' }, ...distinctFiles.map((value) => ({ value, label: value })),
+          ]} />
+          <FilterChip ariaLabel="Service" value={serviceFilter} onChange={setServiceFilter} options={[
+            { value: 'ALL', label: 'All Services' }, ...distinctServices.map((value) => ({ value, label: value })),
+          ]} />
+          <FilterChip ariaLabel="Movement" value={movementFilter} onChange={setMovementFilter} options={[
+            { value: 'ALL', label: 'All Movements' }, { value: 'ARRIVAL', label: 'Arrival / Inward' }, { value: 'SAILING', label: 'Sailing / Outward' }, { value: 'SHIFTING', label: 'Shifting' },
+          ]} />
 
           <FilterChip
             ariaLabel="Status"
@@ -263,6 +339,9 @@ function DataQualityContent() {
                 setSeverityFilter('ALL')
                 setStatusFilter('ALL')
                 setRuleFilter('ALL')
+                setFileFilter('ALL')
+                setServiceFilter('ALL')
+                setMovementFilter('ALL')
               }}
               className="text-[var(--color-accent)] hover:text-[var(--color-accent-hover)] underline text-xs cursor-pointer ml-1"
             >
@@ -293,6 +372,16 @@ function DataQualityContent() {
         </div>
       </div>
 
+      {selectedIssueIds.length > 0 && reviewFilter !== 'OUTLIERS' && (
+        <div className="border-b border-[var(--color-border)] bg-[var(--color-surface-muted)] px-6 py-2.5 flex items-center gap-3 text-xs">
+          <span className="font-semibold">{selectedIssueIds.length} selected</span>
+          <input value={excludeReason} onChange={(event) => setExcludeReason(event.target.value)} placeholder="Reason for governed exclusion (required)" className="min-w-72 flex-1 max-w-xl rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1.5" />
+          <button disabled={!excludeReason.trim() || excluding} onClick={excludeSelected} className="inline-flex items-center gap-1.5 rounded-md border border-red-300 bg-red-50 px-3 py-1.5 font-semibold text-red-800 disabled:opacity-50">
+            <Ban size={13} aria-hidden="true" /> {excluding ? 'Rebuilding…' : 'Exclude from active analysis'}
+          </button>
+        </div>
+      )}
+
       {/* Issues Data Table */}
       <div className="flex-1 overflow-auto bg-[var(--color-surface)]">
         {loading ? (
@@ -312,11 +401,13 @@ function DataQualityContent() {
           <table className="w-full border-collapse text-left text-xs" aria-label="Data Quality Issues Table">
             <thead className="bg-[var(--color-surface-muted)] text-[var(--color-text-secondary)] sticky top-0 z-10 select-none">
               <tr>
+                <th className="px-3 py-2.5 border-b border-[var(--color-border)]"><input aria-label="Select all filtered quality issues" type="checkbox" checked={filteredIssues.length > 0 && filteredIssues.filter((issue) => issue.issue_class !== 'OUTLIER').every((issue) => selectedIssueIds.includes(issue.id))} onChange={(event) => setSelectedIssueIds(event.target.checked ? filteredIssues.filter((issue) => issue.issue_class !== 'OUTLIER').map((issue) => issue.id) : [])} /></th>
                 <th className="px-3 py-2.5 font-semibold border-b border-[var(--color-border)] whitespace-nowrap">Rule ID</th>
                 <th className="px-3 py-2.5 font-semibold border-b border-[var(--color-border)] whitespace-nowrap">Severity</th>
                 <th className="px-3 py-2.5 font-semibold border-b border-[var(--color-border)] whitespace-nowrap">Scope / Domain</th>
                 <th className="px-3 py-2.5 font-semibold border-b border-[var(--color-border)]">Affected Record (VCN)</th>
                 <th className="px-3 py-2.5 font-semibold border-b border-[var(--color-border)]">Record Reference</th>
+                <th className="px-3 py-2.5 font-semibold border-b border-[var(--color-border)]">Source / Original value</th>
                 <th className="px-3 py-2.5 font-semibold border-b border-[var(--color-border)] whitespace-nowrap">Disposition</th>
                 <th className="px-3 py-2.5 font-semibold border-b border-[var(--color-border)]">Rule Expression &amp; Guidance</th>
                 <th className="px-3 py-2.5 font-semibold border-b border-[var(--color-border)] whitespace-nowrap">Workflow State</th>
@@ -329,6 +420,7 @@ function DataQualityContent() {
 
                 return (
                   <tr key={iss.id} className="hover:bg-[var(--color-surface-muted)] transition-colors">
+                    <td className="px-3 py-2"><input aria-label={`Select ${iss.rule_id} issue`} disabled={iss.issue_class === 'OUTLIER' || isResolved} type="checkbox" checked={selectedIssueIds.includes(iss.id)} onChange={() => toggleSelected(iss.id)} /></td>
                     {/* Rule ID */}
                     <td className="px-3 py-2 font-mono font-semibold text-[var(--color-text-primary)] whitespace-nowrap">
                       {iss.rule_id}
@@ -370,6 +462,12 @@ function DataQualityContent() {
                       title={iss.record_reference}
                     >
                       {iss.record_reference}
+                    </td>
+
+                    <td className="px-3 py-2 max-w-[230px]">
+                      <div className="font-medium text-[var(--color-text-primary)] truncate" title={iss.source_file || ''}>{iss.source_file || 'Lineage unavailable'}</div>
+                      {iss.source_sheet && <div className="font-mono text-[10px] text-[var(--color-text-tertiary)]">{iss.source_sheet} · row {iss.source_row ?? '—'} · {iss.source_field || 'record'}</div>}
+                      {iss.original_values && <div className="font-mono text-[10px] text-[var(--color-text-tertiary)] truncate" title={JSON.stringify(iss.original_values)}>{JSON.stringify(iss.original_values)}</div>}
                     </td>
 
                     {/* Disposition */}

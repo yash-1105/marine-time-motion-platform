@@ -4,11 +4,11 @@
     "file_size_bytes": 173374,
     "sha256": "90919984816264e44f0e83bf47a6ef11cc98f000ca375bebc77bf3f7e49b0763",
     "manifest_verified": true,
-    "execution_time_seconds": 58.3,
+    "execution_time_seconds": 55.52,
     "app_version": "1.0.0",
     "rule_version": "1.0",
     "formula_version": "1.0",
-    "run_timestamp": "2026-09-21T17:45:30.677853+00:00"
+    "run_timestamp": "2026-09-22T18:50:32.404904+00:00"
   },
   "row_counts": {
     "VesselCalls": {
@@ -274,9 +274,9 @@
   },
   "kpi_reconciliation": {
     "total_kpis": 55,
-    "computed": 38,
-    "no_source_data": 17,
-    "status": "PASS"
+    "computed": 25,
+    "no_source_data": 28,
+    "status": "FAIL"
   },
   "delays_and_bottlenecks": {
     "delays_reconciled": "41 of 41",

@@ -14,7 +14,12 @@ from sqlalchemy import desc, func, or_, select
 from sqlalchemy.orm import Session
 
 from apps.api.models.audit import AuditEvent
-from apps.api.models.canonical import Delay, DelayAllocation, VesselCall
+from apps.api.models.canonical import Delay, DelayAllocation, ServiceAssignment, ServiceExecution, ServiceRequest, VesselCall
+from apps.api.services.analytics.duration_semantics import (
+    compute_execution_delay,
+    compute_planning_lead_time,
+    compute_scheduling_gap,
+)
 from apps.api.services.delays.mapping import CANONICAL_DELAY_CATEGORIES, map_to_canonical_category
 
 
@@ -23,8 +28,83 @@ class DelayService:
         self.db = db
         self.tenant_id = tenant_id
 
+    @staticmethod
+    def _leg(movement_type: str | None) -> str:
+        """Map source movement without collapsing SHIFTING into an arrival/departure leg."""
+        value = (movement_type or "").strip().upper()
+        if value in {"ARRIVAL", "INWARD"}:
+            return "ARRIVAL_INWARD"
+        if value in {"SAILING", "OUTWARD", "DEPARTURE"}:
+            return "SAILING_OUTWARD"
+        if value == "SHIFTING":
+            return "SHIFTING"
+        return "UNCLASSIFIED"
+
+    def list_service_timings(self, leg: str = "ALL") -> dict[str, Any]:
+        """Expose governed service timing semantics without treating duration as delay.
+
+        Service end timestamps are not supplied by the current source contract, so
+        `service_duration_hours` is deliberately UNAVAILABLE rather than inferred.
+        """
+        stmt = (
+            select(ServiceRequest, ServiceAssignment, ServiceExecution, VesselCall)
+            .outerjoin(ServiceAssignment, ServiceAssignment.service_request_id == ServiceRequest.id)
+            .outerjoin(ServiceExecution, ServiceExecution.service_assignment_id == ServiceAssignment.id)
+            .join(VesselCall, VesselCall.id == ServiceRequest.vessel_call_id)
+            .where(VesselCall.is_merged.is_(False))
+        )
+        if self.tenant_id != "*":
+            stmt = stmt.where(VesselCall.tenant_id == self.tenant_id)
+
+        rows = []
+        for request, assignment, execution, vessel_call in self.db.execute(stmt).all():
+            movement_leg = self._leg(request.movement_type)
+            if leg != "ALL" and movement_leg != leg:
+                continue
+
+            planning_result = compute_planning_lead_time(request.submission_time, request.requested_time)
+            scheduled_time = assignment.scheduled_time if assignment else None
+            served_time = execution.served_time if execution else None
+            scheduling_result = compute_scheduling_gap(request.requested_time, scheduled_time)
+            execution_result = compute_execution_delay(scheduled_time, served_time)
+            planning = planning_result.value_hours
+            scheduling = scheduling_result.value_hours
+            execution_delay = execution_result.value_hours
+            dq_status = "CLEAN"
+            unavailable = []
+            if request.requested_time is None:
+                unavailable.append("requested_time missing")
+            if scheduled_time is None:
+                unavailable.append("scheduled_time missing")
+            if served_time is None:
+                unavailable.append("served_time missing")
+            if scheduling is not None and scheduling < 0:
+                dq_status = "DQ_SCHEDULE_BEFORE_REQUEST"
+            elif unavailable:
+                dq_status = "MISSING_DATA"
+            delay_status = (
+                "UNAVAILABLE" if execution_delay is None else "EARLY" if execution_delay < 0 else "ON_TIME" if execution_delay == 0 else "LATE"
+            )
+            rows.append({
+                "service_request_id": str(request.id), "service_assignment_id": str(assignment.id) if assignment else None, "service_execution_id": str(execution.id) if execution else None,
+                "vessel_call_id": str(vessel_call.id), "vcn": vessel_call.vcn, "vessel_name": vessel_call.vessel_name,
+                "movement": request.movement_type, "leg": movement_leg, "service_type": request.service_type,
+                "submission_time": request.submission_time.isoformat() if request.submission_time else None,
+                "requested_time": request.requested_time.isoformat() if request.requested_time else None,
+                "scheduled_time": scheduled_time.isoformat() if scheduled_time else None,
+                "served_time": served_time.isoformat() if served_time else None,
+                "planning_lead_time_hours": planning, "scheduling_gap_hours": scheduling,
+                "execution_delay_hours": execution_delay, "service_duration_hours": None,
+                "service_duration_status": "UNAVAILABLE", "service_duration_reason": "No service-end timestamp is supplied by the source contract.",
+                "execution_delay_status": delay_status, "formula_version": "service-timing-v1.0",
+                "source_record_ids": [str(record.id) for record in (request, assignment, execution) if record],
+                "data_quality_status": dq_status, "unavailable_inputs": unavailable,
+            })
+        return {"leg": leg, "formula_version": "service-timing-v1.0", "items": rows, "total": len(rows)}
+
     def list_delays(
         self,
+        leg: str = "ALL",
         movement_stage: str | None = None,
         canonical_category: str | None = None,
         cause_status: str | None = None,
@@ -44,6 +124,13 @@ class DelayService:
 
         if movement_stage:
             query = query.where(Delay.movement_stage.ilike(f"%{movement_stage}%"))
+        if leg != "ALL":
+            if leg == "ARRIVAL_INWARD":
+                query = query.where(or_(Delay.movement_stage.ilike("%Arrival%"), Delay.movement_stage.ilike("%Inward%")))
+            elif leg == "SAILING_OUTWARD":
+                query = query.where(or_(Delay.movement_stage.ilike("%Sailing%"), Delay.movement_stage.ilike("%Outward%")))
+            elif leg == "SHIFTING":
+                query = query.where(Delay.movement_stage.ilike("%Shifting%"))
         if canonical_category:
             query = query.where(Delay.canonical_category == canonical_category)
         if cause_status:
@@ -186,13 +273,19 @@ class DelayService:
             ],
         }
 
-    def get_delays_summary(self) -> dict[str, Any]:
+    def get_delays_summary(self, leg: str = "ALL") -> dict[str, Any]:
         """
         Produce Pareto distribution of delay causes, stage breakdown,
         confirmed vs inferred counts, and total unallocated time.
         """
         delays = self.db.execute(select(Delay)).scalars().all()
-        allocations = self.db.execute(select(DelayAllocation)).scalars().all()
+        if leg != "ALL":
+            delays = [delay for delay in delays if self._leg(delay.movement_stage) == leg]
+        delay_ids = {delay.id for delay in delays}
+        allocations = [
+            allocation for allocation in self.db.execute(select(DelayAllocation)).scalars().all()
+            if allocation.delay_id in delay_ids
+        ]
 
         total_delays = len(delays)
         total_delay_hours = round(sum(d.total_duration_hours for d in delays), 2)
@@ -249,6 +342,7 @@ class DelayService:
         review_required_count = sum(1 for d in delays if d.requires_reason_review)
 
         return {
+            "leg": leg,
             "total_delays": total_delays,
             "total_delay_hours": total_delay_hours,
             "confirmed_count": confirmed_count,

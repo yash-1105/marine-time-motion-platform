@@ -15,6 +15,7 @@ Verifies:
 
 from datetime import UTC
 
+import polars as pl
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select
@@ -240,16 +241,29 @@ def test_statistics_percentile_method_is_linear_interpolation(db_session, analyt
             assert agg.p25_hours <= agg.median_hours <= agg.p75_hours <= agg.p90_hours <= agg.p95_hours
 
 
-def test_governed_statistics_expose_p75_and_p90(db_session, analytics_fixture):
-    """P75/P90 are persisted by the one governed Polars calculation, never a UI formula."""
+def test_governed_statistics_expose_p75_min_max_and_extremes(db_session, analytics_fixture):
+    """Catalogue statistics are persisted by the governed Polars calculation, never a UI formula."""
     from apps.api.services.analytics.catalogue import ensure_catalogue
     from apps.api.services.analytics.engine import AnalyticsEngine
 
     definition = ensure_catalogue(db_session)["Turnaround"]
     aggregate = AnalyticsEngine(db_session, tenant_id="synthetic-tenant").compute_statistics(definition.id)
+    available = db_session.execute(
+        select(LeadTimeResult).where(
+            LeadTimeResult.definition_id == definition.id,
+            LeadTimeResult.status == "AVAILABLE",
+            LeadTimeResult.duration_hours.is_not(None),
+        )
+    ).scalars().all()
+    direct = pl.Series([row.duration_hours for row in available])
     assert aggregate.p75_hours is not None
     assert aggregate.p90_hours is not None
     assert aggregate.p75_hours <= aggregate.p90_hours
+    assert aggregate.p75_hours == pytest.approx(float(direct.quantile(0.75, interpolation="linear")), abs=1e-6)
+    assert aggregate.min_hours == pytest.approx(float(direct.min()), abs=1e-6)
+    assert aggregate.max_hours == pytest.approx(float(direct.max()), abs=1e-6)
+    assert aggregate.fastest_vcn in {row.vcn for row in available if row.duration_hours == aggregate.min_hours}
+    assert aggregate.slowest_vcn in {row.vcn for row in available if row.duration_hours == aggregate.max_hours}
     assert aggregate.percentile_method == "linear_interpolation"
 
 
@@ -373,6 +387,13 @@ def test_analytics_api_endpoints_work(db_session, analytics_fixture):
     assert r_metrics.status_code == 200
     metrics_list = r_metrics.json()
     assert len(metrics_list) >= 8
+
+    turnaround = next(metric for metric in metrics_list if metric["name"] == "Turnaround")
+    r_stats = client.get(f"/api/v1/analytics/metrics/{turnaround['id']}/stats", headers=headers)
+    assert r_stats.status_code == 200
+    stats = r_stats.json()
+    for field in ("std_hours", "p75_hours", "min_hours", "max_hours", "fastest_vcn", "slowest_vcn", "outlier_vcns"):
+        assert field in stats
 
     # Fixture reconciliation is validation-only, never a production endpoint.
     r_recon = client.get("/api/v1/analytics/reconciliation?tolerance=0.02", headers=headers)

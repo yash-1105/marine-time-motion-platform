@@ -1,4 +1,7 @@
 
+from datetime import datetime
+
+from dateutil import parser
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -15,10 +18,33 @@ from apps.api.models.quality import QualityIssue, QualityRule
 
 
 class DataQualityEngine:
+    # These rule definitions are deliberately local, deterministic metadata.  They
+    # mirror config/quality_rules.yaml and also make a database seeded before a new
+    # rule was added safe to upgrade.  No inference is used in this workflow.
+    RULE_SPECS = {
+        "DQ-003": ("vessel_call", "HIGH", "ATA is required", "Provide the actual arrival time."),
+        "DQ-004": ("vessel_call", "HIGH", "ETA must not be after ATA", "Verify the ETA/ATA source timestamps."),
+        "DQ-005": ("service_request", "HIGH", "Pilot request requires a scheduled time", "Provide the missing schedule."),
+        "DQ-006": ("event_occurrence", "CRITICAL", "Anchorage arrival must precede arrival pilot boarding", "Review the source chronology."),
+        "DQ-007": ("delay", "MEDIUM", "Late service requires a recorded delay reason", "Provide a governed delay reason."),
+        "DQ-010": ("event_occurrence", "HIGH", "Conflicting source timestamps exceed the governed tolerance", "Resolve the conflicting observations."),
+        "DQ-SERVICE-REQUEST-MISSING": ("service_request", "HIGH", "Requested service time is required", "Provide Requested_Time; do not substitute a value."),
+        "DQ-SERVICE-SCHEDULE-MISSING": ("service_assignment", "HIGH", "Scheduled service time is required", "Provide Scheduled_Time; do not infer it."),
+        "DQ-SERVICE-SERVED-MISSING": ("service_execution", "HIGH", "Actual/served service time is required", "Provide Served_Time; do not infer it."),
+        "DQ-SERVICE-SCHEDULE-BEFORE-REQUEST": ("service_assignment", "HIGH", "Requested Time <= Scheduled Time", "Correct the source chronology without swapping timestamps."),
+        "DQ-INVALID-TIMESTAMP": ("staging_record", "HIGH", "Timestamp must be parseable with its declared timezone", "Correct the source value; raw evidence remains unchanged."),
+        "DQ-MISSING-MANDATORY-FIELD": ("staging_record", "HIGH", "Mandatory source field is blank", "Provide the required source value."),
+        "DQ-DUPLICATE-ROW": ("staging_record", "MEDIUM", "Exact duplicate row in dataset group", "Confirm the duplicate or exclude it from analysis."),
+        "DQ-SEQUENCE-VIOLATION": ("event_occurrence", "CRITICAL", "A configured DAG dependency has negative ordered duration", "Review the ordered event pair; parallel activities are not evaluated by this rule."),
+        "DQ-SERVICE-DURATION-NEGATIVE": ("service_execution", "HIGH", "Service end must not precede service start", "Correct the ordered service timestamps."),
+    }
 
-    def __init__(self, db: Session):
+    def __init__(self, db: Session, ingestion_batch_id: str | None = None):
         self.db = db
-        # Load rules from DB
+        self.ingestion_batch_id = ingestion_batch_id
+        # Bootstrap deterministic rule metadata from the governed configuration.
+        # The database remains the runtime registry/versioned audit surface.
+        self._ensure_configured_rules()
         self.rules = {r.rule_id: r for r in self.db.execute(select(QualityRule)).scalars().all()}
         # Load event definitions
         self.event_defs = {e.id: e.name for e in self.db.execute(select(EventDefinition)).scalars().all()}
@@ -31,14 +57,58 @@ class DataQualityEngine:
         except Exception:
             self.journey_templates = {}
 
+    def _ensure_configured_rules(self):
+        import yaml
+
+        try:
+            with open("config/quality_rules.yaml") as rules_file:
+                configured_rules = (yaml.safe_load(rules_file) or {}).get("rules", [])
+        except OSError:
+            configured_rules = []
+        existing = set(self.db.execute(select(QualityRule.rule_id)).scalars().all())
+        for configured in configured_rules:
+            rule_id = configured.get("id")
+            if not rule_id or rule_id in existing:
+                continue
+            self.db.add(QualityRule(
+                rule_id=rule_id,
+                scope=configured.get("scope", "staging_record"),
+                severity=configured.get("severity", "HIGH"),
+                pass_fail_expression=configured.get("pass_fail_expression", rule_id),
+                remediation_guidance=configured.get("remediation_guidance"),
+            ))
+        self.db.flush()
+
         
-    def _create_issue(self, rule_id: str, vc_id: str, ref: str, severity: str):
+    def _create_issue(self, rule_id: str, vc_id: str | None, ref: str, severity: str | None = None):
         # We need to make sure the rule exists
         rule = self.db.execute(select(QualityRule).where(QualityRule.rule_id == rule_id)).scalar_one_or_none()
         if not rule:
-            rule = QualityRule(rule_id=rule_id, scope="vessel_call", severity=severity, pass_fail_expression="")
+            scope, configured_severity, expression, remediation = self.RULE_SPECS.get(
+                rule_id, ("vessel_call", severity or "HIGH", rule_id, "Review the governed source record.")
+            )
+            rule = QualityRule(
+                rule_id=rule_id,
+                scope=scope,
+                severity=severity or configured_severity,
+                pass_fail_expression=expression,
+                remediation_guidance=remediation,
+            )
             self.db.add(rule)
             self.db.flush()
+        issue_severity = severity or rule.severity
+        # Re-runs are normal (ingestion, exclusion rebuilds and manual DQ runs).
+        # A rule/reference pair must therefore be idempotent rather than generating
+        # duplicate work items on every run.
+        existing = self.db.execute(
+            select(QualityIssue).where(
+                QualityIssue.rule_id == rule.id,
+                QualityIssue.record_reference == ref,
+                QualityIssue.issue_status != "RESOLVED",
+            )
+        ).scalars().first()
+        if existing:
+            return existing
         issue = QualityIssue(
             rule_id=rule.id,
             vessel_call_id=vc_id,
@@ -47,12 +117,13 @@ class DataQualityEngine:
         )
         self.db.add(issue)
         # Apply quarantine if CRITICAL
-        if severity == "CRITICAL":
+        if issue_severity == "CRITICAL":
             # For this MVP engine, we find the relevant record and quarantine it
             if ref.startswith("EventOccurrence:"):
                 ev_id = ref.split(":")[1]
                 ev = self.db.query(EventOccurrence).filter(EventOccurrence.id == ev_id).first()
                 if ev: ev.is_quarantined = True
+        return issue
 
 
     def run_all(self):
@@ -63,7 +134,63 @@ class DataQualityEngine:
             except Exception as e:
                 print(f"Error evaluating {vc.vcn}: {e}")
                 import traceback; traceback.print_exc()
+        self.evaluate_staging_records()
         self.db.commit()
+
+    @staticmethod
+    def _is_blank(value) -> bool:
+        return value is None or (isinstance(value, str) and not value.strip())
+
+    @staticmethod
+    def _parse_timestamp(value):
+        if DataQualityEngine._is_blank(value):
+            return None
+        if isinstance(value, datetime):
+            return value
+        try:
+            return parser.parse(str(value))
+        except (TypeError, ValueError, OverflowError):
+            return False
+
+    def evaluate_staging_records(self):
+        """Validate source rows that cannot safely become canonical observations.
+
+        Parsing failures and blank source columns are intentionally reviewed from
+        staging: raw records remain immutable and no timestamp is corrected or
+        silently discarded.  This runs while the candidate batch is still inactive.
+        """
+        from apps.api.models.ingestion import StagingRecord
+
+        query = select(StagingRecord)
+        if self.ingestion_batch_id:
+            query = query.where(StagingRecord.ingestion_batch_id == self.ingestion_batch_id)
+        rows = self.db.execute(query).scalars().all()
+        required = {
+            "vessel_call": ("VCN", "Vessel_Name"),
+            "event_occurrence": ("VCN", "Event_Name", "Event_Timestamp"),
+            "service_request": ("VCN", "Service_Type"),
+        }
+        timestamp_fields = {
+            "vessel_call": ("ETA", "ATA", "ETD", "ATD"),
+            "event_occurrence": ("Event_Timestamp",),
+            "service_request": ("Submission_Time", "Requested_Time", "Scheduled_Time", "Served_Time"),
+            "delay": ("Scheduled_Time", "Served_Time"),
+            "cargo_ops": ("Cargo_Start", "Cargo_End"),
+        }
+        for row in rows:
+            data = row.parsed_data or {}
+            ref = f"StagingRecord:{row.id}"
+            for field in required.get(row.canonical_table, ()):
+                if self._is_blank(data.get(field)):
+                    self._create_issue("DQ-MISSING-MANDATORY-FIELD", None, ref, "HIGH")
+                    break
+            if row.validation_status == "DUPLICATE":
+                self._create_issue("DQ-DUPLICATE-ROW", None, ref, "MEDIUM")
+            for field in timestamp_fields.get(row.canonical_table, ()):
+                parsed = self._parse_timestamp(data.get(field))
+                if parsed is False:
+                    self._create_issue("DQ-INVALID-TIMESTAMP", None, ref, "HIGH")
+                    break
 
 
 
@@ -91,7 +218,6 @@ class DataQualityEngine:
         ata_staging = vc_staging.parsed_data.get("ATA") if vc_staging else None
         
         if eta_staging and ata_staging:
-            from dateutil import parser
             try:
                 eta_dt = parser.parse(eta_staging)
                 ata_dt = parser.parse(ata_staging)
@@ -144,11 +270,27 @@ class DataQualityEngine:
                             if from_ev == "ANCHORAGE_ARRIVAL" and to_ev == "PILOT_ON_BOARD_ARRIVAL":
                                 self._create_issue("DQ-006", vc.id, f"EventOccurrence:{to_occ[0].id}", "CRITICAL")
                             else:
-                                self._create_issue("RULE_SEQUENCE_VIOLATION", vc.id, f"EventOccurrence:{to_occ[0].id}", "CRITICAL")
+                                self._create_issue("DQ-SEQUENCE-VIOLATION", vc.id, f"EventOccurrence:{to_occ[0].id}", "CRITICAL")
 
 
         # DQ-007: positive execution delay, but reason missing
         services = self.db.execute(select(ServiceRequest).where(ServiceRequest.vessel_call_id == vc.id)).scalars().all()
+
+        # A schedule before the request is a chronology/data-quality error.  This
+        # is categorically different from a negative Served − Scheduled result,
+        # which remains valid early service.
+        for req in services:
+            ass = self.db.execute(select(ServiceAssignment).where(ServiceAssignment.service_request_id == req.id)).scalar_one_or_none()
+            if req.requested_time is None:
+                self._create_issue("DQ-SERVICE-REQUEST-MISSING", vc.id, f"ServiceRequest:{req.id}", "HIGH")
+            if ass is None or ass.scheduled_time is None:
+                self._create_issue("DQ-SERVICE-SCHEDULE-MISSING", vc.id, f"ServiceAssignment:{ass.id}" if ass else f"ServiceRequest:{req.id}", "HIGH")
+                continue
+            exe = self.db.execute(select(ServiceExecution).where(ServiceExecution.service_assignment_id == ass.id)).scalar_one_or_none()
+            if exe is None or exe.served_time is None:
+                self._create_issue("DQ-SERVICE-SERVED-MISSING", vc.id, f"ServiceExecution:{exe.id}" if exe else f"ServiceAssignment:{ass.id}", "HIGH")
+            if ass and req.requested_time and ass.scheduled_time and ass.scheduled_time < req.requested_time:
+                self._create_issue("DQ-SERVICE-SCHEDULE-BEFORE-REQUEST", vc.id, f"ServiceAssignment:{ass.id}", "HIGH")
 
         # We can just check if there is any positive execution delay without a corresponding delay record
         has_positive_delay = False
@@ -165,11 +307,8 @@ class DataQualityEngine:
         if has_positive_delay:
             # Check if there's any delay record for this VC in the Delay table
             delays = self.db.execute(select(Delay).where(Delay.vessel_call_id == vc.id)).scalars().all()
-            if not delays:
+            if not delays or all(not (delay.delay_reason or "").strip() for delay in delays):
                 self._create_issue("DQ-007", vc.id, f"VesselCall:{vc.id}", "MEDIUM")
-            else:
-                # also check if the existing delay has a reason? (we didn't map reason to Delay model yet, but that's fine, the case is 'not in Delays sheet')
-                pass
 
         # Handle parallel events (tests prove parallel events raise no violations)
         # If Tug Service Start and Pilot On Board overlap, no issue raised here by default.

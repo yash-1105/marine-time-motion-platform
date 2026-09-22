@@ -1,4 +1,7 @@
 import hashlib
+import json
+import os
+import shutil
 import uuid
 
 import polars as pl
@@ -13,11 +16,19 @@ from apps.api.models.canonical import (
     VesselCall,
 )
 from apps.api.models.config import EventDefinition
-from apps.api.models.ingestion import IngestionBatch, RawRecord, StagingRecord
+from apps.api.models.ingestion import IngestionBatch, IngestionFile, RawRecord, StagingRecord
+from apps.api.core.config import settings
 from apps.api.services.delays.mapping import map_to_canonical_category
 
 
 class IngestionPipeline:
+    REQUIRED_COLUMNS = {
+        "VesselCalls": {"VCN", "Vessel_Name"},
+        "Events": {"VCN", "Event_Name", "Event_Timestamp"},
+        "Services": {"VCN", "Service_Type"},
+        "CargoOps": {"VCN"},
+        "Delays": {"VCN"},
+    }
     def __init__(self, db: Session, tenant_id: str = "default-tenant"):
         self.db = db
         self.tenant_id = tenant_id
@@ -29,6 +40,21 @@ class IngestionPipeline:
                 sha256_hash.update(byte_block)
         return sha256_hash.hexdigest()
 
+    def _store_original(self, file_path: str, batch_id: str, checksum: str, filename: str) -> str:
+        """Copy an accepted workbook into immutable governed object-store storage.
+
+        `ingestion_storage_path` is a local development directory and the mounted
+        GCS/MinIO adapter in deployed environments. The checksum-addressed name
+        makes retrying the same bytes idempotent without replacing evidence.
+        """
+        safe_name = os.path.basename(filename)
+        destination_dir = os.path.join(settings.ingestion_storage_path, self.tenant_id, batch_id)
+        os.makedirs(destination_dir, exist_ok=True)
+        destination = os.path.join(destination_dir, f"{checksum}_{safe_name}")
+        if not os.path.exists(destination):
+            shutil.copyfile(file_path, destination)
+        return destination
+
     def process_file(
         self,
         file_path: str,
@@ -38,7 +64,28 @@ class IngestionPipeline:
         force_new: bool = False,
         commit_canonical: bool = True,
     ) -> str:
-        checksum = self.calculate_checksum(file_path)
+        return self.process_files(
+            [(file_path, filename)], is_synthetic=is_synthetic, dry_run=dry_run,
+            force_new=force_new, commit_canonical=commit_canonical,
+        )
+
+    def process_files(
+        self,
+        files: list[tuple[str, str]],
+        is_synthetic: bool = False,
+        dry_run: bool = False,
+        force_new: bool = False,
+        commit_canonical: bool = True,
+    ) -> str:
+        """Parse a 1–15 workbook dataset group under one governed parent batch.
+
+        The parent batch is the activation unit; individual files remain immutable
+        manifests and all raw/staging records retain their source_file_id.
+        """
+        if not 1 <= len(files) <= 15:
+            raise ValueError("A dataset group must contain between 1 and 15 workbooks")
+        checksums = [self.calculate_checksum(path) for path, _ in files]
+        checksum = hashlib.sha256("".join(sorted(checksums)).encode()).hexdigest()
         batch_id = str(uuid.uuid4())
 
         if not force_new:
@@ -50,26 +97,51 @@ class IngestionPipeline:
             ).scalar_one_or_none()
 
             if existing and existing.status == "COMMITTED":
-                existing.file_name = filename
+                existing.file_name = files[0][1] if len(files) == 1 else f"{len(files)} workbooks"
                 existing.is_active = True
                 self.db.commit()
                 return str(existing.batch_id)
 
         batch = IngestionBatch(
             batch_id=batch_id,
-            file_name=filename,
+            file_name=files[0][1] if len(files) == 1 else f"{len(files)} workbooks",
             file_checksum=checksum,
             status="UPLOADED",
             tenant_id=self.tenant_id,
             is_synthetic=is_synthetic,
+            # A group becomes active only after canonical and analytics processing
+            # completes. The async worker performs the final activation.
+            is_active=False,
         )
         self.db.add(batch)
         self.db.commit()
 
         try:
-            self._parse_to_raw(file_path, batch)
+            manifests = []
+            for (file_path, filename), file_checksum in zip(files, checksums):
+                manifest = IngestionFile(
+                    group_batch_id=batch_id, original_filename=filename,
+                    file_checksum=file_checksum, byte_size=__import__("os").path.getsize(file_path),
+                    storage_reference=self._store_original(file_path, batch_id, file_checksum, filename),
+                    parse_status="QUEUED", validation_status="PENDING",
+                )
+                self.db.add(manifest)
+                manifests.append((file_path, manifest))
+            self.db.commit()
+            for file_path, manifest in manifests:
+                try:
+                    self._parse_to_raw(file_path, batch, manifest)
+                    manifest.parse_status = "PARSED"
+                except Exception as exc:
+                    manifest.parse_status = "FAILED"
+                    manifest.validation_status = "FAILED"
+                    manifest.error_message = str(exc)
+                    self.db.commit()
+                    raise
             self._map_to_staging(batch)
             self._validate_staging(batch)
+            for _, manifest in manifests:
+                manifest.validation_status = "VALIDATED"
 
             if dry_run:
                 try:
@@ -83,6 +155,8 @@ class IngestionPipeline:
                 self.db.commit()
             elif commit_canonical:
                 self._commit_to_canonical(batch)
+                batch.is_active = True
+                self.db.commit()
             else:
                 batch.status = "VALIDATED"
                 self.db.commit()
@@ -94,26 +168,35 @@ class IngestionPipeline:
             self.db.commit()
             raise e
 
-    def _parse_to_raw(self, file_path: str, batch: IngestionBatch):
+    def _parse_to_raw(self, file_path: str, batch: IngestionBatch, source_file: IngestionFile | None = None):
+        # Polars/fastexcel is the deterministic parser. No AI/OCR/mapping path is
+        # reachable from this governed workbook flow.
         workbook = pl.read_excel(file_path, sheet_id=0)
         target_sheets = ["VesselCalls", "Events", "Services", "CargoOps", "Delays"]
+        seen_sheets = set(workbook).intersection(target_sheets)
+        if not seen_sheets:
+            raise ValueError("Workbook has no governed worksheet (VesselCalls, Events, Services, CargoOps, or Delays)")
 
         for sheet_name, df in workbook.items():
             if sheet_name not in target_sheets:
                 continue
+            missing_columns = self.REQUIRED_COLUMNS[sheet_name].difference(df.columns)
+            if missing_columns:
+                raise ValueError(f"{sheet_name} is missing required column(s): {', '.join(sorted(missing_columns))}")
 
             records = []
             for row_idx, row in enumerate(df.iter_rows(named=True), start=2):
                 for col_name, val in row.items():
                     val_str = "" if val is None else str(val)
                     record = RawRecord(
-                        file_checksum=batch.file_checksum,
+                        file_checksum=source_file.file_checksum if source_file else batch.file_checksum,
                         worksheet_name=sheet_name,
                         row_number=row_idx,
                         column_name=col_name,
                         original_value=val_str,
                         ingestion_batch_id=batch.batch_id,
                         source_record_id=row.get("VCN") or row.get("Source_Call_ID") or "",
+                        source_file_id=str(source_file.id) if source_file else None,
                     )
                     records.append(record)
 
@@ -151,13 +234,16 @@ class IngestionPipeline:
 
             row_map = {}
             for r in raw_records:
-                if r.row_number not in row_map:
-                    row_map[r.row_number] = {"data": {}, "source_record_id": r.source_record_id}
-                if isinstance(row_map[r.row_number], dict) and isinstance(row_map[r.row_number].get("data"), dict):
-                    row_map[r.row_number]["data"][str(r.column_name)] = r.original_value  # type: ignore
+                # Row number repeats across files, so source file is part of the
+                # staging identity. This is what makes file/sheet/row lineage exact.
+                row_key = (r.source_file_id, r.row_number)
+                if row_key not in row_map:
+                    row_map[row_key] = {"data": {}, "source_record_id": r.source_record_id, "source_file_id": r.source_file_id, "file_checksum": r.file_checksum}
+                if isinstance(row_map[row_key], dict) and isinstance(row_map[row_key].get("data"), dict):
+                    row_map[row_key]["data"][str(r.column_name)] = r.original_value  # type: ignore
 
             staging_records = []
-            for row_idx, row_info in row_map.items():
+            for (_, row_idx), row_info in row_map.items():
                 parsed_data = row_info["data"]
                 canonical_table = ""
                 if sheet == "VesselCalls":
@@ -172,7 +258,7 @@ class IngestionPipeline:
                     canonical_table = "delay"
 
                 staging_record = StagingRecord(
-                    file_checksum=batch.file_checksum,
+                    file_checksum=row_info["file_checksum"],
                     worksheet_name=sheet,
                     row_number=row_idx,
                     parsed_data=parsed_data,
@@ -181,6 +267,7 @@ class IngestionPipeline:
                     validation_status="PENDING",
                     source_record_id=row_info["source_record_id"],
                     canonical_table=canonical_table,
+                    source_file_id=row_info["source_file_id"],
                 )
                 staging_records.append(staging_record)
 
@@ -191,13 +278,31 @@ class IngestionPipeline:
         self.db.commit()
 
     def _validate_staging(self, batch: IngestionBatch):
-        pass
+        rows = self.db.execute(
+            select(StagingRecord).where(StagingRecord.ingestion_batch_id == batch.batch_id)
+        ).scalars().all()
+        if not any(row.canonical_table == "vessel_call" for row in rows):
+            raise ValueError("Dataset group requires at least one VesselCalls worksheet")
+        seen: set[tuple[str, str]] = set()
+        for row in rows:
+            fingerprint = json.dumps(row.parsed_data, sort_keys=True, default=str, separators=(",", ":"))
+            key = (row.canonical_table, fingerprint)
+            if key in seen:
+                row.validation_status = "DUPLICATE"
+                row.errors = {"duplicate": "Exact duplicate row in dataset group"}
+            else:
+                row.validation_status = "VALID"
+                seen.add(key)
+        batch.status = "VALIDATED"
+        self.db.commit()
 
     def _commit_to_canonical(self, batch: IngestionBatch, completion_status: str = "COMMITTED"):
         vessel_records = (
             self.db.execute(
                 select(StagingRecord).where(
-                    StagingRecord.ingestion_batch_id == batch.batch_id, StagingRecord.canonical_table == "vessel_call"
+                    StagingRecord.ingestion_batch_id == batch.batch_id,
+                    StagingRecord.canonical_table == "vessel_call",
+                    StagingRecord.validation_status.notin_(["DUPLICATE", "EXCLUDED"]),
                 )
             )
             .scalars()
@@ -224,6 +329,7 @@ class IngestionPipeline:
                 return None
 
             vc = VesselCall(
+                source_lineage_id=f"{r.source_file_id}:{r.worksheet_name}:{r.row_number}",
                 tenant_id=batch.tenant_id,
                 vessel_name=get_val(pd, "Vessel_Name") or "UNKNOWN",
                 imo_number=get_val(pd, "IMO_Number"),
@@ -254,6 +360,7 @@ class IngestionPipeline:
                 select(StagingRecord).where(
                     StagingRecord.ingestion_batch_id == batch.batch_id,
                     StagingRecord.canonical_table == "event_occurrence",
+                    StagingRecord.validation_status.notin_(["DUPLICATE", "EXCLUDED"]),
                 )
             )
             .scalars()
@@ -327,6 +434,7 @@ class IngestionPipeline:
 
             if utc_val and event_def_id:
                 ev = EventOccurrence(
+                    source_lineage_id=f"{r.source_file_id}:{r.worksheet_name}:{r.row_number}",
                     vessel_call_id=vc_id,
                     event_definition_id=event_def_id,
                     occurrence_index=(
@@ -369,7 +477,7 @@ class IngestionPipeline:
             except Exception:
                 return None
 
-        service_records = [r for r in batch_staging if r.canonical_table == "service_request"]
+        service_records = [r for r in batch_staging if r.canonical_table == "service_request" and r.validation_status not in {"DUPLICATE", "EXCLUDED"}]
         for r in service_records:
             pd_data = r.parsed_data
             vcn = pd_data.get("VCN")
@@ -378,6 +486,7 @@ class IngestionPipeline:
                 continue
 
             req = ServiceRequest(
+                source_lineage_id=f"{r.source_file_id}:{r.worksheet_name}:{r.row_number}",
                 vessel_call_id=vc_id,
                 service_type=pd_data.get("Service_Type", "Unknown"),
                 requested_time=dt_parse(pd_data.get("Requested_Time")),
@@ -388,6 +497,7 @@ class IngestionPipeline:
             self.db.flush()
 
             ass = ServiceAssignment(
+                source_lineage_id=f"{r.source_file_id}:{r.worksheet_name}:{r.row_number}",
                 service_request_id=req.id,
                 scheduled_time=dt_parse(pd_data.get("Scheduled_Time")),
                 assigned_resource_id=pd_data.get("Resource_Assigned"),
@@ -397,13 +507,14 @@ class IngestionPipeline:
             self.db.flush()
 
             exe = ServiceExecution(
+                source_lineage_id=f"{r.source_file_id}:{r.worksheet_name}:{r.row_number}",
                 service_assignment_id=ass.id,
                 served_time=dt_parse(pd_data.get("Served_Time")),
                 execution_status=pd_data.get("Data_Status"),
             )
             self.db.add(exe)
 
-        delay_records = [r for r in batch_staging if r.canonical_table == "delay"]
+        delay_records = [r for r in batch_staging if r.canonical_table == "delay" and r.validation_status not in {"DUPLICATE", "EXCLUDED"}]
         for r in delay_records:
             pd_data = r.parsed_data
             vcn = pd_data.get("VCN")
@@ -444,6 +555,7 @@ class IngestionPipeline:
                 requires_review = True
 
             d = Delay(
+                source_lineage_id=f"{r.source_file_id}:{r.worksheet_name}:{r.row_number}",
                 vessel_call_id=vc_id,
                 source_delay_id=pd_data.get("Delay_ID"),
                 movement_stage=pd_data.get("Movement_Type", "Unknown"),
@@ -482,7 +594,7 @@ class IngestionPipeline:
             )
             self.db.add(alloc)
 
-        cargo_records = [r for r in batch_staging if r.canonical_table == "cargo_ops"]
+        cargo_records = [r for r in batch_staging if r.canonical_table == "cargo_ops" and r.validation_status not in {"DUPLICATE", "EXCLUDED"}]
         for r in cargo_records:
             pd_data = r.parsed_data
             vcn = pd_data.get("VCN")
@@ -507,6 +619,7 @@ class IngestionPipeline:
                     return None
 
             cg = CargoOperation(
+                source_lineage_id=f"{r.source_file_id}:{r.worksheet_name}:{r.row_number}",
                 vessel_call_id=vc_id,
                 operation_id=pd_data.get("Cargo_Operation_ID"),
                 cargo_type=pd_data.get("Cargo_Type"),

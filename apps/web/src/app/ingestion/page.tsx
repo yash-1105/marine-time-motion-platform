@@ -14,7 +14,7 @@ type UploadState = 'idle' | 'uploading' | 'error'
 export default function IngestionPage() {
   const { can, token, refreshAccessToken, logout } = useAuth()
   const { status: datasetStatus, fileName, refresh: refreshDataset, clearDataset } = useDatasetStatus()
-  const [file, setFile] = useState<File | null>(null)
+  const [files, setFiles] = useState<File[]>([])
   const [uploadState, setUploadState] = useState<UploadState>('idle')
   const [uploadedName, setUploadedName] = useState<string>('')
   const [errorMessage, setErrorMessage] = useState<string>('')
@@ -57,12 +57,12 @@ export default function IngestionPage() {
     throw new Error('Upload was accepted but processing is still running. Refresh this page to check its persisted batch status.')
   }
 
-  const processUpload = async (targetFile: File) => {
+  const processUpload = async (targetFiles: File[]) => {
     setUploadState('uploading')
     setErrorMessage('')
 
     const formData = new FormData()
-    formData.append('file', targetFile)
+    targetFiles.forEach((targetFile) => formData.append('files', targetFile))
 
     try {
       let headers = getActiveAuthHeaders()
@@ -107,8 +107,8 @@ export default function IngestionPage() {
         setErrorMessage(outcome.error_message || 'Dataset processing failed.')
         return
       }
-      setUploadedName(targetFile.name)
-      setFile(null)
+      setUploadedName(targetFiles.length === 1 ? targetFiles[0].name : `${targetFiles.length} workbooks`)
+      setFiles([])
       setUploadState('idle')
       await refreshDataset()
     } catch (error) {
@@ -119,15 +119,20 @@ export default function IngestionPage() {
   }
 
   const handleInitialUpload = async () => {
-    if (!file) return
-    await processUpload(file)
+    if (!files.length) return
+    await processUpload(files)
   }
 
   const handleAddNewFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selected = e.target.files?.[0]
-    if (!selected) return
+    const selected = Array.from(e.target.files || [])
+    if (!selected.length) return
     // Reset the input value so the same file can be re-selected if needed
     e.target.value = ''
+    if (selected.length > 15) {
+      setErrorMessage('A dataset group supports a maximum of 15 workbooks. File #16 was not added.')
+      setUploadState('error')
+      return
+    }
     await processUpload(selected)
   }
 
@@ -141,7 +146,7 @@ export default function IngestionPage() {
     try {
       await clearDataset()
       setUploadedName('')
-      setFile(null)
+      setFiles([])
     } catch {
       // Handled via context
     } finally {
@@ -161,6 +166,7 @@ export default function IngestionPage() {
         type="file"
         ref={addNewInputRef}
         accept=".xlsx"
+        multiple
         onChange={handleAddNewFileSelected}
         className="hidden"
         aria-hidden="true"
@@ -200,7 +206,7 @@ export default function IngestionPage() {
                 <button
                   onClick={() => addNewInputRef.current?.click()}
                   className="inline-flex min-h-9 items-center gap-1.5 px-3.5 py-2 bg-[var(--color-surface)] hover:bg-[var(--color-surface-muted)] text-[var(--color-text-primary)] rounded-[var(--radius-md)] text-xs font-semibold border border-[var(--color-border-strong)] cursor-pointer"
-                  title="Select another Excel workbook to replace the active dataset"
+                  title="Select one to fifteen Excel workbooks to replace the active dataset"
                 >
                   <Plus size={14} aria-hidden="true" /> Add New
                 </button>
@@ -221,28 +227,48 @@ export default function IngestionPage() {
           </Card>
         ) : (
           <div className="space-y-4">
+            <div
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={(event) => {
+                event.preventDefault()
+                const selected = Array.from(event.dataTransfer.files).filter((candidate) => candidate.name.toLowerCase().endsWith('.xlsx'))
+                if (selected.length > 15) {
+                  setErrorMessage('A dataset group supports a maximum of 15 workbooks. File #16 was not added.')
+                  setUploadState('error')
+                  return
+                }
+                setFiles(selected)
+              }}
+            >
             <Card className="text-center">
               <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-[14px] border border-[var(--color-accent-soft-border)] bg-[var(--color-accent-soft)] text-[var(--color-accent)]">
                 <UploadCloud size={26} strokeWidth={1.6} aria-hidden="true" />
               </div>
-              <SectionHeader className="justify-center" title="Upload vessel operations dataset" description="Select a governed Excel workbook to begin ingestion and analytics processing." />
+              <SectionHeader className="justify-center" title="Upload vessel operations dataset" description="Drop one to fifteen governed Excel workbooks here, or select them below, for one atomic dataset ingestion." />
               <div className="mx-auto mt-6 max-w-xl space-y-4 text-left">
                 <input
                   type="file"
                   accept=".xlsx"
-                  onChange={(e) => setFile(e.target.files?.[0] || null)}
+                  multiple
+                  onChange={(e) => {
+                    const selected = Array.from(e.target.files || [])
+                    if (selected.length > 15) { setErrorMessage('A dataset group supports a maximum of 15 workbooks. Remove files and try again.'); setUploadState('error'); return }
+                    setFiles(selected)
+                  }}
                   className="block w-full text-sm text-[var(--color-text-secondary)] border border-dashed border-[var(--color-border-strong)] rounded-[var(--radius-lg)] bg-[var(--color-surface-subtle)] p-3 file:mr-3 file:px-3 file:py-2 file:rounded-[var(--radius-md)] file:border-0 file:text-xs file:font-semibold file:bg-[var(--color-accent-soft)] file:text-[var(--color-accent-strong)] cursor-pointer hover:border-[var(--color-accent-soft-border)]"
                 />
                 <button
                   onClick={handleInitialUpload}
-                  disabled={!file}
+                  disabled={!files.length}
                   className="inline-flex min-h-10 w-full items-center justify-center gap-2 px-4 py-2 bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-white rounded-[var(--radius-md)] text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shadow-sm"
                 >
-                  <UploadCloud size={16} aria-hidden="true" /> Upload &amp; Process
+                  <UploadCloud size={16} aria-hidden="true" /> Upload {files.length || ''} {files.length === 1 ? 'workbook' : 'workbooks'} &amp; Process
                 </button>
-                <p className="text-center text-[11px] text-[var(--color-text-tertiary)]">Excel (.xlsx) · validated, lineage-tracked, and processed through the governed pipeline</p>
+                <p className="text-center text-[11px] text-[var(--color-text-tertiary)]">Files selected: {files.length} / 15 · Excel (.xlsx) · validated, lineage-tracked, and processed as one dataset group</p>
+                {files.length > 0 && <ul className="space-y-1 text-xs text-[var(--color-text-secondary)]">{files.map((selected, index) => <li key={`${selected.name}-${index}`} className="flex justify-between gap-3 rounded border border-[var(--color-border)] px-2 py-1.5"><span className="truncate">{selected.name} · {(selected.size / 1024 / 1024).toFixed(2)} MB · Queued</span><button type="button" onClick={() => setFiles((current) => current.filter((_, i) => i !== index))} className="text-[var(--color-critical)] cursor-pointer">Remove</button></li>)}</ul>}
               </div>
             </Card>
+            </div>
           </div>
         )}
       </div>

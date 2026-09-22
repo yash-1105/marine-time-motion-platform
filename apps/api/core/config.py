@@ -13,6 +13,10 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     cors_origins: str = ""
     upload_max_bytes: int = 25 * 1024 * 1024
+    # The deployment mounts its governed object-store adapter (GCS/MinIO in
+    # production; a local directory in development) at this path. Originals are
+    # immutable evidence and are never read from the browser temp directory.
+    ingestion_storage_path: str = "/tmp/marine-platform-uploads"
 
     @field_validator("database_url", mode="before")
     @classmethod

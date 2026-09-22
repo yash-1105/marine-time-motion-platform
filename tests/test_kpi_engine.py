@@ -2,7 +2,8 @@
 
 Tests:
 1. All 55 KPIs exist in registry with valid metadata and numbering.
-2. 38 COMPUTED vs 17 NO_SOURCE_DATA KPIs correctly identified.
+2. FRD v2.1 registry availability: 27 formula-capable entries and 28
+   NO_SOURCE_DATA entries where a required governed source is absent.
 3. NO_SOURCE_DATA KPIs never fabricate zeroes; return status NO_SOURCE_DATA.
 4. Alias pairs (KPI-11/53 and KPI-14/51) cannot double-count in scorecards; admin swap works.
 5. Hand-verified small fixture for computable KPIs with exact arithmetic validation.
@@ -23,7 +24,7 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 
 from apps.api.main import app, settings
-from apps.api.models.analytics import KPIFormulaVersion
+from apps.api.models.analytics import KPI, KPIFormulaVersion
 from apps.api.models.audit import AuditEvent
 from apps.api.models.canonical import (
     CargoOperation,
@@ -98,15 +99,27 @@ def test_all_55_kpis_registered(db_session):
     computed_count = sum(1 for k in kpi_map.values() if k.availability_status == "COMPUTED")
     no_src_count = sum(1 for k in kpi_map.values() if k.availability_status == "NO_SOURCE_DATA")
 
-    assert computed_count == 38
-    assert no_src_count == 17
+    # FRD v2.1 makes resource-capacity/arrival-log dependent metrics explicitly
+    # NO_SOURCE_DATA rather than deriving them from undeclared constants.
+    assert computed_count == 27
+    assert no_src_count == 28
 
-    # Verify every KPI has a formula version 1.0
+    # Legacy rows are retained for result/audit provenance but cannot be part of
+    # the active FRD catalogue or new governed computations.
+    active_governed = db_session.execute(
+        select(KPI).where(KPI.is_active.is_(True), KPI.code.isnot(None))
+    ).scalars().all()
+    assert len(active_governed) == 55
+    assert not db_session.execute(
+        select(KPI).where(KPI.is_active.is_(True), KPI.code.is_(None))
+    ).scalars().first()
+
+    # Every current formula has an explicit v2.1 attribution. Existing v1.0/v2.0
+    # records are intentionally retained by the registry rather than rewritten.
     for kpi in kpi_map.values():
-        f_ver = db_session.execute(
-            select(KPIFormulaVersion).where(KPIFormulaVersion.kpi_id == kpi.id, KPIFormulaVersion.version == "1.0")
-        ).scalar_one_or_none()
-        assert f_ver is not None, f"Missing formula version 1.0 for {kpi.code}"
+        assert db_session.execute(
+            select(KPIFormulaVersion).where(KPIFormulaVersion.kpi_id == kpi.id, KPIFormulaVersion.version == "2.1")
+        ).scalar_one_or_none() is not None
 
 
 def test_alias_pairs_primary_and_alias_status(db_session):
@@ -129,12 +142,12 @@ def test_alias_pairs_primary_and_alias_status(db_session):
 
 
 def test_no_source_data_kpis_never_produce_number(db_session):
-    """Verifies that all 17 NO_SOURCE_DATA KPIs return status NO_SOURCE_DATA and value None."""
+    """Verifies that all source-limited KPIs return NO_SOURCE_DATA, never zero."""
     engine = KPIEngine(db_session, tenant_id="synthetic-tenant")
     kpi_map = engine.ensure_registry()
 
     no_src_codes = [code for code, k in kpi_map.items() if k.availability_status == "NO_SOURCE_DATA"]
-    assert len(no_src_codes) == 17
+    assert len(no_src_codes) == 28
 
     for code in no_src_codes:
         res = engine.calculate_kpi(code)
@@ -220,6 +233,7 @@ def hand_verified_fixture(db_session):
         vessel_call_id=vc1.id,
         operation_id="CG-T1",
         cargo_type="Container",
+        operation_type="Load",
         planned_quantity=1000.0,
         actual_quantity=1000.0,
         unit="TEU",
@@ -277,6 +291,7 @@ def hand_verified_fixture(db_session):
         vessel_call_id=vc2.id,
         operation_id="CG-T2",
         cargo_type="Bulk",
+        operation_type="Discharge",
         planned_quantity=5000.0,
         actual_quantity=5000.0,
         unit="MT",
@@ -313,10 +328,11 @@ def test_computable_kpis_arithmetic_on_hand_verified_fixture(db_session, hand_ve
     assert r2_mt.status == "COMPUTED"
     assert r2_mt.value == 5000.0
 
-    # 4. KPI-10: Pilot Service Delay: Served (10:00) - Scheduled (09:30) = +0.5 hours
+    # 4. KPI-10 requires pilot availability/roster hours and must not substitute
+    # scheduled-to-served delay as a fake availability percentage.
     r10 = engine.calculate_kpi("KPI-10")
-    assert r10.status == "COMPUTED"
-    assert abs(r10.value - 0.5) < 0.001
+    assert r10.status == "NO_SOURCE_DATA"
+    assert r10.value is None
 
     # 5. KPI-21: Berth Productivity (moves / crane-hours)
     # moves = 1000.0; crane-hours = 15.0 * 2 = 30.0 -> 1000 / 30 = 33.33 moves/crane-hr
@@ -329,10 +345,46 @@ def test_computable_kpis_arithmetic_on_hand_verified_fixture(db_session, hand_ve
     assert r24.status == "COMPUTED"
     assert r24.value == 1000.0
 
-    # 7. KPI-44: Port Time (ATD - ATA): Call 1 = 28h, Call 2 = 18h -> avg = 23.0 hours
-    r44 = engine.calculate_kpi("KPI-44")
-    assert r44.status == "COMPUTED"
-    assert abs(r44.value - 23.0) < 0.001
+    # 7. KPI-43 starts at berth departure and ends at port limits; call 1 has
+    # 2 hours and call 2 is ineligible, so the governed average is 2 hours.
+    r43 = engine.calculate_kpi("KPI-43")
+    assert r43.status == "COMPUTED"
+    assert abs(r43.value - 2.0) < 0.001
+
+    # Formula v2.1 is stored on every new governed result.
+    assert r43.formula_version == "2.1"
+
+
+def test_shift_kpis_pair_each_repeat_and_preserve_source_lineage(db_session):
+    """KPI-19/20 count every indexed shift; a later shift cannot overwrite the first."""
+    tenant = f"shift-kpi-{uuid.uuid4().hex[:8]}"
+    definitions = {}
+    for name in ("SHIFT_PILOT_ON_BOARD", "SHIFT_ALL_FAST"):
+        definition = db_session.execute(select(EventDefinition).where(EventDefinition.name == name)).scalar_one_or_none()
+        if not definition:
+            definition = EventDefinition(name=name, category="TEST", time_category="TEST")
+            db_session.add(definition)
+            db_session.flush()
+        definitions[name] = definition
+    call = VesselCall(vessel_name="Repeated Shift", vcn=f"SHIFT-{uuid.uuid4().hex[:6]}", tenant_id=tenant)
+    db_session.add(call)
+    db_session.flush()
+    start = datetime(2026, 7, 1, 8, tzinfo=UTC)
+    for index, start_time, end_time in ((1, start, start + timedelta(hours=1)), (2, start + timedelta(hours=3), start + timedelta(hours=5))):
+        db_session.add_all([
+            EventOccurrence(vessel_call_id=call.id, event_definition_id=definitions["SHIFT_PILOT_ON_BOARD"].id,
+                            utc_value=start_time, occurrence_index=index, movement_scope="SHIFTING"),
+            EventOccurrence(vessel_call_id=call.id, event_definition_id=definitions["SHIFT_ALL_FAST"].id,
+                            utc_value=end_time, occurrence_index=index, movement_scope="SHIFTING"),
+        ])
+    db_session.commit()
+
+    engine = KPIEngine(db_session, tenant_id=tenant)
+    count = engine.calculate_kpi("KPI-19")
+    duration = engine.calculate_kpi("KPI-20")
+    assert (count.status, count.value) == ("COMPUTED", 2.0)
+    assert (duration.status, duration.value) == ("COMPUTED", 1.5)
+    assert len(duration.data_quality_summary["source_event_ids"]) == 4
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -459,9 +511,11 @@ def test_kpi_api_endpoints_work(auth_headers, governed_kpi_api_dataset):
     r_card = client.get("/api/v1/kpis/scorecard", headers=auth_headers)
     assert r_card.status_code == 200
     card = r_card.json()
-    assert card["computed"] == 38
-    assert card["no_source_data"] == 17
-    assert card["unavailable"] == 0
+    assert card["computed"] == 25
+    assert card["no_source_data"] == 28
+    # Unit-dependent KPIs 02 and 27 remain UNAVAILABLE on an unqualified
+    # scorecard; that prevents an incompatible TEU/MT total.
+    assert card["unavailable"] == 2
 
     # 3. Governed percentile values are served from persisted analytics, including P75.
     r_stats = client.get("/api/v1/kpis/statistics", headers=auth_headers)

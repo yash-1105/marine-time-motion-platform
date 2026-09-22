@@ -218,5 +218,95 @@
     "base_calls": 72,
     "metrics_reconciled": "8 of 8",
     "dq_cases_passed": "10 of 10"
+  },
+  {
+    "run_timestamp": "2026-09-22T10:02:12.980938+00:00",
+    "execution_time_seconds": 43.37,
+    "app_version": "1.0.0",
+    "overall_status": "PASS",
+    "dataset_checksum": "90919984816264e44f0e83bf47a6ef11cc98f000ca375bebc77bf3f7e49b0763",
+    "base_calls": 72,
+    "metrics_reconciled": "8 of 8",
+    "dq_cases_passed": "10 of 10"
+  },
+  {
+    "run_timestamp": "2026-09-22T10:06:49.598526+00:00",
+    "execution_time_seconds": 44.18,
+    "app_version": "1.0.0",
+    "overall_status": "PASS",
+    "dataset_checksum": "90919984816264e44f0e83bf47a6ef11cc98f000ca375bebc77bf3f7e49b0763",
+    "base_calls": 72,
+    "metrics_reconciled": "8 of 8",
+    "dq_cases_passed": "10 of 10"
+  },
+  {
+    "run_timestamp": "2026-09-22T10:14:00.621451+00:00",
+    "execution_time_seconds": 46.42,
+    "app_version": "1.0.0",
+    "overall_status": "FAIL",
+    "dataset_checksum": "90919984816264e44f0e83bf47a6ef11cc98f000ca375bebc77bf3f7e49b0763",
+    "base_calls": 72,
+    "metrics_reconciled": "8 of 8",
+    "dq_cases_passed": "9 of 10"
+  },
+  {
+    "run_timestamp": "2026-09-22T10:15:19.889236+00:00",
+    "execution_time_seconds": 51.98,
+    "app_version": "1.0.0",
+    "overall_status": "PASS",
+    "dataset_checksum": "90919984816264e44f0e83bf47a6ef11cc98f000ca375bebc77bf3f7e49b0763",
+    "base_calls": 72,
+    "metrics_reconciled": "8 of 8",
+    "dq_cases_passed": "10 of 10"
+  },
+  {
+    "run_timestamp": "2026-09-22T10:53:48.818766+00:00",
+    "execution_time_seconds": 47.29,
+    "app_version": "1.0.0",
+    "overall_status": "PASS",
+    "dataset_checksum": "90919984816264e44f0e83bf47a6ef11cc98f000ca375bebc77bf3f7e49b0763",
+    "base_calls": 72,
+    "metrics_reconciled": "8 of 8",
+    "dq_cases_passed": "10 of 10"
+  },
+  {
+    "run_timestamp": "2026-09-22T11:11:12.417293+00:00",
+    "execution_time_seconds": 50.31,
+    "app_version": "1.0.0",
+    "overall_status": "PASS",
+    "dataset_checksum": "90919984816264e44f0e83bf47a6ef11cc98f000ca375bebc77bf3f7e49b0763",
+    "base_calls": 72,
+    "metrics_reconciled": "8 of 8",
+    "dq_cases_passed": "10 of 10"
+  },
+  {
+    "run_timestamp": "2026-09-22T11:33:03.936025+00:00",
+    "execution_time_seconds": 65.65,
+    "app_version": "1.0.0",
+    "overall_status": "PASS",
+    "dataset_checksum": "90919984816264e44f0e83bf47a6ef11cc98f000ca375bebc77bf3f7e49b0763",
+    "base_calls": 72,
+    "metrics_reconciled": "8 of 8",
+    "dq_cases_passed": "10 of 10"
+  },
+  {
+    "run_timestamp": "2026-09-22T11:35:32.196161+00:00",
+    "execution_time_seconds": 75.27,
+    "app_version": "1.0.0",
+    "overall_status": "PASS",
+    "dataset_checksum": "90919984816264e44f0e83bf47a6ef11cc98f000ca375bebc77bf3f7e49b0763",
+    "base_calls": 72,
+    "metrics_reconciled": "8 of 8",
+    "dq_cases_passed": "10 of 10"
+  },
+  {
+    "run_timestamp": "2026-09-22T18:50:32.404904+00:00",
+    "execution_time_seconds": 55.52,
+    "app_version": "1.0.0",
+    "overall_status": "PASS",
+    "dataset_checksum": "90919984816264e44f0e83bf47a6ef11cc98f000ca375bebc77bf3f7e49b0763",
+    "base_calls": 72,
+    "metrics_reconciled": "8 of 8",
+    "dq_cases_passed": "10 of 10"
   }
 ]

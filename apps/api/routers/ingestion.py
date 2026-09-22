@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from apps.api.auth.dependencies import require
 from apps.api.core.config import settings
 from apps.api.core.database import get_db
-from apps.api.models.ingestion import IngestionBatch
+from apps.api.models.ingestion import IngestionBatch, IngestionFile
 from apps.api.services.ingestion.pipeline import IngestionPipeline
 from apps.api.services.ingestion.synthetic import reset_tenant_dataset
 from apps.api.services.pipeline_runner import run_full_analytics_pipeline
@@ -27,37 +27,46 @@ def _resolve_tenant(principal) -> str:
 @router.post("/upload", status_code=202)
 def upload_file(
     background_tasks: BackgroundTasks,
-    file: UploadFile = File(...),
+    # Backwards-compatible singular field for existing clients.
+    file: UploadFile | None = File(None),
     db: Session = Depends(get_db),
     principal=Depends(require("create", "vessel_call")),
+    files: list[UploadFile] | None = File(None),
 ):
-    """Accept an authorised workbook and queue its governed downstream processing."""
+    """Accept a governed 1–15 workbook dataset group and queue atomic processing."""
     tenant_id = _resolve_tenant(principal)
-    safe_name = Path(file.filename or "").name
-    if not safe_name.lower().endswith((".xlsx", ".csv")):
-        raise HTTPException(status_code=415, detail="Only .xlsx and .csv uploads are accepted")
+    # Direct service tests call this function without FastAPI dependency
+    # resolution, in which case the default is a `File` marker rather than a
+    # Python list. Requests received through FastAPI always provide a list.
+    uploads = files if isinstance(files, list) else ([] if file is None else [file])
+    if not 1 <= len(uploads) <= 15:
+        raise HTTPException(status_code=400, detail="Upload between 1 and 15 Excel workbooks per dataset group")
     os.makedirs("/tmp/uploads", exist_ok=True)
-    temp_path = f"/tmp/uploads/{uuid.uuid4()}_{safe_name}"
-    with open(temp_path, "wb") as buffer:
-        written = 0
-        while chunk := file.file.read(1024 * 1024):
-            written += len(chunk)
-            if written > settings.upload_max_bytes:
-                buffer.close()
-                os.remove(temp_path)
-                raise HTTPException(status_code=413, detail="Upload exceeds configured size limit")
-            buffer.write(chunk)
-    if safe_name.lower().endswith(".xlsx") and open(temp_path, "rb").read(4) != b"PK\x03\x04":
-        os.remove(temp_path)
-        raise HTTPException(status_code=415, detail="XLSX upload is not a valid OOXML container")
-
+    temp_files: list[tuple[str, str]] = []
     try:
+        for upload in uploads:
+            safe_name = Path(upload.filename or "").name
+            if not safe_name.lower().endswith(".xlsx"):
+                raise HTTPException(status_code=415, detail="Only .xlsx workbooks are accepted for governed dataset groups")
+            temp_path = f"/tmp/uploads/{uuid.uuid4()}_{safe_name}"
+            temp_files.append((temp_path, safe_name))
+            with open(temp_path, "wb") as buffer:
+                written = 0
+                while chunk := upload.file.read(1024 * 1024):
+                    written += len(chunk)
+                    if written > settings.upload_max_bytes:
+                        raise HTTPException(status_code=413, detail=f"{safe_name} exceeds configured file size limit")
+                    buffer.write(chunk)
+            if open(temp_path, "rb").read(4) != b"PK\x03\x04":
+                raise HTTPException(status_code=415, detail=f"{safe_name} is not a valid OOXML XLSX container")
+
         pipeline = IngestionPipeline(db, tenant_id=tenant_id)
-        checksum = pipeline.calculate_checksum(temp_path)
+        checksums = [pipeline.calculate_checksum(path) for path, _ in temp_files]
+        checksum = __import__("hashlib").sha256("".join(sorted(checksums)).encode()).hexdigest()
 
         # Parse/map/validate before replacing an active dataset.  A malformed workbook
         # therefore cannot erase a currently usable dataset.
-        batch_id = pipeline.process_file(temp_path, file.filename, force_new=True, commit_canonical=False)
+        batch_id = pipeline.process_files(temp_files, force_new=True, commit_canonical=False)
 
         # Do not delete the active canonical dataset in the request.  A prior worker
         # may still be calculating it; replacement is serialized by the worker so a
@@ -72,19 +81,19 @@ def upload_file(
         # Redis/Dramatiq is the durable execution boundary shared with the worker.
         process_ingestion_analytics_task.send(batch_id, tenant_id, checksum)
 
-        # Clean up temporary disk file
-        if os.path.exists(temp_path):
-            os.remove(temp_path)
-
-        return {"batch_id": batch_id, "file_name": safe_name, "status": "PROCESSING"}
+        return {"batch_id": batch_id, "file_count": len(temp_files), "files": [name for _, name in temp_files], "status": "PROCESSING"}
+    except HTTPException:
+        if db is not None:
+            db.rollback()
+        raise
     except Exception as e:
-        db.rollback()
-        if os.path.exists(temp_path):
-            try:
-                os.remove(temp_path)
-            except Exception:
-                pass
+        if db is not None:
+            db.rollback()
         raise HTTPException(status_code=400, detail=str(e))
+    finally:
+        for temp_path, _ in temp_files:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
 
 
 @router.delete("/dataset")
@@ -152,6 +161,9 @@ def list_batches(db: Session = Depends(get_db), principal=Depends(require("view"
         .scalars()
         .all()
     )
+    manifests: dict[str, list[IngestionFile]] = {}
+    for manifest in db.execute(select(IngestionFile).where(IngestionFile.group_batch_id.in_([b.batch_id for b in batches]))).scalars().all():
+        manifests.setdefault(manifest.group_batch_id, []).append(manifest)
     return [
         {
             "batch_id": b.batch_id,
@@ -161,6 +173,8 @@ def list_batches(db: Session = Depends(get_db), principal=Depends(require("view"
             "file_checksum": b.file_checksum,
             "created_at": b.created_at.isoformat() if b.created_at else None,
             "error_message": b.error_message,
+            "file_count": len(manifests.get(b.batch_id, [])),
+            "files": [{"filename": f.original_filename, "checksum": f.file_checksum, "byte_size": f.byte_size, "parse_status": f.parse_status, "validation_status": f.validation_status, "error_message": f.error_message} for f in manifests.get(b.batch_id, [])],
         }
         for b in batches
     ]

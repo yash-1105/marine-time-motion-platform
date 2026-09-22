@@ -115,6 +115,12 @@ class KPI(BaseModel):
     alias_of_id = Column(ForeignKey("analytics.kpi.id", ondelete="SET NULL"), nullable=True)
     availability_status = Column(String(50), nullable=False, default="COMPUTED")
     required_source_systems = Column(JSON, nullable=True)
+    # Legacy definitions remain immutable for historical result/audit lineage but
+    # are excluded from the active governed 55-KPI registry.
+    is_active = Column(Boolean, nullable=False, default=True, index=True)
+    retired_at = Column(DateTime(timezone=True), nullable=True)
+    retirement_reason = Column(Text, nullable=True)
+    governed_kpi_id = Column(ForeignKey("analytics.kpi.id", ondelete="SET NULL"), nullable=True)
 
 
 class KPIFormulaVersion(BaseModel):
@@ -260,4 +266,3 @@ class DashboardSnapshot(BaseModel):
     filters_hash = Column(String(64), nullable=False, default="unfiltered")
     snapshot_data = Column(JSON, nullable=False)
     is_active = Column(Boolean, nullable=False, default=True, index=True)
-

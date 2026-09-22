@@ -33,7 +33,7 @@ from apps.api.models.canonical import (
 )
 from apps.api.models.config import EventDefinition
 from apps.api.models.journey import CanonicalObservation
-from apps.api.services.kpi.registry import KPI_REGISTRY_DEFINITIONS, ensure_kpi_registry
+from apps.api.services.kpi.registry import CURRENT_FORMULA_VERSION, KPI_REGISTRY_DEFINITIONS, ensure_kpi_registry
 
 
 class KPIEngine:
@@ -63,10 +63,62 @@ class KPIEngine:
         """Pre-fetches canonical observation winners for vessel calls."""
         if not vessel_call_ids:
             return {}
-        obs = self.db.execute(
-            select(CanonicalObservation).where(CanonicalObservation.vessel_call_id.in_(vessel_call_ids))
-        ).scalars().all()
+        obs = (
+            self.db.execute(
+                select(CanonicalObservation).where(CanonicalObservation.vessel_call_id.in_(vessel_call_ids))
+            )
+            .scalars()
+            .all()
+        )
         return {(o.vessel_call_id, o.event_definition_id): o.selected_event_occurrence_id for o in obs}
+
+    def _shift_pairs(self, vessel_calls: list[VesselCall]) -> list[tuple[float, str, str]]:
+        """Return every completed shifting pair, retaining occurrence-level lineage.
+
+        Shift events are repeatable.  The ordinary KPI event map deliberately keeps
+        one canonical winner per event definition for non-repeatable event pairs,
+        so it must not be used for KPI-19/20.  Pairing by the persisted occurrence
+        index preserves multiple shifts for a call and never turns a missing end
+        event into a duration.
+        """
+        if not vessel_calls:
+            return []
+        definitions = self._get_event_defs()
+        start_id = definitions.get("SHIFT_PILOT_ON_BOARD")
+        end_id = definitions.get("SHIFT_ALL_FAST")
+        if not start_id or not end_id:
+            return []
+        occurrences = (
+            self.db.execute(
+                select(EventOccurrence).where(
+                    EventOccurrence.vessel_call_id.in_([vc.id for vc in vessel_calls]),
+                    EventOccurrence.event_definition_id.in_([start_id, end_id]),
+                    EventOccurrence.is_superseded.is_(False),
+                    EventOccurrence.is_quarantined.is_(False),
+                )
+            )
+            .scalars()
+            .all()
+        )
+        grouped: dict[tuple[Any, int], dict[Any, EventOccurrence]] = {}
+        for occurrence in occurrences:
+            grouped.setdefault((occurrence.vessel_call_id, occurrence.occurrence_index), {})[
+                occurrence.event_definition_id
+            ] = occurrence
+
+        pairs: list[tuple[float, str, str]] = []
+        for pair in grouped.values():
+            start, end = pair.get(start_id), pair.get(end_id)
+            if not start or not end or not start.utc_value or not end.utc_value or end.utc_value < start.utc_value:
+                continue
+            pairs.append(
+                (
+                    (end.utc_value - start.utc_value).total_seconds() / 3600.0,
+                    str(start.id),
+                    str(end.id),
+                )
+            )
+        return pairs
 
     # ──────────────────────────────────────────────────────────────────────────
     # Vessel Calls and Population
@@ -102,13 +154,17 @@ class KPIEngine:
                 if not ata_def_id:
                     filtered_calls.append(vc)
                     continue
-                ata_occ = self.db.execute(
-                    select(EventOccurrence).where(
-                        EventOccurrence.vessel_call_id == vc.id,
-                        EventOccurrence.event_definition_id == ata_def_id,
-                        EventOccurrence.is_superseded == False,
+                ata_occ = (
+                    self.db.execute(
+                        select(EventOccurrence).where(
+                            EventOccurrence.vessel_call_id == vc.id,
+                            EventOccurrence.event_definition_id == ata_def_id,
+                            EventOccurrence.is_superseded == False,
+                        )
                     )
-                ).scalars().first()
+                    .scalars()
+                    .first()
+                )
                 if ata_occ and ata_occ.utc_value:
                     if period_start and ata_occ.utc_value < period_start:
                         continue
@@ -170,7 +226,7 @@ class KPIEngine:
     ) -> KPIResult:
         """Calculates a single KPI by its spec code (e.g., 'KPI-01')."""
         self.ensure_registry()
-        kpi = self.db.execute(select(KPI).where(KPI.code == kpi_code)).scalar_one_or_none()
+        kpi = self.db.execute(select(KPI).where(KPI.code == kpi_code, KPI.is_active.is_(True))).scalar_one_or_none()
         if not kpi:
             raise ValueError(f"KPI with code '{kpi_code}' not found in registry.")
 
@@ -193,7 +249,7 @@ class KPIEngine:
                     f"No connected source system supplies inputs for {kpi.name}. "
                     f"Required: {', '.join(kpi.required_source_systems or [])}."
                 ),
-                formula_version="1.0",
+                formula_version=CURRENT_FORMULA_VERSION,
                 data_quality_summary={"required_source_systems": kpi.required_source_systems or []},
                 calculated_at=datetime.now(UTC),
                 is_recalculation=is_recalculation,
@@ -262,6 +318,8 @@ class KPIEngine:
             cargo_by_vc,
             delays_by_vc,
             cohort_filters,
+            period_start,
+            period_end,
         )
 
         result = KPIResult(
@@ -278,7 +336,7 @@ class KPIEngine:
             target_value=kpi.target,
             band=band,
             unavailable_reason=reason,
-            formula_version="1.0",
+            formula_version=CURRENT_FORMULA_VERSION,
             data_quality_summary=dq_summary,
             calculated_at=datetime.now(UTC),
             is_recalculation=is_recalculation,
@@ -369,15 +427,15 @@ class KPIEngine:
     ) -> KPIResult:
         """Explicit, permissioned, audited operation that produces a new KPI result."""
         # Find previous result if any
-        kpi = self.db.execute(select(KPI).where(KPI.code == kpi_code)).scalar_one_or_none()
+        kpi = self.db.execute(select(KPI).where(KPI.code == kpi_code, KPI.is_active.is_(True))).scalar_one_or_none()
         if not kpi:
             raise ValueError(f"KPI {kpi_code} not found.")
 
-        prev_res = self.db.execute(
-            select(KPIResult)
-            .where(KPIResult.kpi_id == kpi.id)
-            .order_by(desc(KPIResult.calculated_at))
-        ).scalars().first()
+        prev_res = (
+            self.db.execute(select(KPIResult).where(KPIResult.kpi_id == kpi.id).order_by(desc(KPIResult.calculated_at)))
+            .scalars()
+            .first()
+        )
         prev_val = prev_res.value if prev_res else None
         prev_id = str(prev_res.id) if prev_res else None
 
@@ -428,7 +486,7 @@ class KPIEngine:
         periods: int = 6,
     ) -> dict[str, Any]:
         """Calculates trend points, rolling average, and direction classification."""
-        kpi = self.db.execute(select(KPI).where(KPI.code == kpi_code)).scalar_one_or_none()
+        kpi = self.db.execute(select(KPI).where(KPI.code == kpi_code, KPI.is_active.is_(True))).scalar_one_or_none()
         if not kpi:
             raise ValueError(f"KPI {kpi_code} not found.")
 
@@ -442,22 +500,30 @@ class KPIEngine:
             }
 
         # Query recent results for this KPI
-        results = self.db.execute(
-            select(KPIResult)
-            .where(KPIResult.kpi_id == kpi.id, KPIResult.status == "COMPUTED")
-            .order_by(desc(KPIResult.calculated_at))
-            .limit(periods)
-        ).scalars().all()
+        results = (
+            self.db.execute(
+                select(KPIResult)
+                .where(KPIResult.kpi_id == kpi.id, KPIResult.status == "COMPUTED")
+                .order_by(desc(KPIResult.calculated_at))
+                .limit(periods)
+            )
+            .scalars()
+            .all()
+        )
 
         results.reverse()
 
         points = []
         for r in results:
-            points.append({
-                "period": r.period_start.strftime("%Y-%m") if r.period_start else r.calculated_at.strftime("%Y-%m-%d %H:%M"),
-                "value": r.value,
-                "band": r.band,
-            })
+            points.append(
+                {
+                    "period": r.period_start.strftime("%Y-%m")
+                    if r.period_start
+                    else r.calculated_at.strftime("%Y-%m-%d %H:%M"),
+                    "value": r.value,
+                    "band": r.band,
+                }
+            )
 
         # If few historical results stored, slice available calls by month
         if len(points) < 2:
@@ -469,11 +535,13 @@ class KPIEngine:
                 p_start = p_end - timedelta(days=30)
                 r = self.calculate_kpi(kpi_code, period_start=p_start, period_end=p_end, grain=grain)
                 if r.status == "COMPUTED":
-                    points.append({
-                        "period": p_start.strftime("%Y-%m"),
-                        "value": r.value,
-                        "band": r.band,
-                    })
+                    points.append(
+                        {
+                            "period": p_start.strftime("%Y-%m"),
+                            "value": r.value,
+                            "band": r.band,
+                        }
+                    )
 
         # Calculate delta, rolling avg, and direction
         direction = "STABLE"
@@ -570,13 +638,15 @@ class KPIEngine:
             vc_id = req.vessel_call_id
             if vc_id not in services_by_vc:
                 services_by_vc[vc_id] = []
-            services_by_vc[vc_id].append({
-                "service_type": req.service_type,
-                "movement_type": req.movement_type,
-                "requested_time": req.requested_time,
-                "scheduled_time": ass.scheduled_time,
-                "served_time": exe.served_time,
-            })
+            services_by_vc[vc_id].append(
+                {
+                    "service_type": req.service_type,
+                    "movement_type": req.movement_type,
+                    "requested_time": req.requested_time,
+                    "scheduled_time": ass.scheduled_time,
+                    "served_time": exe.served_time,
+                }
+            )
 
         # 3. Cargo Operations
         cg_stmt = select(CargoOperation).where(CargoOperation.vessel_call_id.in_(vc_ids))
@@ -609,12 +679,302 @@ class KPIEngine:
         cargo_by_vc: dict[Any, list[CargoOperation]],
         delays_by_vc: dict[Any, list[Delay]],
         cohort_filters: dict[str, Any] | None,
+        period_start: datetime | None = None,
+        period_end: datetime | None = None,
     ) -> tuple[float | None, float | None, float | None, str, str, str | None, dict[str, Any]]:
         """Dispatches to the formula method for the KPI code."""
         code = kpi.code
 
         if not vessel_calls:
             return None, 0.0, 0.0, "UNAVAILABLE", "GRAY", "No eligible vessel calls for population.", {}
+
+        # FRD section 5 formula set (v2.0).  The legacy branches below are kept
+        # only to preserve historical source history; every current COMPUTED KPI
+        # returns before reaching them.
+        def computed(
+            value: float, numerator: float | None, denominator: float | None, details: dict[str, Any] | None = None
+        ):
+            return (
+                round(value, 4),
+                numerator,
+                denominator,
+                "COMPUTED",
+                self.evaluate_band(value, kpi.target, kpi.target_direction, kpi.thresholds),
+                None,
+                details or {},
+            )
+
+        def unavailable(reason: str):
+            return None, None, None, "UNAVAILABLE", "GRAY", reason, {}
+
+        def durations(start_names: list[str], end_names: list[str]) -> list[float]:
+            values = []
+            for vc in vessel_calls:
+                start = self._get_time(events_by_vc.get(vc.id, {}), start_names)
+                end = self._get_time(events_by_vc.get(vc.id, {}), end_names)
+                if start and end and end >= start:
+                    values.append((end - start).total_seconds() / 3600.0)
+            return values
+
+        def avg_duration(start: list[str], end: list[str], label: str):
+            values = durations(start, end)
+            if not values:
+                return unavailable(f"No eligible {label} records with both required timestamps.")
+            return computed(
+                sum(values) / len(values), round(sum(values), 4), float(len(values)), {"sample_size": len(values)}
+            )
+
+        if code == "KPI-01":
+            arrivals = [vc for vc in vessel_calls if self._get_time(events_by_vc.get(vc.id, {}), ["ATA"])]
+            if not arrivals:
+                return unavailable("No vessel calls with an actual arrival timestamp.")
+            return computed(float(len(arrivals)), float(len(arrivals)), None, {"distinct_vessel_calls": len(arrivals)})
+        if code == "KPI-02":
+            unit = (cohort_filters or {}).get("unit")
+            if not unit:
+                return unavailable("A cargo unit filter is required; TEU, MT, and Units cannot be combined.")
+            per_call = [
+                sum(op.actual_quantity or 0.0 for op in cargo_by_vc.get(vc.id, []) if op.unit == unit)
+                for vc in vessel_calls
+            ]
+            per_call = [value for value in per_call if value != 0]
+            if not per_call:
+                return unavailable(f"No eligible cargo records for unit {unit}.")
+            return computed(
+                sum(per_call) / len(per_call),
+                round(sum(per_call), 4),
+                float(len(per_call)),
+                {"unit": unit, "distinct_vessel_calls": len(per_call)},
+            )
+        if code == "KPI-05":
+            values = durations(["ANCHORAGE_ARRIVAL"], ["PILOT_ON_BOARD_ARRIVAL"])
+            if len(values) < 2:
+                return unavailable("At least two eligible anchorage waits are required for standard deviation.")
+            mean = sum(values) / len(values)
+            std = math.sqrt(sum((value - mean) ** 2 for value in values) / (len(values) - 1))
+            return computed(
+                std,
+                round(sum(values), 4),
+                float(len(values)),
+                {
+                    "sample_size": len(values),
+                    "grouping": "vessel_type; use vessel_type cohort filter for a type-specific index",
+                },
+            )
+        if code in {"KPI-07", "KPI-13"}:
+            return avg_duration(["PILOT_ON_BOARD_ARRIVAL"], ["ALL_FAST_ARRIVAL"], "pilot-to-berth movement")
+        if code == "KPI-12":
+            return avg_duration(["PILOT_SCHEDULED_ARRIVAL"], ["PILOT_ON_BOARD_ARRIVAL"], "pilot boarding")
+        if code == "KPI-15":
+            return avg_duration(["ALL_FAST_ARRIVAL"], ["LAST_LINE_UNTIED_SAILING"], "berth stay")
+        if code == "KPI-16":
+            values = durations(["PILOT_ON_BOARD_ARRIVAL"], ["ALL_FAST_ARRIVAL"])
+            if len(values) < 2:
+                return unavailable("At least two eligible pilot-to-berth records are required for standard deviation.")
+            mean = sum(values) / len(values)
+            return computed(
+                math.sqrt(sum((value - mean) ** 2 for value in values) / (len(values) - 1)),
+                round(sum(values), 4),
+                float(len(values)),
+                {
+                    "sample_size": len(values),
+                    "grouping": "vessel_type; use vessel_type cohort filter for a type-specific index",
+                },
+            )
+        if code in {"KPI-17", "KPI-18"}:
+            idle, berth = [], []
+            for vc in vessel_calls:
+                stay = durations_for = None
+                evs = events_by_vc.get(vc.id, {})
+                all_fast, untied = (
+                    self._get_time(evs, ["ALL_FAST_ARRIVAL"]),
+                    self._get_time(evs, ["LAST_LINE_UNTIED_SAILING"]),
+                )
+                cargo_start, cargo_end = self._get_time(evs, ["CARGO_START"]), self._get_time(evs, ["CARGO_END"])
+                if (
+                    all_fast
+                    and untied
+                    and cargo_start
+                    and cargo_end
+                    and untied >= all_fast
+                    and cargo_end >= cargo_start
+                ):
+                    stay = (untied - all_fast).total_seconds() / 3600.0
+                    idle.append(max(stay - (cargo_end - cargo_start).total_seconds() / 3600.0, 0.0))
+                    berth.append(stay)
+            if not idle:
+                return unavailable("No eligible berth and cargo-operation intervals.")
+            if code == "KPI-17":
+                return computed(
+                    sum(idle) / len(idle),
+                    round(sum(idle), 4),
+                    float(len(idle)),
+                    {"definition": "berth stay minus cargo working interval"},
+                )
+            if sum(berth) == 0:
+                return unavailable("Total berth time is zero.")
+            return computed(
+                (sum(idle) / sum(berth)) * 100.0,
+                round(sum(idle), 4),
+                round(sum(berth), 4),
+                {"definition": "idle hours / berth hours"},
+            )
+        if code in {"KPI-19", "KPI-20"}:
+            pairs = self._shift_pairs(vessel_calls)
+            if not pairs:
+                return unavailable("No eligible intra-port shift event pairs.")
+            values = [pair[0] for pair in pairs]
+            source_event_ids = [event_id for pair in pairs for event_id in pair[1:]]
+            if code == "KPI-19":
+                return computed(
+                    float(len(values)),
+                    float(len(values)),
+                    None,
+                    {"shift_pairs": len(values), "source_event_ids": source_event_ids},
+                )
+            return computed(
+                sum(values) / len(values),
+                round(sum(values), 4),
+                float(len(values)),
+                {"shift_pairs": len(values), "source_event_ids": source_event_ids},
+            )
+        if code in {"KPI-21", "KPI-30"}:
+            ops = [
+                op
+                for vc in vessel_calls
+                for op in cargo_by_vc.get(vc.id, [])
+                if op.unit == "TEU" and op.actual_quantity is not None and op.working_hours and op.resources_deployed
+            ]
+            denominator = sum(op.working_hours * op.resources_deployed for op in ops)
+            if not ops or denominator <= 0:
+                return unavailable("No eligible container moves with positive crane-hours.")
+            numerator = sum(op.actual_quantity for op in ops)
+            return computed(
+                numerator / denominator,
+                round(numerator, 4),
+                round(denominator, 4),
+                {"unit": "TEU", "crane_hours": "working_hours × cranes_deployed"},
+            )
+        if code == "KPI-23":
+            quantity = sum(
+                op.actual_quantity or 0.0 for vc in vessel_calls for op in cargo_by_vc.get(vc.id, []) if op.unit == "MT"
+            )
+            if quantity == 0:
+                return unavailable("No MT cargo-handling records.")
+            return computed(quantity, round(quantity, 4), None, {"unit": "MT"})
+        if code == "KPI-24":
+            included_operation_types = {"load", "discharge", "unload", "transshipment", "transhipment"}
+
+            def is_counted_container_operation(operation: CargoOperation) -> bool:
+                # Source systems sometimes supply combined operations such as
+                # "Discharge, Load".  Include only the FRD-defined traffic
+                # categories; restows and unclassified TEU records are not
+                # silently counted as traffic.
+                tokens = {
+                    token.strip().lower()
+                    for token in (operation.operation_type or "").replace("/", ",").split(",")
+                    if token.strip()
+                }
+                return bool(tokens & included_operation_types)
+
+            quantity = sum(
+                op.actual_quantity or 0.0
+                for vc in vessel_calls
+                for op in cargo_by_vc.get(vc.id, [])
+                if op.unit == "TEU" and is_counted_container_operation(op)
+            )
+            if quantity == 0:
+                return unavailable("No eligible loaded, discharged, or transshipped TEU records.")
+            return computed(
+                quantity,
+                round(quantity, 4),
+                None,
+                {"unit": "TEU", "included_operation_types": sorted(included_operation_types)},
+            )
+        if code == "KPI-25":
+            calls = [vc for vc in vessel_calls if vc.vessel_type and "container" in vc.vessel_type.lower()]
+            moves = sum(
+                op.actual_quantity or 0.0 for vc in calls for op in cargo_by_vc.get(vc.id, []) if op.unit == "TEU"
+            )
+            if not calls or moves == 0:
+                return unavailable("No eligible container vessel calls with TEU moves.")
+            return computed(
+                moves / len(calls),
+                round(moves, 4),
+                float(len(calls)),
+                {"unit": "TEU", "distinct_vessel_calls": len(calls)},
+            )
+        if code == "KPI-27":
+            unit = (cohort_filters or {}).get("unit")
+            if not unit:
+                return unavailable(
+                    "A cargo unit filter is required; cargo units cannot be combined for berth-day output."
+                )
+            cargo, berth_hours = 0.0, 0.0
+            for vc in vessel_calls:
+                cargo += sum(op.actual_quantity or 0.0 for op in cargo_by_vc.get(vc.id, []) if op.unit == unit)
+                evs = events_by_vc.get(vc.id, {})
+                start, end = (
+                    self._get_time(evs, ["ALL_FAST_ARRIVAL"]),
+                    self._get_time(evs, ["LAST_LINE_UNTIED_SAILING"]),
+                )
+                if start and end and end >= start:
+                    berth_hours += (end - start).total_seconds() / 3600.0
+            if cargo == 0 or berth_hours <= 0:
+                return unavailable(f"No eligible {unit} cargo and berth-time records.")
+            return computed(cargo / (berth_hours / 24.0), round(cargo, 4), round(berth_hours / 24.0, 4), {"unit": unit})
+        if code == "KPI-28":
+            values = [
+                op.resources_deployed
+                for vc in vessel_calls
+                if vc.vessel_type and "container" in vc.vessel_type.lower()
+                for op in cargo_by_vc.get(vc.id, [])
+                if op.resources_deployed is not None
+            ]
+            if not values:
+                return unavailable("No eligible container operations with cranes deployed.")
+            return computed(
+                sum(values) / len(values), float(sum(values)), float(len(values)), {"container_operations": len(values)}
+            )
+        if code == "KPI-29":
+            ops = [
+                op
+                for vc in vessel_calls
+                for op in cargo_by_vc.get(vc.id, [])
+                if op.working_hours is not None and op.downtime_hours is not None
+            ]
+            total = sum(op.working_hours + op.downtime_hours for op in ops)
+            downtime = sum(op.downtime_hours for op in ops)
+            if not ops or total <= 0:
+                return unavailable("No eligible equipment working and downtime hours.")
+            return computed(
+                (downtime / total) * 100.0,
+                round(downtime, 4),
+                round(total, 4),
+                {"total_equipment_hours": "productive working + downtime"},
+            )
+        if code == "KPI-41":
+            return avg_duration(["ANCHORAGE_ARRIVAL"], ["BREAKWATER_OUT", "ATD"], "turnaround")
+        if code == "KPI-42":
+            return avg_duration(["ALL_FAST_ARRIVAL"], ["LAST_LINE_UNTIED_SAILING"], "berth turnaround")
+        if code == "KPI-43":
+            return avg_duration(["LAST_LINE_UNTIED_SAILING"], ["BREAKWATER_OUT", "PORT_LIMIT_OUT"], "outward movement")
+        if code == "KPI-45":
+            departure_times = [
+                self._get_time(events_by_vc.get(vc.id, {}), ["ATD", "BREAKWATER_OUT", "PORT_LIMIT_OUT"])
+                for vc in vessel_calls
+            ]
+            departure_times = [time for time in departure_times if time]
+            if not departure_times:
+                return unavailable("No outward departure timestamps.")
+            start = period_start or min(departure_times)
+            end = period_end or max(departure_times)
+            days = max((end.date() - start.date()).days + 1, 1)
+            return computed(
+                len(departure_times) / days, float(len(departure_times)), float(days), {"calendar_days": days}
+            )
+        if code == "KPI-54":
+            return avg_duration(["PILOT_REQUEST_ARRIVAL"], ["PILOT_ON_BOARD_ARRIVAL"], "pilot response")
 
         # ── KPI-01: Number of Vessel Calls ──
         if code == "KPI-01":
@@ -649,15 +1009,31 @@ class KPIEngine:
             }
 
             if call_count == 0:
-                return None, None, None, "UNAVAILABLE", "GRAY", f"No cargo records for unit {selected_unit}", {"breakdown_by_unit": breakdown}
+                return (
+                    None,
+                    None,
+                    None,
+                    "UNAVAILABLE",
+                    "GRAY",
+                    f"No cargo records for unit {selected_unit}",
+                    {"breakdown_by_unit": breakdown},
+                )
 
             avg_val = round(total_qty / call_count, 2)
             band = self.evaluate_band(avg_val, kpi.target, kpi.target_direction, kpi.thresholds)
-            return avg_val, total_qty, float(call_count), "COMPUTED", band, None, {
-                "segmented_unit": selected_unit,
-                "breakdown_by_unit": breakdown,
-                "disclosure": "Never mixes units into an unqualified combined total (spec §11).",
-            }
+            return (
+                avg_val,
+                total_qty,
+                float(call_count),
+                "COMPUTED",
+                band,
+                None,
+                {
+                    "segmented_unit": selected_unit,
+                    "breakdown_by_unit": breakdown,
+                    "disclosure": "Never mixes units into an unqualified combined total (spec §11).",
+                },
+            )
 
         # ── KPI-03: Average Pre-Berthing Waiting Time ──
         elif code == "KPI-03":
@@ -687,7 +1063,15 @@ class KPIEngine:
                 return None, None, None, "UNAVAILABLE", "GRAY", "No valid pre-berthing delay records.", {}
             avg_d = round(sum(delays) / len(delays), 4)
             band = self.evaluate_band(avg_d, kpi.target, kpi.target_direction, kpi.thresholds)
-            return avg_d, round(sum(delays), 4), float(len(delays)), "COMPUTED", band, None, {"sample_size": len(delays)}
+            return (
+                avg_d,
+                round(sum(delays), 4),
+                float(len(delays)),
+                "COMPUTED",
+                band,
+                None,
+                {"sample_size": len(delays)},
+            )
 
         # ── KPI-05: Anchorage Time Variation Index ──
         elif code == "KPI-05":
@@ -699,16 +1083,32 @@ class KPIEngine:
                 if t_arr and t_pob and t_pob >= t_arr:
                     waits.append((t_pob - t_arr).total_seconds() / 3600.0)
             if len(waits) < 2:
-                return None, None, None, "UNAVAILABLE", "GRAY", "Insufficient anchorage records (need at least 2 for stddev).", {}
+                return (
+                    None,
+                    None,
+                    None,
+                    "UNAVAILABLE",
+                    "GRAY",
+                    "Insufficient anchorage records (need at least 2 for stddev).",
+                    {},
+                )
             mean_w = sum(waits) / len(waits)
             variance = sum((w - mean_w) ** 2 for w in waits) / (len(waits) - 1)
             std_dev = round(math.sqrt(variance), 4)
             band = self.evaluate_band(std_dev, kpi.target, kpi.target_direction, kpi.thresholds)
-            return std_dev, round(sum(waits), 4), float(len(waits)), "COMPUTED", band, None, {
-                "sample_size": len(waits),
-                "mean_wait_hours": round(mean_w, 4),
-                "variance": round(variance, 4),
-            }
+            return (
+                std_dev,
+                round(sum(waits), 4),
+                float(len(waits)),
+                "COMPUTED",
+                band,
+                None,
+                {
+                    "sample_size": len(waits),
+                    "mean_wait_hours": round(mean_w, 4),
+                    "variance": round(variance, 4),
+                },
+            )
 
         # ── KPI-07: Inward Towage Duration ──
         elif code == "KPI-07":
@@ -723,7 +1123,15 @@ class KPIEngine:
                 return None, None, None, "UNAVAILABLE", "GRAY", "No inward towage events recorded.", {}
             avg_t = round(sum(towages) / len(towages), 4)
             band = self.evaluate_band(avg_t, kpi.target, kpi.target_direction, kpi.thresholds)
-            return avg_t, round(sum(towages), 4), float(len(towages)), "COMPUTED", band, None, {"sample_size": len(towages)}
+            return (
+                avg_t,
+                round(sum(towages), 4),
+                float(len(towages)),
+                "COMPUTED",
+                band,
+                None,
+                {"sample_size": len(towages)},
+            )
 
         # ── KPI-08: Average Inward Towage Duration (Configurable denominator disclosed) ──
         elif code == "KPI-08":
@@ -751,18 +1159,28 @@ class KPIEngine:
                 den = float(len(towages))
 
             band = self.evaluate_band(val, kpi.target, kpi.target_direction, kpi.thresholds)
-            return val, round(sum(towages), 4), den, "COMPUTED", band, None, {
-                "denominator_choice": denom_type,
-                "assisted_vessels": len(towages),
-                "total_services": service_count,
-            }
+            return (
+                val,
+                round(sum(towages), 4),
+                den,
+                "COMPUTED",
+                band,
+                None,
+                {
+                    "denominator_choice": denom_type,
+                    "assisted_vessels": len(towages),
+                    "total_services": service_count,
+                },
+            )
 
         # ── KPI-09: Outward Towage Duration ──
         elif code == "KPI-09":
             outwards = []
             for vc in vessel_calls:
                 evs = events_by_vc.get(vc.id, {})
-                t_start = self._get_time(evs, ["FIRST_LINE_UNTIED_SAILING", "LAST_LINE_UNTIED_SAILING", "PILOT_ON_BOARD_SAILING"])
+                t_start = self._get_time(
+                    evs, ["FIRST_LINE_UNTIED_SAILING", "LAST_LINE_UNTIED_SAILING", "PILOT_ON_BOARD_SAILING"]
+                )
                 t_end = self._get_time(evs, ["TUG_RELEASE_SAILING", "BREAKWATER_OUT", "Breakwater Out"])
                 if t_start and t_end and t_end >= t_start:
                     outwards.append((t_end - t_start).total_seconds() / 3600.0)
@@ -770,7 +1188,15 @@ class KPIEngine:
                 return None, None, None, "UNAVAILABLE", "GRAY", "No outward towage events.", {}
             avg_o = round(sum(outwards) / len(outwards), 4)
             band = self.evaluate_band(avg_o, kpi.target, kpi.target_direction, kpi.thresholds)
-            return avg_o, round(sum(outwards), 4), float(len(outwards)), "COMPUTED", band, None, {"sample_size": len(outwards)}
+            return (
+                avg_o,
+                round(sum(outwards), 4),
+                float(len(outwards)),
+                "COMPUTED",
+                band,
+                None,
+                {"sample_size": len(outwards)},
+            )
 
         # ── KPI-10: Pilot Service Delay (Arrival Pilotage Execution Delay) ──
         elif code == "KPI-10":
@@ -788,10 +1214,18 @@ class KPIEngine:
                 return None, None, None, "UNAVAILABLE", "GRAY", "No pilot service execution records.", {}
             avg_d = round(sum(delays) / len(delays), 4)
             band = self.evaluate_band(avg_d, kpi.target, kpi.target_direction, kpi.thresholds)
-            return avg_d, round(sum(delays), 4), float(len(delays)), "COMPUTED", band, None, {
-                "sample_size": len(delays),
-                "early_service_count": sum(1 for d in delays if d < 0),
-            }
+            return (
+                avg_d,
+                round(sum(delays), 4),
+                float(len(delays)),
+                "COMPUTED",
+                band,
+                None,
+                {
+                    "sample_size": len(delays),
+                    "early_service_count": sum(1 for d in delays if d < 0),
+                },
+            )
 
         # ── KPI-11: Tug Response Time (Primary) ──
         elif code == "KPI-11":
@@ -809,10 +1243,18 @@ class KPIEngine:
                 return None, None, None, "UNAVAILABLE", "GRAY", "No tug service execution records.", {}
             avg_d = round(sum(delays) / len(delays), 4)
             band = self.evaluate_band(avg_d, kpi.target, kpi.target_direction, kpi.thresholds)
-            return avg_d, round(sum(delays), 4), float(len(delays)), "COMPUTED", band, None, {
-                "sample_size": len(delays),
-                "early_service_count": sum(1 for d in delays if d < 0),
-            }
+            return (
+                avg_d,
+                round(sum(delays), 4),
+                float(len(delays)),
+                "COMPUTED",
+                band,
+                None,
+                {
+                    "sample_size": len(delays),
+                    "early_service_count": sum(1 for d in delays if d < 0),
+                },
+            )
 
         # ── KPI-12: Mooring Service Response Time ──
         elif code == "KPI-12":
@@ -830,10 +1272,18 @@ class KPIEngine:
                 return None, None, None, "UNAVAILABLE", "GRAY", "No mooring/berthing service records found in data.", {}
             avg_d = round(sum(delays) / len(delays), 4)
             band = self.evaluate_band(avg_d, kpi.target, kpi.target_direction, kpi.thresholds)
-            return avg_d, round(sum(delays), 4), float(len(delays)), "COMPUTED", band, None, {
-                "sample_size": len(delays),
-                "early_service_count": sum(1 for d in delays if d < 0),
-            }
+            return (
+                avg_d,
+                round(sum(delays), 4),
+                float(len(delays)),
+                "COMPUTED",
+                band,
+                None,
+                {
+                    "sample_size": len(delays),
+                    "early_service_count": sum(1 for d in delays if d < 0),
+                },
+            )
 
         # ── KPI-13: Berth Availability ──
         elif code == "KPI-13":
@@ -852,7 +1302,15 @@ class KPIEngine:
                 return None, None, None, "UNAVAILABLE", "GRAY", "No berthing records.", {}
             rate = round((on_time / total) * 100.0, 2)
             band = self.evaluate_band(rate, kpi.target, kpi.target_direction, kpi.thresholds)
-            return rate, float(on_time), float(total), "COMPUTED", band, None, {"available_calls": on_time, "total_calls": total}
+            return (
+                rate,
+                float(on_time),
+                float(total),
+                "COMPUTED",
+                band,
+                None,
+                {"available_calls": on_time, "total_calls": total},
+            )
 
         # ── KPI-14: Berth Occupancy Rate (Primary) ──
         elif code == "KPI-14":
@@ -866,8 +1324,10 @@ class KPIEngine:
                 if t_fast and t_untied and t_untied >= t_fast:
                     dur = (t_untied - t_fast).total_seconds() / 3600.0
                     berth_stays.append(dur)
-                    if min_t is None or t_fast < min_t: min_t = t_fast
-                    if max_t is None or t_untied > max_t: max_t = t_untied
+                    if min_t is None or t_fast < min_t:
+                        min_t = t_fast
+                    if max_t is None or t_untied > max_t:
+                        max_t = t_untied
             if not berth_stays or not min_t or not max_t:
                 return None, None, None, "UNAVAILABLE", "GRAY", "No berth stay data.", {}
 
@@ -878,11 +1338,19 @@ class KPIEngine:
             total_capacity = num_berths * period_hours
             occupancy_pct = round(min((total_berth_hours / total_capacity) * 100.0, 100.0), 2)
             band = self.evaluate_band(occupancy_pct, kpi.target, kpi.target_direction, kpi.thresholds)
-            return occupancy_pct, round(total_berth_hours, 2), round(total_capacity, 2), "COMPUTED", band, None, {
-                "assumed_berth_count": num_berths,
-                "period_hours": round(period_hours, 2),
-                "total_berth_stay_hours": round(total_berth_hours, 2),
-            }
+            return (
+                occupancy_pct,
+                round(total_berth_hours, 2),
+                round(total_capacity, 2),
+                "COMPUTED",
+                band,
+                None,
+                {
+                    "assumed_berth_count": num_berths,
+                    "period_hours": round(period_hours, 2),
+                    "total_berth_stay_hours": round(total_berth_hours, 2),
+                },
+            )
 
         # ── KPI-15: Berth Turnaround Time ──
         elif code == "KPI-15":
@@ -897,7 +1365,15 @@ class KPIEngine:
                 return None, None, None, "UNAVAILABLE", "GRAY", "No berth turnaround records.", {}
             avg_stay = round(sum(stays) / len(stays), 4)
             band = self.evaluate_band(avg_stay, kpi.target, kpi.target_direction, kpi.thresholds)
-            return avg_stay, round(sum(stays), 4), float(len(stays)), "COMPUTED", band, None, {"sample_size": len(stays)}
+            return (
+                avg_stay,
+                round(sum(stays), 4),
+                float(len(stays)),
+                "COMPUTED",
+                band,
+                None,
+                {"sample_size": len(stays)},
+            )
 
         # ── KPI-16: Berth Productivity (Cargo / Berth Stay) ──
         elif code == "KPI-16":
@@ -917,10 +1393,18 @@ class KPIEngine:
                 return None, None, None, "UNAVAILABLE", "GRAY", "No berth stay data for cargo calls.", {}
             prod = round(total_cargo / total_stay, 2)
             band = self.evaluate_band(prod, kpi.target, kpi.target_direction, kpi.thresholds)
-            return prod, round(total_cargo, 2), round(total_stay, 2), "COMPUTED", band, None, {
-                "total_cargo": round(total_cargo, 2),
-                "total_berth_stay_hours": round(total_stay, 2),
-            }
+            return (
+                prod,
+                round(total_cargo, 2),
+                round(total_stay, 2),
+                "COMPUTED",
+                band,
+                None,
+                {
+                    "total_cargo": round(total_cargo, 2),
+                    "total_berth_stay_hours": round(total_stay, 2),
+                },
+            )
 
         # ── KPI-17: Berth Working Time Ratio ──
         elif code == "KPI-17":
@@ -940,10 +1424,18 @@ class KPIEngine:
                 return None, None, None, "UNAVAILABLE", "GRAY", "No berth stay or working hours.", {}
             ratio = round(min((total_working / total_stay) * 100.0, 100.0), 2)
             band = self.evaluate_band(ratio, kpi.target, kpi.target_direction, kpi.thresholds)
-            return ratio, round(total_working, 2), round(total_stay, 2), "COMPUTED", band, None, {
-                "working_hours": round(total_working, 2),
-                "berth_stay_hours": round(total_stay, 2),
-            }
+            return (
+                ratio,
+                round(total_working, 2),
+                round(total_stay, 2),
+                "COMPUTED",
+                band,
+                None,
+                {
+                    "working_hours": round(total_working, 2),
+                    "berth_stay_hours": round(total_stay, 2),
+                },
+            )
 
         # ── KPI-18: Berth Working Rate ──
         elif code == "KPI-18":
@@ -958,10 +1450,18 @@ class KPIEngine:
                 return None, None, None, "UNAVAILABLE", "GRAY", "No working hours logged.", {}
             rate = round(total_cargo / total_working, 2)
             band = self.evaluate_band(rate, kpi.target, kpi.target_direction, kpi.thresholds)
-            return rate, round(total_cargo, 2), round(total_working, 2), "COMPUTED", band, None, {
-                "total_cargo": round(total_cargo, 2),
-                "total_working_hours": round(total_working, 2),
-            }
+            return (
+                rate,
+                round(total_cargo, 2),
+                round(total_working, 2),
+                "COMPUTED",
+                band,
+                None,
+                {
+                    "total_cargo": round(total_cargo, 2),
+                    "total_working_hours": round(total_working, 2),
+                },
+            )
 
         # ── KPI-19: Berth Idle Time ──
         elif code == "KPI-19":
@@ -979,7 +1479,15 @@ class KPIEngine:
                 return None, None, None, "UNAVAILABLE", "GRAY", "No berth stay data.", {}
             avg_idle = round(sum(idle_times) / len(idle_times), 4)
             band = self.evaluate_band(avg_idle, kpi.target, kpi.target_direction, kpi.thresholds)
-            return avg_idle, round(sum(idle_times), 4), float(len(idle_times)), "COMPUTED", band, None, {"sample_size": len(idle_times)}
+            return (
+                avg_idle,
+                round(sum(idle_times), 4),
+                float(len(idle_times)),
+                "COMPUTED",
+                band,
+                None,
+                {"sample_size": len(idle_times)},
+            )
 
         # ── KPI-20: Berth Dwell Time ──
         elif code == "KPI-20":
@@ -994,13 +1502,22 @@ class KPIEngine:
                 return None, None, None, "UNAVAILABLE", "GRAY", "No berth dwell events.", {}
             avg_dwell = round(sum(dwells) / len(dwells), 4)
             band = self.evaluate_band(avg_dwell, kpi.target, kpi.target_direction, kpi.thresholds)
-            return avg_dwell, round(sum(dwells), 4), float(len(dwells)), "COMPUTED", band, None, {"sample_size": len(dwells)}
+            return (
+                avg_dwell,
+                round(sum(dwells), 4),
+                float(len(dwells)),
+                "COMPUTED",
+                band,
+                None,
+                {"sample_size": len(dwells)},
+            )
 
         # ── KPI-21: Berth Productivity - Crane (moves / crane-hours) ──
         # Spec rule: If crane-hours are already summed across cranes, do not multiply by crane count again.
         elif code == "KPI-21":
             container_ops = [
-                op for vc in vessel_calls
+                op
+                for vc in vessel_calls
                 for op in cargo_by_vc.get(vc.id, [])
                 if op.unit == "TEU" and op.working_hours and op.actual_quantity
             ]
@@ -1013,16 +1530,25 @@ class KPIEngine:
                 return None, None, None, "UNAVAILABLE", "GRAY", "Total crane hours is zero.", {}
             prod = round(total_moves / total_crane_hours, 2)
             band = self.evaluate_band(prod, kpi.target, kpi.target_direction, kpi.thresholds)
-            return prod, round(total_moves, 2), round(total_crane_hours, 2), "COMPUTED", band, None, {
-                "total_container_moves": round(total_moves, 2),
-                "total_crane_hours": round(total_crane_hours, 2),
-                "rule": "moves / crane-hours (spec §11).",
-            }
+            return (
+                prod,
+                round(total_moves, 2),
+                round(total_crane_hours, 2),
+                "COMPUTED",
+                band,
+                None,
+                {
+                    "total_container_moves": round(total_moves, 2),
+                    "total_crane_hours": round(total_crane_hours, 2),
+                    "rule": "moves / crane-hours (spec §11).",
+                },
+            )
 
         # ── KPI-22: Gross Crane Productivity (moves / total working hours) ──
         elif code == "KPI-22":
             container_ops = [
-                op for vc in vessel_calls
+                op
+                for vc in vessel_calls
                 for op in cargo_by_vc.get(vc.id, [])
                 if op.unit == "TEU" and op.working_hours and op.actual_quantity
             ]
@@ -1034,12 +1560,21 @@ class KPIEngine:
                 return None, None, None, "UNAVAILABLE", "GRAY", "Zero working hours.", {}
             prod = round(total_moves / total_wh, 2)
             band = self.evaluate_band(prod, kpi.target, kpi.target_direction, kpi.thresholds)
-            return prod, round(total_moves, 2), round(total_wh, 2), "COMPUTED", band, None, {"total_moves": total_moves, "gross_working_hours": total_wh}
+            return (
+                prod,
+                round(total_moves, 2),
+                round(total_wh, 2),
+                "COMPUTED",
+                band,
+                None,
+                {"total_moves": total_moves, "gross_working_hours": total_wh},
+            )
 
         # ── KPI-23: Net Crane Productivity (moves / (working hours - downtime)) ──
         elif code == "KPI-23":
             container_ops = [
-                op for vc in vessel_calls
+                op
+                for vc in vessel_calls
                 for op in cargo_by_vc.get(vc.id, [])
                 if op.unit == "TEU" and op.working_hours and op.actual_quantity
             ]
@@ -1049,7 +1584,15 @@ class KPIEngine:
             net_hours = sum(max(op.working_hours - (op.downtime_hours or 0.0), 0.1) for op in container_ops)
             prod = round(total_moves / net_hours, 2)
             band = self.evaluate_band(prod, kpi.target, kpi.target_direction, kpi.thresholds)
-            return prod, round(total_moves, 2), round(net_hours, 2), "COMPUTED", band, None, {"total_moves": total_moves, "net_working_hours": round(net_hours, 2)}
+            return (
+                prod,
+                round(total_moves, 2),
+                round(net_hours, 2),
+                "COMPUTED",
+                band,
+                None,
+                {"total_moves": total_moves, "net_working_hours": round(net_hours, 2)},
+            )
 
         # ── KPI-24: Container Traffic in TEUs ──
         # Spec rule: loaded + unloaded + transshipped, with restow treatment configured and disclosed.
@@ -1061,10 +1604,18 @@ class KPIEngine:
                 if op.unit == "TEU"
             )
             band = self.evaluate_band(teu_sum, kpi.target, kpi.target_direction, kpi.thresholds)
-            return round(teu_sum, 2), round(teu_sum, 2), None, "COMPUTED", band, None, {
-                "restow_treatment": "excluded_from_primary_throughput_unless_restow_flag_set",
-                "total_teu": round(teu_sum, 2),
-            }
+            return (
+                round(teu_sum, 2),
+                round(teu_sum, 2),
+                None,
+                "COMPUTED",
+                band,
+                None,
+                {
+                    "restow_treatment": "excluded_from_primary_throughput_unless_restow_flag_set",
+                    "total_teu": round(teu_sum, 2),
+                },
+            )
 
         # ── KPI-25: Cargo Handling Time ──
         elif code == "KPI-25":
@@ -1079,7 +1630,15 @@ class KPIEngine:
                 return None, None, None, "UNAVAILABLE", "GRAY", "No cargo timing events recorded.", {}
             avg_d = round(sum(durations) / len(durations), 4)
             band = self.evaluate_band(avg_d, kpi.target, kpi.target_direction, kpi.thresholds)
-            return avg_d, round(sum(durations), 4), float(len(durations)), "COMPUTED", band, None, {"sample_size": len(durations)}
+            return (
+                avg_d,
+                round(sum(durations), 4),
+                float(len(durations)),
+                "COMPUTED",
+                band,
+                None,
+                {"sample_size": len(durations)},
+            )
 
         # ── KPI-27: Last Container Lift to Departure Time ──
         elif code == "KPI-27":
@@ -1094,7 +1653,15 @@ class KPIEngine:
                 return None, None, None, "UNAVAILABLE", "GRAY", "No cargo-end or departure events.", {}
             avg_d = round(sum(durations) / len(durations), 4)
             band = self.evaluate_band(avg_d, kpi.target, kpi.target_direction, kpi.thresholds)
-            return avg_d, round(sum(durations), 4), float(len(durations)), "COMPUTED", band, None, {"sample_size": len(durations)}
+            return (
+                avg_d,
+                round(sum(durations), 4),
+                float(len(durations)),
+                "COMPUTED",
+                band,
+                None,
+                {"sample_size": len(durations)},
+            )
 
         # ── KPI-28: Cargo Working Idle Time ──
         elif code == "KPI-28":
@@ -1108,23 +1675,36 @@ class KPIEngine:
                 return None, None, None, "UNAVAILABLE", "GRAY", "No cargo downtime records.", {}
             avg_dt = round(sum(downtimes) / len(downtimes), 4)
             band = self.evaluate_band(avg_dt, kpi.target, kpi.target_direction, kpi.thresholds)
-            return avg_dt, round(sum(downtimes), 4), float(len(downtimes)), "COMPUTED", band, None, {"sample_size": len(downtimes)}
+            return (
+                avg_dt,
+                round(sum(downtimes), 4),
+                float(len(downtimes)),
+                "COMPUTED",
+                band,
+                None,
+                {"sample_size": len(downtimes)},
+            )
 
         # ── KPI-29: Total Cargo Working Hours ──
         elif code == "KPI-29":
-            wh_sum = sum(
-                op.working_hours or 0.0
-                for vc in vessel_calls
-                for op in cargo_by_vc.get(vc.id, [])
-            )
+            wh_sum = sum(op.working_hours or 0.0 for vc in vessel_calls for op in cargo_by_vc.get(vc.id, []))
             band = self.evaluate_band(wh_sum, kpi.target, kpi.target_direction, kpi.thresholds)
-            return round(wh_sum, 2), round(wh_sum, 2), None, "COMPUTED", band, None, {"total_working_hours": round(wh_sum, 2)}
+            return (
+                round(wh_sum, 2),
+                round(wh_sum, 2),
+                None,
+                "COMPUTED",
+                band,
+                None,
+                {"total_working_hours": round(wh_sum, 2)},
+            )
 
         # ── KPI-30: Crane Moves per Hour per Crane ──
         # Spec rule: total moves / summed productive crane-hours (working_hours * resources_deployed)
         elif code == "KPI-30":
             container_ops = [
-                op for vc in vessel_calls
+                op
+                for vc in vessel_calls
                 for op in cargo_by_vc.get(vc.id, [])
                 if op.unit == "TEU" and op.working_hours and op.actual_quantity
             ]
@@ -1136,10 +1716,18 @@ class KPIEngine:
                 return None, None, None, "UNAVAILABLE", "GRAY", "Zero crane hours.", {}
             mph = round(total_moves / crane_hours, 2)
             band = self.evaluate_band(mph, kpi.target, kpi.target_direction, kpi.thresholds)
-            return mph, round(total_moves, 2), round(crane_hours, 2), "COMPUTED", band, None, {
-                "total_moves": round(total_moves, 2),
-                "summed_crane_hours": round(crane_hours, 2),
-            }
+            return (
+                mph,
+                round(total_moves, 2),
+                round(crane_hours, 2),
+                "COMPUTED",
+                band,
+                None,
+                {
+                    "total_moves": round(total_moves, 2),
+                    "summed_crane_hours": round(crane_hours, 2),
+                },
+            )
 
         # ── KPI-41: Turnaround Time (Departure − Anchorage Arrival) ──
         # Spec rule: departure − anchorage arrival, with governed exclusions. Distinct from ATA-to-ATD.
@@ -1155,10 +1743,18 @@ class KPIEngine:
                 return None, None, None, "UNAVAILABLE", "GRAY", "No valid turnaround spans.", {}
             avg_tat = round(sum(turnarounds) / len(turnarounds), 4)
             band = self.evaluate_band(avg_tat, kpi.target, kpi.target_direction, kpi.thresholds)
-            return avg_tat, round(sum(turnarounds), 4), float(len(turnarounds)), "COMPUTED", band, None, {
-                "definition": "Departure − Anchorage Arrival (distinct from ATA-to-ATD Turnaround)",
-                "sample_size": len(turnarounds),
-            }
+            return (
+                avg_tat,
+                round(sum(turnarounds), 4),
+                float(len(turnarounds)),
+                "COMPUTED",
+                band,
+                None,
+                {
+                    "definition": "Departure − Anchorage Arrival (distinct from ATA-to-ATD Turnaround)",
+                    "sample_size": len(turnarounds),
+                },
+            )
 
         # ── KPI-42: Anchorage Duration ──
         elif code == "KPI-42":
@@ -1173,7 +1769,15 @@ class KPIEngine:
                 return None, None, None, "UNAVAILABLE", "GRAY", "No anchorage events recorded.", {}
             avg_ad = round(sum(anch_durations) / len(anch_durations), 4)
             band = self.evaluate_band(avg_ad, kpi.target, kpi.target_direction, kpi.thresholds)
-            return avg_ad, round(sum(anch_durations), 4), float(len(anch_durations)), "COMPUTED", band, None, {"sample_size": len(anch_durations)}
+            return (
+                avg_ad,
+                round(sum(anch_durations), 4),
+                float(len(anch_durations)),
+                "COMPUTED",
+                band,
+                None,
+                {"sample_size": len(anch_durations)},
+            )
 
         # ── KPI-43: Turnaround Efficiency (Working Hours / Turnaround Hours * 100%) ──
         elif code == "KPI-43":
@@ -1191,10 +1795,18 @@ class KPIEngine:
                 return None, None, None, "UNAVAILABLE", "GRAY", "No turnaround data.", {}
             eff = round(min((total_work / total_tat) * 100.0, 100.0), 2)
             band = self.evaluate_band(eff, kpi.target, kpi.target_direction, kpi.thresholds)
-            return eff, round(total_work, 2), round(total_tat, 2), "COMPUTED", band, None, {
-                "working_hours": round(total_work, 2),
-                "turnaround_hours": round(total_tat, 2),
-            }
+            return (
+                eff,
+                round(total_work, 2),
+                round(total_tat, 2),
+                "COMPUTED",
+                band,
+                None,
+                {
+                    "working_hours": round(total_work, 2),
+                    "turnaround_hours": round(total_tat, 2),
+                },
+            )
 
         # ── KPI-44: Port Time (ATD − ATA) ──
         elif code == "KPI-44":
@@ -1209,10 +1821,18 @@ class KPIEngine:
                 return None, None, None, "UNAVAILABLE", "GRAY", "No valid ATA/ATD pairs.", {}
             avg_pt = round(sum(port_times) / len(port_times), 4)
             band = self.evaluate_band(avg_pt, kpi.target, kpi.target_direction, kpi.thresholds)
-            return avg_pt, round(sum(port_times), 4), float(len(port_times)), "COMPUTED", band, None, {
-                "definition": "ATD - ATA port stay time",
-                "sample_size": len(port_times),
-            }
+            return (
+                avg_pt,
+                round(sum(port_times), 4),
+                float(len(port_times)),
+                "COMPUTED",
+                band,
+                None,
+                {
+                    "definition": "ATD - ATA port stay time",
+                    "sample_size": len(port_times),
+                },
+            )
 
         # ── KPI-45: Service Delays (Total Delay Hours / Delay Events) ──
         elif code == "KPI-45":
@@ -1220,10 +1840,18 @@ class KPIEngine:
             total_delay_hours = sum(dl.total_duration_hours or 0.0 for dl in all_delays)
             count = len(all_delays)
             band = self.evaluate_band(total_delay_hours, kpi.target, kpi.target_direction, kpi.thresholds)
-            return round(total_delay_hours, 2), round(total_delay_hours, 2), float(count), "COMPUTED", band, None, {
-                "total_delay_records": count,
-                "total_delay_hours": round(total_delay_hours, 2),
-            }
+            return (
+                round(total_delay_hours, 2),
+                round(total_delay_hours, 2),
+                float(count),
+                "COMPUTED",
+                band,
+                None,
+                {
+                    "total_delay_records": count,
+                    "total_delay_hours": round(total_delay_hours, 2),
+                },
+            )
 
         # ── KPI-49: Pilot Utilization ──
         elif code == "KPI-49":
@@ -1237,11 +1865,19 @@ class KPIEngine:
             capacity_hours = 4.0 * 720.0
             util = round(min((pilot_hours / capacity_hours) * 100.0, 100.0), 2)
             band = self.evaluate_band(util, kpi.target, kpi.target_direction, kpi.thresholds)
-            return util, round(pilot_hours, 2), capacity_hours, "COMPUTED", band, None, {
-                "assumed_pilots": 4,
-                "service_hours": round(pilot_hours, 2),
-                "capacity_hours": capacity_hours,
-            }
+            return (
+                util,
+                round(pilot_hours, 2),
+                capacity_hours,
+                "COMPUTED",
+                band,
+                None,
+                {
+                    "assumed_pilots": 4,
+                    "service_hours": round(pilot_hours, 2),
+                    "capacity_hours": capacity_hours,
+                },
+            )
 
         # ── KPI-50: Tug Utilization ──
         elif code == "KPI-50":
@@ -1255,11 +1891,19 @@ class KPIEngine:
             capacity_hours = 4.0 * 720.0
             util = round(min((tug_hours / capacity_hours) * 100.0, 100.0), 2)
             band = self.evaluate_band(util, kpi.target, kpi.target_direction, kpi.thresholds)
-            return util, round(tug_hours, 2), capacity_hours, "COMPUTED", band, None, {
-                "assumed_tugs": 4,
-                "service_hours": round(tug_hours, 2),
-                "capacity_hours": capacity_hours,
-            }
+            return (
+                util,
+                round(tug_hours, 2),
+                capacity_hours,
+                "COMPUTED",
+                band,
+                None,
+                {
+                    "assumed_tugs": 4,
+                    "service_hours": round(tug_hours, 2),
+                    "capacity_hours": capacity_hours,
+                },
+            )
 
         # ── KPI-54: On-Time Departure Rate ──
         elif code == "KPI-54":
@@ -1279,10 +1923,18 @@ class KPIEngine:
                 return None, None, None, "UNAVAILABLE", "GRAY", "No sailing service records.", {}
             rate = round((on_time / eligible) * 100.0, 2)
             band = self.evaluate_band(rate, kpi.target, kpi.target_direction, kpi.thresholds)
-            return rate, float(on_time), float(eligible), "COMPUTED", band, None, {
-                "on_time_sailings": on_time,
-                "total_sailings": eligible,
-            }
+            return (
+                rate,
+                float(on_time),
+                float(eligible),
+                "COMPUTED",
+                band,
+                None,
+                {
+                    "on_time_sailings": on_time,
+                    "total_sailings": eligible,
+                },
+            )
 
         # Fallback for unexpected code
         return None, None, None, "UNAVAILABLE", "GRAY", f"Formula logic for {code} not mapped.", {}

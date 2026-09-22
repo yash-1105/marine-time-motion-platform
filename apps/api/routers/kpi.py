@@ -113,7 +113,7 @@ def list_kpis(
 ):
     """Lists all 55 governed KPIs in the registry with metadata and status."""
     ensure_kpi_registry(db)
-    stmt = select(KPI).where(KPI.code.isnot(None)).order_by(KPI.kpi_number.asc())
+    stmt = select(KPI).where(KPI.code.isnot(None), KPI.is_active.is_(True)).order_by(KPI.kpi_number.asc())
 
     if category:
         stmt = stmt.where(KPI.category == category)
@@ -242,7 +242,9 @@ def get_scorecard(
         calc_res = engine.calculate_all_kpis()
 
     # Organize by category
-    kpi_objs = db.execute(select(KPI).order_by(KPI.kpi_number.asc())).scalars().all()
+    kpi_objs = (
+        db.execute(select(KPI).where(KPI.is_active.is_(True)).order_by(KPI.kpi_number.asc())).scalars().all()
+    )
     kpi_by_code = {k.code: k for k in kpi_objs}
 
     categories: dict[str, list[dict[str, Any]]] = {}

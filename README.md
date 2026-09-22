@@ -18,15 +18,21 @@ The platform preserves source lineage from uploaded workbooks through raw, stagi
 
 ### Excel ingestion
 
-An authorised administrator uploads a validated Excel/OOXML workbook through the Data Ingestion screen. The API preserves the original upload, checksum, lineage, batch identity, and staging records, then returns `202 PROCESSING` after raw/staging/canonical ingestion. A durable Dramatiq worker performs analytics and KPI/dashboard persistence. The batch becomes active only after downstream processing succeeds.
+An authorised administrator uploads a governed dataset group of **1–15** validated Excel/OOXML workbooks through the Data Ingestion screen. Each file retains an immutable original, checksum, byte size, storage reference, parse/validation status, and file/sheet/row lineage under one parent batch. The API preserves raw and staging evidence, then returns `202 PROCESSING`; a durable Dramatiq worker performs analytics and KPI/dashboard persistence. The group becomes active only after downstream processing succeeds.
 
-The web application polls the persisted batch status and reports `PROCESSING`, `COMMITTED`, or a useful failure state. Re-upload remains idempotent, and replacement batches isolate stale staging records until the new dataset is ready. Quarantine, validation, duplicate handling, and data-scope controls remain part of the normal pipeline.
+Extraction is deterministic and rule-based (Polars/fastexcel where compatible, with openpyxl retained for OOXML compatibility). No AI, LLM, OCR, embedding, or model-assisted mapping is called by the governed Excel ingestion or DQ path. The web application polls persisted group/file status and reports `PROCESSING`, `COMMITTED`, or a useful failure state. Re-upload remains idempotent, and replacement batches isolate stale staging records until the new dataset is ready. Quarantine, validation, duplicate handling, and data-scope controls remain part of the normal pipeline.
+
+### Governed delays and data quality
+
+Service timing preserves four independent concepts: Planning Lead Time = `Requested − Submission`; Scheduling Gap = `Scheduled − Requested`; Execution Delay = `Served − Scheduled`; and Service/Stage Duration, which is never substituted for delay. Positive execution delay is late, zero is on time, and negative execution delay is retained as early service. Arrival/Inward, Sailing/Outward, and SHIFTING are separate movement scopes.
+
+DQ validates deterministic format, completeness, duplicate, conflict, configured-DAG sequence, and request/schedule/served chronology rules before activation. `Scheduled < Requested` is a review issue; timestamps are never swapped or absolute-valued. An authorised analyst can logically exclude selected source rows from active analysis with an actor/reason/before/after audit trail. Raw evidence remains immutable, and a governed rebuild recalculates journeys, statistics, delays, KPIs, bottlenecks, and dashboards. Statistical outliers remain reviewable and are never automatically deleted.
 
 ### Governed statistics and KPIs
 
-The governed statistical engine calculates count, missing count, mean, median, standard deviation, coefficient of variation, minimum/maximum, P25, P75, P90, configured P95, and outliers. Percentiles use the configured persisted calculation path (currently linear interpolation); the API is the sole calculator and the KPI UI exposes the method and sample availability.
+The governed statistical engine calculates count, missing count, mean, median, standard deviation, coefficient of variation, minimum/maximum, P25, P75, P90, configured P95, fastest/slowest observations, and outliers. Percentiles use the configured persisted calculation path (currently linear interpolation); the API is the sole calculator and Time & Motion Explorer/KPI UI expose the method, units, and sample availability.
 
-The Governed KPIs experience surfaces persisted P75/P90 statistics and retains KPI formula versions, targets, variance, status, source lineage, and `UNAVAILABLE`/`NO_SOURCE_DATA` semantics. Refresh actions invalidate and reload the scorecard from persisted analytics.
+The active governed KPI registry contains exactly the 55 numbered FRD definitions. Formula version `2.1` is the current executable release version; older results retain their own version attribution. Legacy unnumbered KPI definitions are retained only for historical lineage, marked inactive, and cannot enter current scorecards or calculations. The Governed KPIs experience surfaces persisted P75/P90 statistics and retains KPI formula versions, targets, variance, status, source lineage, and `UNAVAILABLE`/`NO_SOURCE_DATA` semantics. Refresh actions invalidate and reload the scorecard from persisted analytics.
 
 ### Service Line interpretation
 

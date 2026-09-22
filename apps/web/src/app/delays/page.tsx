@@ -82,6 +82,8 @@ interface DelaysSummary {
   stage_breakdown: Array<{ stage: string; count: number; total_hours: number }>
 }
 
+interface ServiceTiming { service_request_id: string; vcn?: string; vessel_name?: string; movement?: string; leg: string; service_type: string; scheduling_gap_hours?: number | null; execution_delay_hours?: number | null; service_duration_hours?: number | null; execution_delay_status: string; data_quality_status: string; service_duration_reason?: string }
+
 interface BottleneckItem {
   rank: number
   stage_or_resource: string
@@ -197,6 +199,8 @@ export default function DelaysAndBottlenecksPage() {
   const [delaysLoading, setDelaysLoading] = useState(false)
   const [delaysError, setDelaysError] = useState<string | null>(null)
   const [stageFilter, setStageFilter] = useState('')
+  const [legFilter, setLegFilter] = useState('ALL')
+  const [serviceTimings, setServiceTimings] = useState<ServiceTiming[]>([])
   const [categoryFilter, setCategoryFilter] = useState('')
   const [causeStatusFilter, setCauseStatusFilter] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
@@ -249,7 +253,7 @@ export default function DelaysAndBottlenecksPage() {
   // 1. Fetch Summary
   const fetchSummary = useCallback(async () => {
     try {
-      const res = await fetch(`${API}/api/v1/delays/summary`, {
+      const res = await fetch(`${API}/api/v1/delays/summary?leg=${legFilter}`, {
         headers: { Authorization: `Bearer ${token || 'dev-token'}` },
       })
       if (res.ok) {
@@ -263,13 +267,14 @@ export default function DelaysAndBottlenecksPage() {
       console.error('Failed to load delays summary', e)
       setDelaysError('Network error while loading delay summary')
     }
-  }, [token])
+  }, [token, legFilter])
 
   // 2. Fetch Delays List
   const fetchDelays = useCallback(async () => {
     setDelaysLoading(true)
     try {
       const params = new URLSearchParams()
+      params.append('leg', legFilter)
       if (stageFilter) params.append('stage', stageFilter)
       if (categoryFilter) params.append('category', categoryFilter)
       if (causeStatusFilter) params.append('cause_status', causeStatusFilter)
@@ -294,7 +299,12 @@ export default function DelaysAndBottlenecksPage() {
     } finally {
       setDelaysLoading(false)
     }
-  }, [token, stageFilter, categoryFilter, causeStatusFilter, searchQuery, reviewFilter])
+  }, [token, legFilter, stageFilter, categoryFilter, causeStatusFilter, searchQuery, reviewFilter])
+
+  const fetchServiceTimings = useCallback(async () => {
+    const res = await fetch(`${API}/api/v1/delays/service-timings?leg=${legFilter}`, { headers: { Authorization: `Bearer ${token || 'dev-token'}` } })
+    if (res.ok) setServiceTimings((await res.json()).items || [])
+  }, [token, legFilter])
 
   // 3. Fetch Bottlenecks
   const fetchBottlenecks = useCallback(async () => {
@@ -390,7 +400,8 @@ export default function DelaysAndBottlenecksPage() {
     if (authLoading) return
     fetchSummary()
     fetchDelays()
-  }, [authLoading, fetchSummary, fetchDelays])
+    fetchServiceTimings()
+  }, [authLoading, fetchSummary, fetchDelays, fetchServiceTimings])
 
   useEffect(() => {
     if (authLoading) return
@@ -678,6 +689,9 @@ export default function DelaysAndBottlenecksPage() {
             {/* Filters */}
             <Card padded={false} className="p-3">
               <div className="flex flex-wrap items-center gap-2">
+                <select value={legFilter} onChange={(e) => setLegFilter(e.target.value)} className={inputClass} aria-label="Operational delay leg">
+                  <option value="ALL">All legs</option><option value="ARRIVAL_INWARD">Arrival / Inward</option><option value="SAILING_OUTWARD">Sailing / Outward</option><option value="SHIFTING">Shifting</option>
+                </select>
                 <input
                   type="text"
                   placeholder="Search VCN, reason, vessel..."
@@ -725,6 +739,11 @@ export default function DelaysAndBottlenecksPage() {
                   Showing {delays.length} of {delaysTotal} delays
                 </div>
               </div>
+            </Card>
+
+            <Card padded={false} className="overflow-hidden">
+              <div className="px-3 py-2 border-b border-[var(--color-border)] flex justify-between"><span className="text-sm font-semibold">Service timing — {legFilter.replace('_', ' ')}</span><span className="text-xs text-[var(--color-text-secondary)]">Scheduling and execution delay are separate from time taken</span></div>
+              <div className="overflow-x-auto"><table className="w-full text-left text-xs"><thead><tr className="bg-[var(--color-surface-muted)]"><th className="p-2">Service / Vessel</th><th className="p-2">Leg</th><th className="p-2 text-right">Scheduling gap</th><th className="p-2 text-right">Execution delay</th><th className="p-2">Time taken</th><th className="p-2">Status</th></tr></thead><tbody>{serviceTimings.slice(0, 12).map((row) => <tr key={row.service_request_id} className="border-t border-[var(--color-border)]"><td className="p-2 font-medium">{row.service_type}<span className="block text-[var(--color-text-tertiary)]">{row.vcn || row.vessel_name}</span></td><td className="p-2">{row.leg}</td><td className="p-2 text-right tabular-nums">{row.scheduling_gap_hours == null ? '—' : `${row.scheduling_gap_hours >= 0 ? '+' : ''}${(row.scheduling_gap_hours * 60).toFixed(0)}m`}</td><td className="p-2 text-right tabular-nums">{row.execution_delay_hours == null ? '—' : `${row.execution_delay_hours >= 0 ? '+' : ''}${(row.execution_delay_hours * 60).toFixed(0)}m`}</td><td className="p-2">{row.service_duration_hours == null ? 'Unavailable — no end timestamp' : `${row.service_duration_hours.toFixed(2)}h`}</td><td className="p-2"><StatusBadge label={`${row.execution_delay_status} · ${row.data_quality_status}`} tone={row.execution_delay_status === 'EARLY' ? 'good' : row.execution_delay_status === 'LATE' ? 'warning' : 'neutral'} /></td></tr>)}</tbody></table></div>
             </Card>
 
             {/* Delays Table */}

@@ -1,7 +1,7 @@
 # Marine Time & Motion Analytics Platform — Synthetic Validation Report
 
 > [!NOTE]
-> **Validation Run:** `2026-09-21T17:45:30.677853+00:00` | **Execution Time:** `58.3s` | **Overall Verdict:** **`PASS`**
+> **Validation Run:** `2026-09-22T18:50:32.404904+00:00` | **Execution Time:** `55.52s` | **Overall Verdict:** **`PASS`**
 > **App Version:** `1.0.0` | **Rule Version:** `1.0` | **Formula Version:** `1.0`
 
 ---
@@ -82,8 +82,8 @@
 ## 6. Governed KPI Engine Reconciliation (55 KPIs)
 
 - **Total Governed Registry Entries:** `55 of 55`
-- **Computable KPIs on Fixture:** `38 of 38` (arithmetically verified against fixture data)
-- **Governed `NO_SOURCE_DATA` KPIs:** `17 of 17` (lacks yard, gate, or crane sensor data; status explicitly registered with required inputs; zero fabricated zeroes)
+- **Computed KPIs on Unqualified Fixture:** `25 of 55` (KPI-02 and KPI-27 require an explicit cargo unit)
+- **Governed `NO_SOURCE_DATA` KPIs:** `28 of 55` (required capacity, arrival-log, yard, gate, rail, or CMMS source is absent; no zero is fabricated)
 
 ---
 

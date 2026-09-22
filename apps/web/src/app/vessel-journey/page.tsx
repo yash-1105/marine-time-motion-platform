@@ -99,6 +99,21 @@ interface ConflictRow {
   decided_at?: string
 }
 
+interface ServiceTimingRow {
+  service_request_id: string
+  service_type: string
+  movement?: string
+  submission_time?: string | null
+  requested_time?: string | null
+  scheduled_time?: string | null
+  served_time?: string | null
+  scheduling_gap_hours?: number | null
+  execution_delay_hours?: number | null
+  execution_delay_status: 'EARLY' | 'ON_TIME' | 'LATE' | 'UNAVAILABLE'
+  service_duration_status: 'AVAILABLE' | 'UNAVAILABLE'
+  service_duration_reason?: string
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function fmt(h: number | null | undefined): string {
@@ -233,6 +248,7 @@ function VesselJourneyContent() {
   const [journey, setJourney] = useState<JourneyData | null>(null)
   const [conflicts, setConflicts] = useState<ConflictRow[]>([])
   const [rawEvents, setRawEvents] = useState<RawEventRow[]>([])
+  const [serviceTimings, setServiceTimings] = useState<ServiceTimingRow[]>([])
   const [loadingList, setLoadingList] = useState(true)
   const [loadingJourney, setLoadingJourney] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -284,6 +300,7 @@ function VesselJourneyContent() {
       setJourney(null)
       setConflicts([])
       setRawEvents([])
+      setServiceTimings([])
       setError(null)
 
       const authHeaders = getActiveAuthHeaders()
@@ -297,11 +314,15 @@ function VesselJourneyContent() {
         fetch(`${API}/api/v1/journey/${vcId}/events`, { headers: authHeaders }).then((r) =>
           r.ok ? r.json() : []
         ),
+        fetch(`${API}/api/v1/journey/${vcId}/service-timings`, { headers: authHeaders }).then((r) =>
+          r.ok ? r.json() : []
+        ),
       ])
-        .then(([j, c, evs]: [JourneyData, ConflictRow[], RawEventRow[]]) => {
+        .then(([j, c, evs, timings]: [JourneyData, ConflictRow[], RawEventRow[], ServiceTimingRow[]]) => {
           setJourney(j)
           setConflicts(c)
           setRawEvents(evs)
+          setServiceTimings(timings)
         })
         .catch(() => setError('No reconstructed journey for this vessel call. Use Reconstruct to build it.'))
         .finally(() => setLoadingJourney(false))
@@ -710,6 +731,24 @@ function VesselJourneyContent() {
               {/* ── Stage Details (formerly Timeline) ── */}
               {tab === 'timeline' && (
                 <div className="space-y-2">
+                  {serviceTimings.length > 0 && (
+                    <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3 text-xs">
+                      <div className="flex items-center justify-between gap-3 mb-2">
+                        <h3 className="font-semibold text-[var(--color-text-primary)]">Service timing</h3>
+                        <span className="text-[var(--color-text-secondary)]">Requested, scheduled, and served are shown separately from time taken.</span>
+                      </div>
+                      <div className="space-y-2">
+                        {serviceTimings.map((timing) => (
+                          <div key={timing.service_request_id} className="grid grid-cols-[minmax(112px,1fr)_repeat(2,minmax(125px,1fr))] gap-x-3 gap-y-1 border-t border-[var(--color-border)] pt-2 first:border-t-0 first:pt-0">
+                            <span className="font-medium text-[var(--color-text-primary)]">{timing.service_type} · {timing.movement || 'Unclassified'}</span>
+                            <span className="text-[var(--color-text-secondary)]">Requested {fmtTs(timing.requested_time)} · Scheduled {fmtTs(timing.scheduled_time)} <strong className="text-[var(--color-text-primary)]">({fmt(timing.scheduling_gap_hours)})</strong></span>
+                            <span className="text-[var(--color-text-secondary)]">Served {fmtTs(timing.served_time)} · <StatusBadge label={`${timing.execution_delay_status} ${fmt(timing.execution_delay_hours)}`} tone={timing.execution_delay_status === 'EARLY' ? 'good' : timing.execution_delay_status === 'LATE' ? 'warning' : 'neutral'} showGlyph={false} /></span>
+                            {timing.service_duration_status === 'UNAVAILABLE' && <span className="col-span-3 text-[var(--color-text-tertiary)]">Time taken unavailable: {timing.service_duration_reason}</span>}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   {journey.stages.map((s, i) => (
                     <div
                       key={s.id}

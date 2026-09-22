@@ -44,6 +44,7 @@ def process_ingestion_analytics_task(batch_id: str, tenant_id: str, file_checksu
     db = SessionLocal()
     lock_key = f"ingestion:{tenant_id}"
     lock_acquired = False
+    real_commit = db.commit
     try:
         batch = db.execute(select(IngestionBatch).where(IngestionBatch.batch_id == batch_id)).scalar_one()
         if batch.status in {"SUPERSEDED", "FAILED"} or (batch.status == "COMMITTED" and batch.is_active):
@@ -73,21 +74,29 @@ def process_ingestion_analytics_task(batch_id: str, tenant_id: str, file_checksu
         batch.error_message = None
         db.commit()
 
-        # All writes that replace the active dataset occur while holding the same
-        # tenant lock.  Parsed/staging rows remain batch-scoped for lineage.
-        reset_tenant_dataset(db, tenant_id, keep_batches=True)
-        batch = db.execute(select(IngestionBatch).where(IngestionBatch.batch_id == batch_id)).scalar_one()
-        IngestionPipeline(db, tenant_id=tenant_id)._commit_to_canonical(batch, completion_status="PROCESSING")
-        run_full_analytics_pipeline(db, tenant_id=tenant_id, batch_id=batch_id, file_checksum=file_checksum)
+        # All replacement writes are one transaction. Several established domain
+        # services commit as part of their standalone API use; in this bounded
+        # worker operation those commits become flushes. A parser/DQ/analytics
+        # failure therefore rolls back the candidate and keeps the prior active
+        # dataset queryable, rather than leaving a half-replaced dataset active.
+        db.commit = db.flush  # type: ignore[method-assign]
+        try:
+            reset_tenant_dataset(db, tenant_id, keep_batches=True)
+            batch = db.execute(select(IngestionBatch).where(IngestionBatch.batch_id == batch_id)).scalar_one()
+            IngestionPipeline(db, tenant_id=tenant_id)._commit_to_canonical(batch, completion_status="PROCESSING")
+            run_full_analytics_pipeline(db, tenant_id=tenant_id, batch_id=batch_id, file_checksum=file_checksum)
 
-        batch = db.execute(select(IngestionBatch).where(IngestionBatch.batch_id == batch_id)).scalar_one()
-        db.query(IngestionBatch).filter(
-            IngestionBatch.tenant_id == tenant_id,
-            IngestionBatch.batch_id != batch_id,
-        ).update({"is_active": False, "status": "SUPERSEDED"})
-        batch.status = "COMMITTED"
-        batch.is_active = True
-        batch.error_message = None
+            batch = db.execute(select(IngestionBatch).where(IngestionBatch.batch_id == batch_id)).scalar_one()
+            db.query(IngestionBatch).filter(
+                IngestionBatch.tenant_id == tenant_id,
+                IngestionBatch.batch_id != batch_id,
+            ).update({"is_active": False, "status": "SUPERSEDED"})
+            batch.status = "COMMITTED"
+            batch.is_active = True
+            batch.error_message = None
+            db.flush()
+        finally:
+            db.commit = real_commit  # type: ignore[method-assign]
         db.commit()
     except Exception as exc:
         db.rollback()

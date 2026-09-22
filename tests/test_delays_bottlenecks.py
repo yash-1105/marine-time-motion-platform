@@ -1,12 +1,14 @@
 """Tests for Phase 09: Delay analysis, bottlenecks, outliers, criticality, and alerts."""
 import pytest
+from datetime import UTC, datetime, timedelta
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from apps.api.core.database import SessionLocal
 from apps.api.main import app
 from apps.api.models.analytics import ActionItem, OperationalAlert, OutlierRecord
-from apps.api.models.canonical import Delay, DelayAllocation, VesselCall
+from apps.api.models.canonical import Delay, DelayAllocation, ServiceAssignment, ServiceExecution, ServiceRequest, VesselCall
+from apps.api.models.quality import QualityIssue, QualityRule
 from apps.api.services.alerts.engine import AlertEngine
 from apps.api.services.bottlenecks.engine import BottleneckEngine
 from apps.api.services.criticality.engine import CriticalityEngine
@@ -14,6 +16,7 @@ from apps.api.services.delays.inference import DelayInferenceEngine
 from apps.api.services.delays.mapping import CANONICAL_DELAY_CATEGORIES, map_to_canonical_category
 from apps.api.services.delays.service import DelayService
 from apps.api.services.outliers.engine import OutlierEngine
+from apps.api.services.quality.engine import DataQualityEngine
 
 
 @pytest.fixture
@@ -52,6 +55,88 @@ def test_canonical_delay_categories_mapping():
     assert map_to_canonical_category("Terminal", "Terminal Awaiting Cargo") == "Terminal Readiness"
     assert map_to_canonical_category("Vessel/Other", "Documentation Delay") == "Documentation"
     assert map_to_canonical_category("Marine Service", "Change of Shift") == "Port-Side"
+
+
+def test_service_timing_preserves_frd_delay_signs_and_legs(db):
+    """Requested/scheduled/served metrics use FRD signs and never classify SHIFTING as arrival/sailing."""
+    vc = db.execute(select(VesselCall).limit(1)).scalar_one()
+    base = datetime(2026, 1, 1, 23, 50, tzinfo=UTC)
+    created = []
+    for movement, service_type, scheduled_offset, served_offset in [
+        ("Arrival", "Pilotage Service", 15, 35),   # +15m schedule, +20m late execution
+        ("Sailing", "Tug Service", 0, 0),           # on time
+        ("Shifting", "Berthing Service", 15, 5),    # early service, separate leg
+    ]:
+        request = ServiceRequest(vessel_call_id=vc.id, service_type=service_type, movement_type=movement, submission_time=base, requested_time=base + timedelta(minutes=10))
+        db.add(request); db.flush()
+        assignment = ServiceAssignment(service_request_id=request.id, scheduled_time=base + timedelta(minutes=10 + scheduled_offset))
+        db.add(assignment); db.flush()
+        execution = ServiceExecution(service_assignment_id=assignment.id, served_time=base + timedelta(minutes=10 + served_offset))
+        db.add(execution); created.extend([request, assignment, execution])
+    db.commit()
+    try:
+        rows = DelayService(db, tenant_id=vc.tenant_id).list_service_timings()["items"]
+        ours = [row for row in rows if row["service_request_id"] == str(created[0].id) or row["service_request_id"] == str(created[3].id) or row["service_request_id"] == str(created[6].id)]
+        arrival = next(row for row in ours if row["leg"] == "ARRIVAL_INWARD")
+        sailing = next(row for row in ours if row["leg"] == "SAILING_OUTWARD")
+        shifting = next(row for row in ours if row["leg"] == "SHIFTING")
+        assert arrival["planning_lead_time_hours"] == pytest.approx(1 / 6, abs=1e-6)
+        assert arrival["scheduling_gap_hours"] == pytest.approx(1 / 4, abs=1e-6)
+        assert arrival["execution_delay_hours"] == pytest.approx(1 / 3, abs=1e-6)
+        assert arrival["execution_delay_status"] == "LATE"
+        assert sailing["execution_delay_hours"] == 0
+        assert sailing["execution_delay_status"] == "ON_TIME"
+        assert shifting["execution_delay_hours"] == pytest.approx(-1 / 6, abs=1e-6)
+        assert shifting["execution_delay_status"] == "EARLY"
+        assert shifting["service_duration_hours"] is None
+    finally:
+        for item in [created[2], created[5], created[8]]:
+            db.delete(item)
+        db.flush()
+        for item in [created[1], created[4], created[7]]:
+            db.delete(item)
+        db.flush()
+        for item in [created[0], created[3], created[6]]:
+            db.delete(item)
+        db.commit()
+
+
+def test_service_timing_missing_inputs_and_schedule_chronology_are_explicit(db):
+    """Missing inputs remain unavailable, while schedule-before-request becomes a DQ issue."""
+    vc = VesselCall(vessel_name="Delay timing test vessel", vcn="TEST-SERVICE-TIMING", tenant_id="synthetic-tenant")
+    db.add(vc); db.flush()
+    request = ServiceRequest(
+        vessel_call_id=vc.id, service_type="Pilotage Service", movement_type="Arrival",
+        submission_time=datetime(2026, 1, 1, 23, 55, tzinfo=UTC),
+        requested_time=datetime(2026, 1, 2, 0, 10, tzinfo=UTC),
+    )
+    db.add(request); db.flush()
+    assignment = ServiceAssignment(service_request_id=request.id, scheduled_time=datetime(2026, 1, 2, 0, 5, tzinfo=UTC))
+    db.add(assignment); db.flush()
+    execution = ServiceExecution(service_assignment_id=assignment.id, served_time=None)
+    db.add(execution); db.commit()
+    try:
+        row = next(item for item in DelayService(db, tenant_id=vc.tenant_id).list_service_timings()["items"] if item["service_request_id"] == str(request.id))
+        assert row["planning_lead_time_hours"] == pytest.approx(0.25)  # crosses midnight with timezone-aware values
+        assert row["scheduling_gap_hours"] == pytest.approx(-1 / 12, abs=1e-6)
+        assert row["execution_delay_hours"] is None
+        assert row["execution_delay_status"] == "UNAVAILABLE"
+        assert row["data_quality_status"] == "DQ_SCHEDULE_BEFORE_REQUEST"
+        DataQualityEngine(db).evaluate_vessel_call(vc)
+        db.commit()
+        issue = db.execute(
+            select(QualityIssue)
+            .join(QualityRule, QualityIssue.rule_id == QualityRule.id)
+            .where(QualityIssue.vessel_call_id == vc.id, QualityRule.rule_id == "DQ-SERVICE-SCHEDULE-BEFORE-REQUEST")
+        ).scalar_one()
+        assert issue.record_reference == f"ServiceAssignment:{assignment.id}"
+    finally:
+        for issue in db.execute(select(QualityIssue).where(QualityIssue.vessel_call_id == vc.id)).scalars().all():
+            db.delete(issue)
+        db.delete(execution); db.flush()
+        db.delete(assignment); db.flush()
+        db.delete(request); db.flush()
+        db.delete(vc); db.commit()
 
 
 def test_delay_allocation_and_unallocated_remainder(db):

@@ -33,7 +33,7 @@ def run_full_analytics_pipeline(
     9. Executive Dashboard Service (computes and persists dashboard snapshot to PostgreSQL)
     """
     # 1. Quality Engine
-    quality_engine = DataQualityEngine(db)
+    quality_engine = DataQualityEngine(db, ingestion_batch_id=batch_id)
     quality_engine.run_all()
 
     # 2. Identity Resolution

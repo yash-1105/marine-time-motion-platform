@@ -43,6 +43,7 @@ class ReviewDelayReasonRequest(BaseModel):
 
 @router.get("", summary="List delays with filters, search, and pagination")
 def list_delays(
+    leg: str = Query("ALL", pattern="^(ALL|ARRIVAL_INWARD|SAILING_OUTWARD|SHIFTING)$"),
     stage: str | None = Query(None, description="Movement stage filter (Arrival, Sailing, Shifting)"),
     category: str | None = Query(None, description="Canonical category filter"),
     cause_status: str | None = Query(None, description="Confirmed vs Inferred"),
@@ -59,6 +60,7 @@ def list_delays(
 ):
     service = DelayService(db, tenant_id=_tenant(principal))
     return service.list_delays(
+        leg=leg,
         movement_stage=stage,
         canonical_category=category,
         cause_status=cause_status,
@@ -75,11 +77,27 @@ def list_delays(
 
 @router.get("/summary", summary="Get Pareto distribution and delay summary")
 def get_delays_summary(
+    leg: str = Query("ALL", pattern="^(ALL|ARRIVAL_INWARD|SAILING_OUTWARD|SHIFTING)$"),
     db: Session = Depends(get_db),
     principal: UserPrincipal = Depends(require("view", "delays")),
 ):
     service = DelayService(db, tenant_id=_tenant(principal))
-    return service.get_delays_summary()
+    return service.get_delays_summary(leg=leg)
+
+
+@router.get("/service-timings", summary="List governed planning, scheduling, and execution timing by operational leg")
+def list_service_timings(
+    leg: str = Query("ALL", pattern="^(ALL|ARRIVAL_INWARD|SAILING_OUTWARD|SHIFTING)$"),
+    db: Session = Depends(get_db),
+    principal: UserPrincipal = Depends(require("view", "delays")),
+):
+    """FRD §4.4 timing semantics: request/submission, schedule/request and served/schedule.
+
+    This endpoint intentionally returns service duration as UNAVAILABLE until an
+    actual service-end source timestamp is connected; it never reuses a delay as a
+    duration or reverses the execution-delay sign.
+    """
+    return DelayService(db, tenant_id=_tenant(principal)).list_service_timings(leg=leg)
 
 
 @router.get("/{delay_id}", summary="Get delay detail with allocations and reconciliation")
