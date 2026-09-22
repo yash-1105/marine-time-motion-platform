@@ -1,11 +1,114 @@
 # Marine Time & Motion Platform
 
-Governed port-operation ingestion, analytics, dashboards, reporting, and scoped Copilot.
+Governed port-operation ingestion, time-and-motion analytics, dashboards, reporting, and scoped Copilot for marine operations teams.
 
-## Local verification
+The platform preserves source lineage from uploaded workbooks through raw, staging, canonical, and analytics data. Metrics are governed by configured formulas, data-quality rules, cohort filters, and persisted statistical results; unavailable source data is reported as unavailable rather than fabricated.
 
-Copy `.env.example` to `.env`, set development-only values, then run `docker compose up` and `alembic upgrade head`. API health endpoints are `/live`, `/ready`, and `/health`; `/ready` verifies PostgreSQL and Redis. Run focused tests with `pytest tests/test_security_hardening.py tests/test_copilot_core.py`, then build the web application with `cd apps/web && npm ci && npm run build`.
+## Platform architecture
 
-Production secrets are configured only in Railway/Vercel secret stores. `SARVAM_API_KEY`, JWT/OIDC secrets, database URLs, and storage credentials must never be `NEXT_PUBLIC_*` variables.
+- **Web:** Next.js 15 App Router, TypeScript, TanStack Query/Table, Radix primitives, and Lucide icons.
+- **API:** FastAPI, Pydantic v2, and OpenAPI 3.1.
+- **Data:** PostgreSQL 16 with `raw`, `staging`, `canonical`, `analytics`, `audit`, `config`, and `testkit` schemas.
+- **Processing:** Polars service-layer analytics with SQL projections.
+- **Async work:** Redis and Dramatiq. Railway runs the API and the separate worker service.
+- **Storage:** GCS in production; MinIO is available through Docker Compose for local development.
+- **Deployment:** Vercel serves `apps/web`; Railway hosts the API, worker, PostgreSQL, and Redis.
 
-See [deployment runbook](docs/runbooks/deployment.md), [security threat model](docs/threat-model.md), and [known limitations](docs/known-limitations.md).
+## Core workflows
+
+### Excel ingestion
+
+An authorised administrator uploads a validated Excel/OOXML workbook through the Data Ingestion screen. The API preserves the original upload, checksum, lineage, batch identity, and staging records, then returns `202 PROCESSING` after raw/staging/canonical ingestion. A durable Dramatiq worker performs analytics and KPI/dashboard persistence. The batch becomes active only after downstream processing succeeds.
+
+The web application polls the persisted batch status and reports `PROCESSING`, `COMMITTED`, or a useful failure state. Re-upload remains idempotent, and replacement batches isolate stale staging records until the new dataset is ready. Quarantine, validation, duplicate handling, and data-scope controls remain part of the normal pipeline.
+
+### Governed statistics and KPIs
+
+The governed statistical engine calculates count, missing count, mean, median, standard deviation, coefficient of variation, minimum/maximum, P25, P75, P90, configured P95, and outliers. Percentiles use the configured persisted calculation path (currently linear interpolation); the API is the sole calculator and the KPI UI exposes the method and sample availability.
+
+The Governed KPIs experience surfaces persisted P75/P90 statistics and retains KPI formula versions, targets, variance, status, source lineage, and `UNAVAILABLE`/`NO_SOURCE_DATA` semantics. Refresh actions invalidate and reload the scorecard from persisted analytics.
+
+### Service Line interpretation
+
+The specification does not define a KPI literally named “Service Line.” The supported implementation represents that request through the real source-backed **Service Type** dimension (`ServiceRequest`/`ServiceAssignment`/`ServiceExecution` and `Services.Service_Type`). It reports governed execution-delay performance by service type and movement, including cohort filters, record lineage, and drill-through. Shipping Line remains a separate vessel-call filter and aggregation dimension.
+
+## Web experience
+
+The application includes:
+
+- Executive Dashboard with vessel-call quality, cargo throughput, lead times, delay causes, bottlenecks, and KPI health.
+- Vessel Calls and Vessel Journey reconstruction views.
+- Data Ingestion with persisted asynchronous batch polling and dataset replacement controls.
+- Time & Motion Explorer with governed catalogue, statistics, per-call lineage, and recalculation controls.
+- Governed KPIs with persisted P75/P90 statistics and Service Type performance.
+- Delays & Bottlenecks, Reports, Data Quality, Identity & Merges, and grounded Copilot workflows.
+
+The current interface uses a shared maritime enterprise design system: teal maritime branding, Lucide outline icons, semantic status badges, consistent cards/tables/controls, compact route headers, and responsive dashboard layouts. Sidebar routes expose one primary page heading in the application shell; route metadata and actions remain in compact toolbars. Login branding is aligned to the same 42/58 split as its background so copy remains inside the teal panel at desktop widths.
+
+## Local development
+
+Copy `.env.example` to `.env` and set development-only values. Start the infrastructure and services from a clean checkout:
+
+```bash
+docker compose up -d
+source .venv/bin/activate
+alembic upgrade head
+```
+
+For the API, worker, and web development servers:
+
+```bash
+make dev
+```
+
+The API exposes `/live`, `/ready`, and `/health`; `/ready` verifies PostgreSQL and Redis. The web application is served from `apps/web`.
+
+## Verification
+
+Focused frontend checks:
+
+```bash
+cd apps/web
+npm ci
+npm run lint
+npx tsc --noEmit
+npm run build
+```
+
+Backend and integration tests:
+
+```bash
+DATABASE_URL='postgresql://admin:password@localhost:5434/marine_platform' \
+REDIS_URL='redis://localhost:6379/0' make test
+```
+
+The synthetic validation harness runs the governed workbook through the real ingestion and analytics path:
+
+```bash
+make validate
+```
+
+The fixture is governed test data. Do not modify the workbook, expected outputs, or application logic to special-case fixture values. See [AGENTS.md](AGENTS.md), the [Level 100 specification](docs/spec/LEVEL_100_SPEC.md), [assumptions and decisions](docs/assumptions.md), and [test-data issues](docs/test-data-issues.md).
+
+## Production deployment
+
+The existing production targets are:
+
+- **Frontend:** Vercel project `marine-time-motion-platform`, root directory `apps/web`, production branch `main`.
+- **API and worker:** Railway services using the same PostgreSQL and Redis configuration. The worker must be deployed separately and run the Dramatiq process required by asynchronous ingestion.
+- **Production URL:** https://marine-time-motion-platform.vercel.app/
+
+Before a release, run migrations, verify `/live`, `/ready`, and `/health`, confirm Redis worker connectivity, and exercise login → authorised upload → `PROCESSING` → `COMMITTED` → dashboard/KPIs → reporting/Copilot/audit. See the [deployment runbook](docs/runbooks/deployment.md) for environment, proxy, storage, backup, and incident requirements.
+
+Production secrets belong only in Railway/Vercel secret stores. `SARVAM_API_KEY`, JWT/OIDC secrets, database URLs, storage credentials, and Redis credentials must never be exposed as `NEXT_PUBLIC_*` variables.
+
+## Recent shipped changes
+
+- `daa541a`, `751198c`, `2030b9c`: asynchronous Excel ingestion, persisted batch polling, downstream analytics queuing, replacement staging isolation, governed P75 exposure, Service Type performance, and upload error handling.
+- `835aae6`: batched governed KPI persistence to reduce ingestion and scorecard latency.
+- `237122c`, `dd15f0c`, `81a1ff9`: serialized dataset replacement workers and Railway worker-role deployment support.
+- `e48b8f0`: maritime enterprise visual redesign across the application, including shared tokens, professional icons, cards, tables, status treatments, and the logo mark.
+- `cee40b7`: removed duplicated route headings and refined the Executive Dashboard hierarchy and responsive density.
+- `3a65611`: aligned the login content grid with the teal background boundary so branding copy cannot cross into the form panel.
+
+See the full [deployment runbook](docs/runbooks/deployment.md), [security threat model](docs/threat-model.md), and [known limitations](docs/known-limitations.md) for operational details.
