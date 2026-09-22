@@ -11,7 +11,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import desc, func, select
+from sqlalchemy import String, cast, desc, func, or_, select
 from sqlalchemy.orm import Session
 
 from apps.api.auth.dependencies import require
@@ -174,7 +174,10 @@ def get_scorecard(
         KPIResult.period_end.is_(None),
         KPIResult.grain == "ALL",
         KPIResult.cohort_key == "all",
-        KPIResult.cohort_filters.is_(None),
+        # SQLAlchemy's JSON column stores a Python None as JSON `null` by
+        # default, not necessarily SQL NULL.  Accept both representations so a
+        # persisted unfiltered snapshot is actually reusable.
+        or_(KPIResult.cohort_filters.is_(None), cast(KPIResult.cohort_filters, String) == "null"),
         KPIResult.is_recalculation.is_(False),
         KPIResult.kpi_id.in_([k.id for k in kpi_map.values()]),
     )
