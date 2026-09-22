@@ -11,7 +11,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import desc, select
+from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 
 from apps.api.auth.dependencies import require
@@ -169,26 +169,38 @@ def get_scorecard(
     # data loads) on every page request.  Fall back to the engine when a complete
     # snapshot is not available or predates the active committed batch.
     kpi_map = engine.ensure_registry()
+    snapshot_filter = (
+        KPIResult.period_start.is_(None),
+        KPIResult.period_end.is_(None),
+        KPIResult.grain == "ALL",
+        KPIResult.cohort_key == "all",
+        KPIResult.cohort_filters.is_(None),
+        KPIResult.is_recalculation.is_(False),
+        KPIResult.kpi_id.in_([k.id for k in kpi_map.values()]),
+    )
+    # Fetch one persisted result per KPI in SQL.  Loading all historical
+    # scorecard rows and de-duplicating in Python grows without bound after each
+    # governed recalculation, which made otherwise cached scorecard reads slow.
+    ranked_snapshot = (
+        select(
+            KPIResult.id.label("result_id"),
+            func.row_number()
+            .over(partition_by=KPIResult.kpi_id, order_by=KPIResult.calculated_at.desc())
+            .label("rank"),
+        )
+        .where(*snapshot_filter)
+        .subquery()
+    )
     persisted_rows = (
         db.execute(
             select(KPIResult)
-            .where(
-                KPIResult.period_start.is_(None),
-                KPIResult.period_end.is_(None),
-                KPIResult.grain == "ALL",
-                KPIResult.cohort_key == "all",
-                KPIResult.cohort_filters.is_(None),
-                KPIResult.is_recalculation.is_(False),
-                KPIResult.kpi_id.in_([k.id for k in kpi_map.values()]),
-            )
-            .order_by(KPIResult.calculated_at.desc())
+            .join(ranked_snapshot, KPIResult.id == ranked_snapshot.c.result_id)
+            .where(ranked_snapshot.c.rank == 1)
         )
         .scalars()
         .all()
     )
-    latest_by_kpi: dict[Any, KPIResult] = {}
-    for row in persisted_rows:
-        latest_by_kpi.setdefault(row.kpi_id, row)
+    latest_by_kpi = {row.kpi_id: row for row in persisted_rows}
 
     active_batch = (
         db.execute(
