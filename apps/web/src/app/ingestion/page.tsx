@@ -43,7 +43,7 @@ function FileHandlingSummary({ files, batchStatus }: { files: FileResult[]; batc
       <div className="mb-3 flex items-center justify-between gap-3">
         <p className="text-xs font-semibold text-[var(--color-text-primary)]">File handling</p>
         <p className="text-[11px] text-[var(--color-text-tertiary)]">
-          {files.length - skipped} governed · {skipped} skipped
+          {files.length} total · {files.length - skipped} governed / processed · {skipped} skipped
         </p>
       </div>
       <ul className="space-y-2">
@@ -69,7 +69,7 @@ function FileHandlingSummary({ files, batchStatus }: { files: FileResult[]; batc
 
 export default function IngestionPage() {
   const { can, token, refreshAccessToken, logout } = useAuth()
-  const { status: datasetStatus, fileName, refresh: refreshDataset, clearDataset } = useDatasetStatus()
+  const { status: datasetStatus, fileName, files: persistedFiles, refresh: refreshDataset, clearDataset } = useDatasetStatus()
   const [files, setFiles] = useState<File[]>([])
   const [uploadState, setUploadState] = useState<UploadState>('idle')
   const [uploadedName, setUploadedName] = useState<string>('')
@@ -301,7 +301,7 @@ export default function IngestionPage() {
                 </button>
               </div>
             </div>
-            <FileHandlingSummary files={fileResults} batchStatus={batchStatus || 'COMMITTED'} />
+            <FileHandlingSummary files={fileResults.length ? fileResults : persistedFiles} batchStatus={batchStatus || 'COMMITTED'} />
           </Card>
         ) : (
           <div className="space-y-4">

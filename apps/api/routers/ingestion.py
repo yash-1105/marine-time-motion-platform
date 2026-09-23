@@ -23,6 +23,18 @@ def _resolve_tenant(principal) -> str:
     return resolve_principal_tenant(principal)
 
 
+def _file_result(manifest: IngestionFile) -> dict:
+    """Serialize the persisted per-file handling result consistently."""
+    return {
+        "filename": manifest.original_filename,
+        "checksum": manifest.file_checksum,
+        "byte_size": manifest.byte_size,
+        "parse_status": manifest.parse_status,
+        "validation_status": manifest.validation_status,
+        "error_message": manifest.error_message,
+    }
+
+
 @router.post("/upload", status_code=202)
 def upload_file(
     background_tasks: BackgroundTasks,
@@ -162,6 +174,16 @@ def get_active_dataset(db: Session = Depends(get_db), principal=Depends(require(
     if not batch:
         return {"has_active_dataset": False, "batch": None}
 
+    manifests = (
+        db.execute(
+            select(IngestionFile)
+            .where(IngestionFile.group_batch_id == batch.batch_id)
+            .order_by(IngestionFile.created_at, IngestionFile.id)
+        )
+        .scalars()
+        .all()
+    )
+
     return {
         "has_active_dataset": True,
         "batch": {
@@ -171,6 +193,10 @@ def get_active_dataset(db: Session = Depends(get_db), principal=Depends(require(
             "created_at": batch.created_at.isoformat() if batch.created_at else None,
             "status": batch.status,
             "is_active": batch.is_active,
+            "file_count": len(manifests),
+            "governed_file_count": sum(manifest.parse_status != "SKIPPED" for manifest in manifests),
+            "skipped_file_count": sum(manifest.parse_status == "SKIPPED" for manifest in manifests),
+            "files": [_file_result(manifest) for manifest in manifests],
         },
     }
 
@@ -205,7 +231,7 @@ def list_batches(db: Session = Depends(get_db), principal=Depends(require("view"
             "created_at": b.created_at.isoformat() if b.created_at else None,
             "error_message": b.error_message,
             "file_count": len(manifests.get(b.batch_id, [])),
-            "files": [{"filename": f.original_filename, "checksum": f.file_checksum, "byte_size": f.byte_size, "parse_status": f.parse_status, "validation_status": f.validation_status, "error_message": f.error_message} for f in manifests.get(b.batch_id, [])],
+            "files": [_file_result(f) for f in manifests.get(b.batch_id, [])],
         }
         for b in batches
     ]

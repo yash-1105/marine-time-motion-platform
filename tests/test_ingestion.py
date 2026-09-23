@@ -93,6 +93,10 @@ def test_active_dataset_endpoint(auth_headers):
         assert "batch_id" in data["batch"]
         assert "file_name" in data["batch"]
         assert data["batch"]["status"] == "COMMITTED"
+        assert data["batch"]["file_count"] == len(data["batch"]["files"])
+        assert data["batch"]["governed_file_count"] + data["batch"]["skipped_file_count"] == data["batch"]["file_count"]
+        for file_result in data["batch"]["files"]:
+            assert {"filename", "byte_size", "parse_status", "validation_status", "error_message"} <= file_result.keys()
 
 
 def test_dashboard_persisted_snapshot_reuse(auth_headers, db_session):

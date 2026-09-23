@@ -66,6 +66,36 @@ interface QualitySummary {
   quarantined_rows?: number
 }
 
+const ISSUE_DESCRIPTIONS: Record<string, string> = {
+  RULE_MANDATORY_ATA: 'Required actual arrival timestamp is missing.',
+  RULE_ETA_BEFORE_ATA: 'Estimated arrival occurs after the actual arrival.',
+  RULE_MISSING_SERVICE_EVENT: 'A required service event is missing.',
+  RULE_PILOT_ON_BOARD_BEFORE_SCHEDULED: 'Pilot boarding time occurs before the pilot was scheduled.',
+  RULE_DELAY_REASON: 'A delayed service is missing its required delay reason.',
+  RULE_ORPHAN_EVENT: 'The event cannot be linked to a governed vessel call.',
+  'DQ-001': 'Duplicate vessel call detected.',
+  'DQ-002': 'Potential duplicate vessel call detected from an identifier variation.',
+  'DQ-003': 'Required actual arrival timestamp is missing.',
+  'DQ-004': 'Estimated arrival occurs after the actual arrival.',
+  'DQ-005': 'A pilot request is missing its scheduled time.',
+  'DQ-006': 'Invalid chronological sequence detected between anchorage arrival and pilot boarding.',
+  'DQ-007': 'A delayed service is missing its required delay reason.',
+  'DQ-010': 'Conflicting source timestamps exceed the governed tolerance.',
+  'DQ-SERVICE-REQUEST-MISSING': 'Required service request timestamp is missing.',
+  'DQ-SERVICE-SCHEDULE-MISSING': 'Required scheduled service timestamp is missing.',
+  'DQ-SERVICE-SERVED-MISSING': 'Required actual or served timestamp is missing.',
+  'DQ-SERVICE-SCHEDULE-BEFORE-REQUEST': 'Service was scheduled before it was requested.',
+  'DQ-INVALID-TIMESTAMP': 'A source timestamp has an invalid date or time value.',
+  'DQ-MISSING-MANDATORY-FIELD': 'A required source field is blank or missing.',
+  'DQ-DUPLICATE-ROW': 'Duplicate source row detected.',
+  'DQ-SEQUENCE-VIOLATION': 'Invalid chronological sequence detected.',
+  OUTLIER: 'A governed statistical outlier was detected for review.',
+}
+
+function issueDescription(issue: QualityIssue) {
+  return ISSUE_DESCRIPTIONS[issue.rule_id] || issue.reason || issue.remediation_guidance || issue.rule_name || 'Data quality rule violation detected.'
+}
+
 function DataQualityContent() {
   const { token, isLoading: authLoading } = useAuth()
   const searchParams = useSearchParams()
@@ -221,7 +251,7 @@ function DataQualityContent() {
   }
 
   return (
-    <div className="flex-1 flex flex-col h-full overflow-hidden bg-[var(--color-bg)] text-[var(--color-text-primary)]">
+    <div className="flex-1 flex flex-col min-h-full bg-[var(--color-bg)] text-[var(--color-text-primary)]">
       <PageHeader
         title="Data Quality"
         meta={`${filteredIssues.length} issue${filteredIssues.length === 1 ? '' : 's'} shown`}
@@ -383,7 +413,7 @@ function DataQualityContent() {
       )}
 
       {/* Issues Data Table */}
-      <div className="flex-1 overflow-auto bg-[var(--color-surface)]">
+      <div className="overflow-x-auto bg-[var(--color-surface)]">
         {loading ? (
           <LoadingState label="Loading Data Quality issues from governance engine…" />
         ) : error ? (
@@ -404,8 +434,9 @@ function DataQualityContent() {
                 <th className="px-3 py-2.5 border-b border-[var(--color-border)]"><input aria-label="Select all filtered quality issues" type="checkbox" checked={filteredIssues.length > 0 && filteredIssues.filter((issue) => issue.issue_class !== 'OUTLIER').every((issue) => selectedIssueIds.includes(issue.id))} onChange={(event) => setSelectedIssueIds(event.target.checked ? filteredIssues.filter((issue) => issue.issue_class !== 'OUTLIER').map((issue) => issue.id) : [])} /></th>
                 <th className="px-3 py-2.5 font-semibold border-b border-[var(--color-border)] whitespace-nowrap">Rule ID</th>
                 <th className="px-3 py-2.5 font-semibold border-b border-[var(--color-border)] whitespace-nowrap">Severity</th>
-                <th className="px-3 py-2.5 font-semibold border-b border-[var(--color-border)] whitespace-nowrap">Scope / Domain</th>
+                <th className="px-3 py-2.5 font-semibold border-b border-[var(--color-border)] min-w-[260px]">Issue</th>
                 <th className="px-3 py-2.5 font-semibold border-b border-[var(--color-border)]">Affected Record (VCN)</th>
+                <th className="px-3 py-2.5 font-semibold border-b border-[var(--color-border)] whitespace-nowrap">Scope / Domain</th>
                 <th className="px-3 py-2.5 font-semibold border-b border-[var(--color-border)]">Record Reference</th>
                 <th className="px-3 py-2.5 font-semibold border-b border-[var(--color-border)]">Source / Original value</th>
                 <th className="px-3 py-2.5 font-semibold border-b border-[var(--color-border)] whitespace-nowrap">Disposition</th>
@@ -431,9 +462,9 @@ function DataQualityContent() {
                       <StatusBadge status={iss.severity || 'MEDIUM'} />
                     </td>
 
-                    {/* Scope */}
-                    <td className="px-3 py-2 font-mono text-[10px] text-[var(--color-text-secondary)] whitespace-nowrap">
-                      {iss.scope || 'VALIDITY'}
+                    {/* Human-readable issue */}
+                    <td className="px-3 py-2 min-w-[260px] max-w-sm text-[11px] leading-4 text-[var(--color-text-primary)]">
+                      {issueDescription(iss)}
                     </td>
 
                     {/* Affected Record */}
@@ -454,6 +485,11 @@ function DataQualityContent() {
                       ) : (
                         <span className="text-[var(--color-text-tertiary)] italic">Global / Unattached</span>
                       )}
+                    </td>
+
+                    {/* Scope */}
+                    <td className="px-3 py-2 font-mono text-[10px] text-[var(--color-text-secondary)] whitespace-nowrap">
+                      {iss.scope || 'VALIDITY'}
                     </td>
 
                     {/* Record Reference */}

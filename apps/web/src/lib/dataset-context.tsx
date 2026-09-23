@@ -5,6 +5,15 @@ import { useAuth } from './auth-context'
 
 export type DatasetState = 'loading' | 'none' | 'processing' | 'ready' | 'failed'
 
+export interface DatasetFileResult {
+  filename: string
+  checksum?: string
+  byte_size: number
+  parse_status: string
+  validation_status: string
+  error_message?: string | null
+}
+
 interface ActiveDatasetResponse {
   has_active_dataset: boolean
   batch?: {
@@ -14,6 +23,10 @@ interface ActiveDatasetResponse {
     created_at?: string | null
     status: string
     is_active?: boolean
+    file_count?: number
+    governed_file_count?: number
+    skipped_file_count?: number
+    files?: DatasetFileResult[]
   } | null
 }
 
@@ -23,6 +36,7 @@ interface DatasetContextType {
   fileName?: string
   fileChecksum?: string
   errorMessage?: string
+  files: DatasetFileResult[]
   refresh: () => Promise<void>
   /** Removes the tenant's active dataset (backend source of truth) and immediately
    * reflects NO_DATASET locally so every page relying on this context updates together. */
@@ -31,6 +45,7 @@ interface DatasetContextType {
 
 const DatasetContext = createContext<DatasetContextType>({
   status: 'loading',
+  files: [],
   refresh: async () => {},
   clearDataset: async () => {},
 })
@@ -44,6 +59,7 @@ export const DatasetStatusProvider: React.FC<{ children: React.ReactNode }> = ({
   const [fileName, setFileName] = useState<string | undefined>(undefined)
   const [fileChecksum, setFileChecksum] = useState<string | undefined>(undefined)
   const [errorMessage, setErrorMessage] = useState<string | undefined>(undefined)
+  const [files, setFiles] = useState<DatasetFileResult[]>([])
 
   const authHeaders = useCallback(() => ({ Authorization: `Bearer ${token || 'dev-token'}` }), [token])
 
@@ -55,6 +71,7 @@ export const DatasetStatusProvider: React.FC<{ children: React.ReactNode }> = ({
         setBatchId(undefined)
         setFileName(undefined)
         setFileChecksum(undefined)
+        setFiles([])
         return
       }
       const data: ActiveDatasetResponse = await res.json()
@@ -63,6 +80,7 @@ export const DatasetStatusProvider: React.FC<{ children: React.ReactNode }> = ({
         setBatchId(data.batch.batch_id)
         setFileName(data.batch.file_name)
         setFileChecksum(data.batch.file_checksum)
+        setFiles(data.batch.files || [])
         setErrorMessage(undefined)
       } else {
         // Check if there are processing or failed batches
@@ -83,12 +101,14 @@ export const DatasetStatusProvider: React.FC<{ children: React.ReactNode }> = ({
         setBatchId(undefined)
         setFileName(undefined)
         setFileChecksum(undefined)
+        setFiles([])
       }
     } catch {
       setStatus('none')
       setBatchId(undefined)
       setFileName(undefined)
       setFileChecksum(undefined)
+      setFiles([])
     }
   }, [authHeaders])
 
@@ -106,6 +126,7 @@ export const DatasetStatusProvider: React.FC<{ children: React.ReactNode }> = ({
     setBatchId(undefined)
     setFileName(undefined)
     setFileChecksum(undefined)
+    setFiles([])
     setErrorMessage(undefined)
   }, [authHeaders])
 
@@ -115,7 +136,7 @@ export const DatasetStatusProvider: React.FC<{ children: React.ReactNode }> = ({
   }, [authLoading, refresh])
 
   return (
-    <DatasetContext.Provider value={{ status, batchId, fileName, fileChecksum, errorMessage, refresh, clearDataset }}>
+    <DatasetContext.Provider value={{ status, batchId, fileName, fileChecksum, errorMessage, files, refresh, clearDataset }}>
       {children}
     </DatasetContext.Provider>
   )
