@@ -134,6 +134,20 @@ function fmtTs(ts: string | undefined | null): string {
   }
 }
 
+function schedulingGapLabel(hours: number | null | undefined): string {
+  if (hours == null) return 'Scheduling gap unavailable'
+  if (hours === 0) return 'Scheduled at requested time'
+  return hours > 0
+    ? `Scheduled ${fmt(hours)} after request`
+    : `Scheduled ${fmt(Math.abs(hours))} before request · chronology issue`
+}
+
+function executionDelayLabel(hours: number | null | undefined): string {
+  if (hours == null) return 'Execution delay unavailable'
+  if (hours === 0) return 'Served on time'
+  return hours > 0 ? `Served ${fmt(hours)} late` : `Served ${fmt(Math.abs(hours))} early`
+}
+
 /** Maps internal time-category vocabulary to a StatusBadge tone. */
 function categoryTone(cat: string): 'good' | 'warning' | 'critical' | 'inferred' | 'neutral' {
   switch (cat) {
@@ -739,11 +753,23 @@ function VesselJourneyContent() {
                       </div>
                       <div className="space-y-2">
                         {serviceTimings.map((timing) => (
-                          <div key={timing.service_request_id} className="grid grid-cols-[minmax(112px,1fr)_repeat(2,minmax(125px,1fr))] gap-x-3 gap-y-1 border-t border-[var(--color-border)] pt-2 first:border-t-0 first:pt-0">
-                            <span className="font-medium text-[var(--color-text-primary)]">{timing.service_type} · {timing.movement || 'Unclassified'}</span>
-                            <span className="text-[var(--color-text-secondary)]">Requested {fmtTs(timing.requested_time)} · Scheduled {fmtTs(timing.scheduled_time)} <strong className="text-[var(--color-text-primary)]">({fmt(timing.scheduling_gap_hours)})</strong></span>
-                            <span className="text-[var(--color-text-secondary)]">Served {fmtTs(timing.served_time)} · <StatusBadge label={`${timing.execution_delay_status} ${fmt(timing.execution_delay_hours)}`} tone={timing.execution_delay_status === 'EARLY' ? 'good' : timing.execution_delay_status === 'LATE' ? 'warning' : 'neutral'} showGlyph={false} /></span>
-                            {timing.service_duration_status === 'UNAVAILABLE' && <span className="col-span-3 text-[var(--color-text-tertiary)]">Time taken unavailable: {timing.service_duration_reason}</span>}
+                          <div key={timing.service_request_id} className="grid gap-2 border-t border-[var(--color-border)] pt-3 first:border-t-0 first:pt-0 lg:grid-cols-[minmax(140px,0.8fr)_minmax(0,2.2fr)]">
+                            <div>
+                              <p className="font-semibold text-[var(--color-text-primary)]">{timing.service_type}</p>
+                              <p className="text-[10px] text-[var(--color-text-tertiary)]">{timing.movement || 'Unclassified'}</p>
+                            </div>
+                            <div>
+                              <div className="grid gap-2 sm:grid-cols-3">
+                                <div className="rounded-md bg-[var(--color-surface-muted)] px-2.5 py-2"><span className="block text-[10px] uppercase tracking-wide text-[var(--color-text-tertiary)]">Requested Time</span><strong className="mt-0.5 block font-medium text-[var(--color-text-primary)]">{timing.requested_time ? fmtTs(timing.requested_time) : 'Unavailable'}</strong></div>
+                                <div className="rounded-md bg-[var(--color-surface-muted)] px-2.5 py-2"><span className="block text-[10px] uppercase tracking-wide text-[var(--color-text-tertiary)]">Scheduled / Assigned Time</span><strong className="mt-0.5 block font-medium text-[var(--color-text-primary)]">{timing.scheduled_time ? fmtTs(timing.scheduled_time) : 'Unavailable'}</strong></div>
+                                <div className="rounded-md bg-[var(--color-surface-muted)] px-2.5 py-2"><span className="block text-[10px] uppercase tracking-wide text-[var(--color-text-tertiary)]">Actual / Served Time</span><strong className="mt-0.5 block font-medium text-[var(--color-text-primary)]">{timing.served_time ? fmtTs(timing.served_time) : 'Unavailable'}</strong></div>
+                              </div>
+                              <div className="mt-2 flex flex-wrap items-center gap-2">
+                                <div className="flex items-center gap-1.5"><span className="text-[10px] font-semibold text-[var(--color-text-secondary)]">Scheduling Gap</span><StatusBadge label={schedulingGapLabel(timing.scheduling_gap_hours)} tone={timing.scheduling_gap_hours != null && timing.scheduling_gap_hours < 0 ? 'critical' : 'neutral'} showGlyph={false} /></div>
+                                <div className="flex items-center gap-1.5"><span className="text-[10px] font-semibold text-[var(--color-text-secondary)]">Execution Delay</span><StatusBadge label={executionDelayLabel(timing.execution_delay_hours)} tone={timing.execution_delay_status === 'EARLY' ? 'good' : timing.execution_delay_status === 'LATE' ? 'warning' : 'neutral'} showGlyph={false} /></div>
+                                {timing.service_duration_status === 'UNAVAILABLE' && <span className="text-[10px] text-[var(--color-text-tertiary)]">Time taken unavailable: {timing.service_duration_reason}</span>}
+                              </div>
+                            </div>
                           </div>
                         ))}
                       </div>

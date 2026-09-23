@@ -84,6 +84,28 @@ interface DelaysSummary {
 
 interface ServiceTiming { service_request_id: string; vcn?: string; vessel_name?: string; movement?: string; leg: string; service_type: string; scheduling_gap_hours?: number | null; execution_delay_hours?: number | null; service_duration_hours?: number | null; execution_delay_status: string; data_quality_status: string; service_duration_reason?: string }
 
+interface ServiceDelayMetric {
+  key: string
+  label: string
+  status: 'AVAILABLE' | 'UNAVAILABLE'
+  average_hours?: number | null
+  observation_count: number
+  delayed_count?: number | null
+  on_time_count?: number | null
+  early_count?: number | null
+  formula: string
+  unavailable_reason?: string | null
+}
+
+interface ServiceDurationRange {
+  service_type: string
+  status: 'AVAILABLE' | 'UNAVAILABLE'
+  min_hours?: number | null
+  max_hours?: number | null
+  observation_count: number
+  unavailable_reason?: string | null
+}
+
 interface BottleneckItem {
   rank: number
   stage_or_resource: string
@@ -188,6 +210,16 @@ function severityTone(severity: string): 'good' | 'warning' | 'critical' | 'neut
   return 'good'
 }
 
+function compactDuration(hours: number | null | undefined, signed = false): string {
+  if (hours == null) return 'Unavailable'
+  const totalMinutes = Math.round(Math.abs(hours) * 60)
+  const hourPart = Math.floor(totalMinutes / 60)
+  const minutePart = totalMinutes % 60
+  const value = hourPart > 0 ? `${hourPart}h ${minutePart}m` : `${minutePart}m`
+  if (!signed) return value
+  return `${hours > 0 ? '+' : hours < 0 ? '−' : ''}${value}`
+}
+
 export default function DelaysAndBottlenecksPage() {
   const { token, isLoading: authLoading } = useAuth()
   const [activeTab, setActiveTab] = useState<TabType>('delays')
@@ -201,6 +233,8 @@ export default function DelaysAndBottlenecksPage() {
   const [stageFilter, setStageFilter] = useState('')
   const [legFilter, setLegFilter] = useState('ALL')
   const [serviceTimings, setServiceTimings] = useState<ServiceTiming[]>([])
+  const [serviceDelayMetrics, setServiceDelayMetrics] = useState<ServiceDelayMetric[]>([])
+  const [serviceDurationRanges, setServiceDurationRanges] = useState<ServiceDurationRange[]>([])
   const [categoryFilter, setCategoryFilter] = useState('')
   const [causeStatusFilter, setCauseStatusFilter] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
@@ -303,7 +337,12 @@ export default function DelaysAndBottlenecksPage() {
 
   const fetchServiceTimings = useCallback(async () => {
     const res = await fetch(`${API}/api/v1/delays/service-timings?leg=${legFilter}`, { headers: { Authorization: `Bearer ${token || 'dev-token'}` } })
-    if (res.ok) setServiceTimings((await res.json()).items || [])
+    if (res.ok) {
+      const data = await res.json()
+      setServiceTimings(data.items || [])
+      setServiceDelayMetrics(data.delay_overview || [])
+      setServiceDurationRanges(data.duration_ranges || [])
+    }
   }, [token, legFilter])
 
   // 3. Fetch Bottlenecks
@@ -738,6 +777,83 @@ export default function DelaysAndBottlenecksPage() {
                 <div className="ml-auto text-xs text-[var(--color-text-secondary)] font-medium">
                   Showing {delays.length} of {delaysTotal} delays
                 </div>
+              </div>
+            </Card>
+
+            <div className="space-y-3">
+              <SectionHeader
+                title="Service Delay Overview"
+                description={`Governed service timing metrics for ${legFilter === 'ALL' ? 'all operational legs' : legFilter.replaceAll('_', ' ').toLowerCase()}.`}
+              />
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                {serviceDelayMetrics.map((metric) => {
+                  const executionMetric = metric.delayed_count != null
+                  return (
+                    <Card key={metric.key} className="min-w-0">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="text-xs font-semibold text-[var(--color-text-secondary)]">{metric.label}</p>
+                        <StatusBadge label={metric.status === 'AVAILABLE' ? 'Available' : 'Unavailable'} tone={metric.status === 'AVAILABLE' ? 'good' : 'neutral'} showGlyph={false} />
+                      </div>
+                      {metric.status === 'AVAILABLE' ? (
+                        <>
+                          <p className="mt-3 text-2xl font-semibold tabular-nums text-[var(--color-text-primary)]">
+                            {compactDuration(metric.average_hours, executionMetric)}
+                          </p>
+                          <p className="mt-1 text-[11px] text-[var(--color-text-tertiary)]">Average · {metric.observation_count} observations</p>
+                          {executionMetric ? (
+                            <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-[10px] font-medium text-[var(--color-text-secondary)]">
+                              <span><strong className="text-[var(--color-warning)]">{metric.delayed_count}</strong> late</span>
+                              <span><strong className="text-[var(--color-text-primary)]">{metric.on_time_count}</strong> on time</span>
+                              <span><strong className="text-[var(--color-good)]">{metric.early_count}</strong> early</span>
+                            </div>
+                          ) : (
+                            <p className="mt-3 text-[10px] text-[var(--color-text-secondary)]">Observed governed wait duration</p>
+                          )}
+                        </>
+                      ) : (
+                        <p className="mt-3 text-[11px] leading-4 text-[var(--color-text-tertiary)]">{metric.unavailable_reason}</p>
+                      )}
+                      <p className="mt-3 border-t border-[var(--color-border)] pt-2 text-[10px] text-[var(--color-text-tertiary)]">{metric.formula}</p>
+                    </Card>
+                  )
+                })}
+              </div>
+            </div>
+
+            <Card>
+              <SectionHeader
+                title="Service Duration Range"
+                description="Minimum and maximum observed service time from governed start/end timestamps. Missing end timestamps remain unavailable."
+              />
+              <div className="space-y-4">
+                {serviceDurationRanges.map((range) => {
+                  const availableMaxima = serviceDurationRanges.flatMap((item) => item.max_hours == null ? [] : [item.max_hours])
+                  const scaleMax = Math.max(...availableMaxima, 1)
+                  const minPosition = range.min_hours == null ? 0 : Math.max(0, Math.min(100, (range.min_hours / scaleMax) * 100))
+                  const maxPosition = range.max_hours == null ? 0 : Math.max(0, Math.min(100, (range.max_hours / scaleMax) * 100))
+                  return (
+                    <div key={range.service_type} className="grid items-center gap-3 md:grid-cols-[150px_minmax(0,1fr)_100px]">
+                      <div>
+                        <p className="text-xs font-semibold text-[var(--color-text-primary)]">{range.service_type}</p>
+                        <p className="text-[10px] text-[var(--color-text-tertiary)]">{range.observation_count} observations</p>
+                      </div>
+                      {range.status === 'AVAILABLE' ? (
+                        <div className="relative h-7" aria-label={`${range.service_type}: minimum ${compactDuration(range.min_hours)}, maximum ${compactDuration(range.max_hours)}`}>
+                          <div className="absolute left-0 right-0 top-3 h-1 rounded-full bg-[var(--color-surface-muted)]" />
+                          <div className="absolute top-3 h-1 rounded-full bg-[var(--color-accent)]" style={{ left: `${minPosition}%`, width: `${Math.max(maxPosition - minPosition, 0.5)}%` }} />
+                          <span className="absolute top-1.5 h-4 w-4 -translate-x-1/2 rounded-full border-2 border-white bg-[var(--color-accent)] shadow-sm" style={{ left: `${minPosition}%` }} />
+                          <span className="absolute top-1.5 h-4 w-4 -translate-x-1/2 rounded-full border-2 border-white bg-[var(--color-accent)] shadow-sm" style={{ left: `${maxPosition}%` }} />
+                        </div>
+                      ) : (
+                        <div className="rounded-md bg-[var(--color-surface-muted)] px-3 py-2 text-[11px] text-[var(--color-text-tertiary)]">{range.unavailable_reason}</div>
+                      )}
+                      <div className="text-right text-[11px] tabular-nums text-[var(--color-text-secondary)]">
+                        {range.status === 'AVAILABLE' ? <><span className="block">Min {compactDuration(range.min_hours)}</span><span className="block">Max {compactDuration(range.max_hours)}</span></> : 'Unavailable'}
+                      </div>
+                    </div>
+                  )
+                })}
+                {serviceDurationRanges.length === 0 && <EmptyState title="No service records are available for this leg" />}
               </div>
             </Card>
 

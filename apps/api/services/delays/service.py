@@ -13,10 +13,19 @@ from typing import Any
 from sqlalchemy import desc, func, or_, select
 from sqlalchemy.orm import Session
 
+from apps.api.models.analytics import LeadTimeDefinition, LeadTimeResult
 from apps.api.models.audit import AuditEvent
-from apps.api.models.canonical import Delay, DelayAllocation, ServiceAssignment, ServiceExecution, ServiceRequest, VesselCall
+from apps.api.models.canonical import (
+    Delay,
+    DelayAllocation,
+    ServiceAssignment,
+    ServiceExecution,
+    ServiceRequest,
+    VesselCall,
+)
 from apps.api.services.analytics.duration_semantics import (
     compute_execution_delay,
+    compute_lead_time,
     compute_planning_lead_time,
     compute_scheduling_gap,
 )
@@ -57,7 +66,9 @@ class DelayService:
             stmt = stmt.where(VesselCall.tenant_id == self.tenant_id)
 
         rows = []
+        service_types: set[str] = set()
         for request, assignment, execution, vessel_call in self.db.execute(stmt).all():
+            service_types.add(request.service_type)
             movement_leg = self._leg(request.movement_type)
             if leg != "ALL" and movement_leg != leg:
                 continue
@@ -67,6 +78,11 @@ class DelayService:
             served_time = execution.served_time if execution else None
             scheduling_result = compute_scheduling_gap(request.requested_time, scheduled_time)
             execution_result = compute_execution_delay(scheduled_time, served_time)
+            requested_to_served = compute_lead_time(
+                request.requested_time,
+                served_time,
+                formula_version="service-timing-v1.0",
+            )
             planning = planning_result.value_hours
             scheduling = scheduling_result.value_hours
             execution_delay = execution_result.value_hours
@@ -95,12 +111,144 @@ class DelayService:
                 "served_time": served_time.isoformat() if served_time else None,
                 "planning_lead_time_hours": planning, "scheduling_gap_hours": scheduling,
                 "execution_delay_hours": execution_delay, "service_duration_hours": None,
+                "requested_to_served_hours": requested_to_served.value_hours,
                 "service_duration_status": "UNAVAILABLE", "service_duration_reason": "No service-end timestamp is supplied by the source contract.",
                 "execution_delay_status": delay_status, "formula_version": "service-timing-v1.0",
                 "source_record_ids": [str(record.id) for record in (request, assignment, execution) if record],
                 "data_quality_status": dq_status, "unavailable_inputs": unavailable,
             })
-        return {"leg": leg, "formula_version": "service-timing-v1.0", "items": rows, "total": len(rows)}
+        return {
+            "leg": leg,
+            "formula_version": "service-timing-v1.0",
+            "items": rows,
+            "total": len(rows),
+            "delay_overview": self._service_delay_overview(rows, leg),
+            "duration_ranges": self._service_duration_ranges(rows, service_types, leg),
+        }
+
+    @staticmethod
+    def _service_kind(service_type: str) -> str:
+        value = service_type.upper()
+        if "PILOT" in value:
+            return "PILOTAGE"
+        if "BERTH" in value or "MOOR" in value:
+            return "BERTHING"
+        if "TUG" in value or "TOW" in value:
+            return "TOWAGE"
+        return "OTHER"
+
+    @staticmethod
+    def _summarize_values(
+        key: str,
+        label: str,
+        rows: list[dict[str, Any]],
+        value_field: str,
+        formula: str,
+        include_execution_context: bool = True,
+    ) -> dict[str, Any]:
+        values = [row[value_field] for row in rows if row.get(value_field) is not None]
+        unavailable_reason = None if values else "No eligible governed observations are available for this leg."
+        result = {
+            "key": key,
+            "label": label,
+            "status": "AVAILABLE" if values else "UNAVAILABLE",
+            "average_hours": round(sum(values) / len(values), 6) if values else None,
+            "observation_count": len(values),
+            "formula": formula,
+            "formula_version": "service-delay-overview-v1.0",
+            "unavailable_reason": unavailable_reason,
+            "delayed_count": None,
+            "on_time_count": None,
+            "early_count": None,
+        }
+        if include_execution_context:
+            result.update({
+                "delayed_count": sum(value > 0 for value in values),
+                "on_time_count": sum(value == 0 for value in values),
+                "early_count": sum(value < 0 for value in values),
+            })
+        return result
+
+    def _anchorage_wait_summary(self, leg: str) -> dict[str, Any]:
+        base = {
+            "key": "ANCHORAGE_WAIT",
+            "label": "Anchorage Wait",
+            "status": "UNAVAILABLE",
+            "average_hours": None,
+            "observation_count": 0,
+            "formula": "PILOT_ON_BOARD_ARRIVAL − ANCHORAGE_ARRIVAL",
+            "formula_version": "1.0",
+            "unavailable_reason": "Anchorage wait applies only to the Arrival / Inward leg.",
+            "delayed_count": None,
+            "on_time_count": None,
+            "early_count": None,
+        }
+        if leg not in {"ALL", "ARRIVAL_INWARD"}:
+            return base
+        values = self.db.execute(
+            select(LeadTimeResult.duration_hours)
+            .join(LeadTimeDefinition, LeadTimeResult.definition_id == LeadTimeDefinition.id)
+            .join(VesselCall, LeadTimeResult.vessel_call_id == VesselCall.id)
+            .where(
+                LeadTimeDefinition.name == "Anchorage Wait",
+                LeadTimeResult.status == "AVAILABLE",
+                LeadTimeResult.duration_hours.is_not(None),
+                VesselCall.tenant_id == self.tenant_id,
+                VesselCall.is_merged.is_(False),
+            )
+        ).scalars().all()
+        if not values:
+            base["unavailable_reason"] = "No eligible governed anchorage observations are available."
+            return base
+        base.update({
+            "status": "AVAILABLE",
+            "average_hours": round(sum(values) / len(values), 6),
+            "observation_count": len(values),
+            "unavailable_reason": None,
+        })
+        return base
+
+    def _service_delay_overview(self, rows: list[dict[str, Any]], leg: str) -> list[dict[str, Any]]:
+        pilotage = [row for row in rows if self._service_kind(row["service_type"]) == "PILOTAGE"]
+        berthing = [row for row in rows if self._service_kind(row["service_type"]) == "BERTHING"]
+        towage = [row for row in rows if self._service_kind(row["service_type"]) == "TOWAGE"]
+        return [
+            self._summarize_values("PILOTAGE_DELAY", "Pilotage Delay", pilotage, "execution_delay_hours", "Served Time − Scheduled Time"),
+            self._summarize_values("BERTHING_DELAY", "Berthing Delay", berthing, "execution_delay_hours", "Served Time − Scheduled Time"),
+            self._summarize_values("TOWAGE_WAIT", "Towage Wait", towage, "requested_to_served_hours", "Served Time − Requested Time", False),
+            self._summarize_values("TUG_TOWAGE_DELAY", "Tug / Towage Delay", towage, "execution_delay_hours", "Served Time − Scheduled Time"),
+            self._anchorage_wait_summary(leg),
+        ]
+
+    @staticmethod
+    def _service_duration_ranges(
+        rows: list[dict[str, Any]],
+        service_types: set[str],
+        leg: str,
+    ) -> list[dict[str, Any]]:
+        ranges = []
+        for service_type in sorted(service_types):
+            values = [
+                row["service_duration_hours"]
+                for row in rows
+                if row["service_type"] == service_type and row.get("service_duration_hours") is not None
+            ]
+            ranges.append({
+                "service_type": service_type,
+                "status": "AVAILABLE" if values else "UNAVAILABLE",
+                "min_hours": min(values) if values else None,
+                "max_hours": max(values) if values else None,
+                "observation_count": len(values),
+                "unit": "hours",
+                "formula_version": "service-timing-v1.0",
+                "unavailable_reason": None if values else (
+                    "No service duration observations are available for this leg."
+                    if not any(row["service_type"] == service_type for row in rows)
+                    else "No service-end timestamp is supplied by the source contract."
+                ),
+                "leg": leg,
+            })
+        return ranges
 
     def list_delays(
         self,

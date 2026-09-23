@@ -1,13 +1,22 @@
 """Tests for Phase 09: Delay analysis, bottlenecks, outliers, criticality, and alerts."""
-import pytest
+import uuid
 from datetime import UTC, datetime, timedelta
+
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from apps.api.core.database import SessionLocal
 from apps.api.main import app
 from apps.api.models.analytics import ActionItem, OperationalAlert, OutlierRecord
-from apps.api.models.canonical import Delay, DelayAllocation, ServiceAssignment, ServiceExecution, ServiceRequest, VesselCall
+from apps.api.models.canonical import (
+    Delay,
+    DelayAllocation,
+    ServiceAssignment,
+    ServiceExecution,
+    ServiceRequest,
+    VesselCall,
+)
 from apps.api.models.quality import QualityIssue, QualityRule
 from apps.api.services.alerts.engine import AlertEngine
 from apps.api.services.bottlenecks.engine import BottleneckEngine
@@ -137,6 +146,76 @@ def test_service_timing_missing_inputs_and_schedule_chronology_are_explicit(db):
         db.delete(assignment); db.flush()
         db.delete(request); db.flush()
         db.delete(vc); db.commit()
+
+
+def test_service_delay_overview_and_duration_ranges_are_governed_and_leg_scoped(db):
+    """Overview cards are server-computed from governed timestamps and never fabricate service duration."""
+    tenant_id = f"service-overview-test-{uuid.uuid4()}"
+    vc = VesselCall(vessel_name="Service overview vessel", vcn="SERVICE-OVERVIEW-001", tenant_id=tenant_id)
+    db.add(vc)
+    db.flush()
+    base = datetime(2026, 2, 1, 8, 0, tzinfo=UTC)
+    created: list[object] = [vc]
+    cases = [
+        ("Arrival", "Pilotage Service", 10, 25),  # 15m late
+        ("Arrival", "Berthing Service", 20, 15),  # 5m early
+        ("Arrival", "Tug Service", 10, 10),  # on time; 10m requested-to-served wait
+        ("Sailing", "Tug Service", 15, 30),  # excluded by Arrival filter
+    ]
+    for movement, service_type, scheduled_minutes, served_minutes in cases:
+        request = ServiceRequest(
+            vessel_call_id=vc.id,
+            service_type=service_type,
+            movement_type=movement,
+            submission_time=base - timedelta(minutes=5),
+            requested_time=base,
+        )
+        db.add(request)
+        db.flush()
+        assignment = ServiceAssignment(
+            service_request_id=request.id,
+            scheduled_time=base + timedelta(minutes=scheduled_minutes),
+        )
+        db.add(assignment)
+        db.flush()
+        execution = ServiceExecution(
+            service_assignment_id=assignment.id,
+            served_time=base + timedelta(minutes=served_minutes),
+        )
+        db.add(execution)
+        db.flush()
+        created.extend([request, assignment, execution])
+    db.commit()
+
+    try:
+        result = DelayService(db, tenant_id=tenant_id).list_service_timings(leg="ARRIVAL_INWARD")
+        metrics = {metric["key"]: metric for metric in result["delay_overview"]}
+        assert result["total"] == 3
+        assert metrics["PILOTAGE_DELAY"]["average_hours"] == pytest.approx(0.25)
+        assert metrics["PILOTAGE_DELAY"]["delayed_count"] == 1
+        assert metrics["BERTHING_DELAY"]["average_hours"] == pytest.approx(-5 / 60, abs=1e-6)
+        assert metrics["BERTHING_DELAY"]["early_count"] == 1
+        assert metrics["TUG_TOWAGE_DELAY"]["average_hours"] == 0
+        assert metrics["TUG_TOWAGE_DELAY"]["on_time_count"] == 1
+        assert metrics["TOWAGE_WAIT"]["average_hours"] == pytest.approx(1 / 6, abs=1e-6)
+        assert metrics["ANCHORAGE_WAIT"]["status"] == "UNAVAILABLE"
+        assert {item["service_type"] for item in result["duration_ranges"]} == {
+            "Pilotage Service", "Berthing Service", "Tug Service"
+        }
+        assert all(item["status"] == "UNAVAILABLE" for item in result["duration_ranges"])
+        assert all(item["min_hours"] is None and item["max_hours"] is None for item in result["duration_ranges"])
+    finally:
+        for item in created[3::3]:
+            db.delete(item)
+        db.flush()
+        for item in created[2::3]:
+            db.delete(item)
+        db.flush()
+        for item in created[1::3]:
+            db.delete(item)
+        db.flush()
+        db.delete(vc)
+        db.commit()
 
 
 def test_delay_allocation_and_unallocated_remainder(db):
