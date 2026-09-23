@@ -41,6 +41,9 @@ def process_ingestion_analytics_task(batch_id: str, tenant_id: str, file_checksu
     from apps.api.services.ingestion.synthetic import reset_tenant_dataset
     from apps.api.services.pipeline_runner import run_full_analytics_pipeline
 
+    class _SupersededByNewerUpload(Exception):
+        """Internal control flow: keep an older candidate from activating."""
+
     db = SessionLocal()
     lock_key = f"ingestion:{tenant_id}"
     lock_acquired = False
@@ -86,10 +89,25 @@ def process_ingestion_analytics_task(batch_id: str, tenant_id: str, file_checksu
             IngestionPipeline(db, tenant_id=tenant_id)._commit_to_canonical(batch, completion_status="PROCESSING")
             run_full_analytics_pipeline(db, tenant_id=tenant_id, batch_id=batch_id, file_checksum=file_checksum)
 
+            # An upload can be accepted while this worker is calculating.  Never
+            # let the older candidate mark that newer upload as superseded (the
+            # previous broad UPDATE did exactly that), and never activate stale
+            # results.  Rolling back this candidate leaves the prior active
+            # dataset available until the newest queued batch succeeds.
+            newest_batch_id = db.execute(
+                select(IngestionBatch.batch_id)
+                .where(IngestionBatch.tenant_id == tenant_id)
+                .order_by(IngestionBatch.created_at.desc())
+                .limit(1)
+            ).scalar_one()
+            if newest_batch_id != batch_id:
+                raise _SupersededByNewerUpload()
+
             batch = db.execute(select(IngestionBatch).where(IngestionBatch.batch_id == batch_id)).scalar_one()
             db.query(IngestionBatch).filter(
                 IngestionBatch.tenant_id == tenant_id,
                 IngestionBatch.batch_id != batch_id,
+                IngestionBatch.created_at < batch.created_at,
             ).update({"is_active": False, "status": "SUPERSEDED"})
             batch.status = "COMMITTED"
             batch.is_active = True
@@ -98,6 +116,14 @@ def process_ingestion_analytics_task(batch_id: str, tenant_id: str, file_checksu
         finally:
             db.commit = real_commit  # type: ignore[method-assign]
         db.commit()
+    except _SupersededByNewerUpload:
+        db.rollback()
+        batch = db.execute(select(IngestionBatch).where(IngestionBatch.batch_id == batch_id)).scalar_one_or_none()
+        if batch:
+            batch.status = "SUPERSEDED"
+            batch.is_active = False
+            batch.error_message = "Superseded by a newer dataset upload before processing completed."
+            db.commit()
     except Exception as exc:
         db.rollback()
         batch = db.execute(select(IngestionBatch).where(IngestionBatch.batch_id == batch_id)).scalar_one_or_none()

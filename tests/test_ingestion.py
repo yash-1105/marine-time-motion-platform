@@ -1,6 +1,7 @@
 """Tests for Dataset Ingestion, Persistence, and Replacement (spec Phase 12 / Change 1 & 2)."""
 
 import time
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -40,7 +41,9 @@ def _delete_uncommitted_group(db_session, batch_id: str) -> None:
     for model in (StagingRecord, RawRecord):
         for row in db_session.execute(select(model).where(model.ingestion_batch_id == batch_id)).scalars().all():
             db_session.delete(row)
-    for row in db_session.execute(select(IngestionFile).where(IngestionFile.group_batch_id == batch_id)).scalars().all():
+    for row in (
+        db_session.execute(select(IngestionFile).where(IngestionFile.group_batch_id == batch_id)).scalars().all()
+    ):
         db_session.delete(row)
     batch = db_session.execute(select(IngestionBatch).where(IngestionBatch.batch_id == batch_id)).scalar_one_or_none()
     if batch:
@@ -127,8 +130,22 @@ def test_dataset_upload_queues_analytics_and_worker_commits_batch(auth_headers, 
 
     # Upload replacement workbook
     files = [
-        ("files", ("replacement_workbook.xlsx", file_content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")),
-        ("files", ("additional-call.xlsx", extra_content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")),
+        (
+            "files",
+            (
+                "replacement_workbook.xlsx",
+                file_content,
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            ),
+        ),
+        (
+            "files",
+            (
+                "additional-call.xlsx",
+                extra_content,
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            ),
+        ),
     ]
     upload_resp = client.post("/api/v1/ingestion/upload", headers=auth_headers, files=files)
     assert upload_resp.status_code == 202
@@ -170,7 +187,16 @@ def test_dataset_upload_queues_analytics_and_worker_commits_batch(auth_headers, 
     # Delivery retry is idempotent: an already active committed group is not reinserted.
     process_ingestion_analytics_task.fn(new_batch_id, "synthetic-tenant", upload_data["batch_id"])
     db_session.expire_all()
-    assert len(db_session.execute(select(VesselCall).where(VesselCall.tenant_id == "synthetic-tenant", VesselCall.is_merged.is_(False))).scalars().all()) == 73
+    assert (
+        len(
+            db_session.execute(
+                select(VesselCall).where(VesselCall.tenant_id == "synthetic-tenant", VesselCall.is_merged.is_(False))
+            )
+            .scalars()
+            .all()
+        )
+        == 73
+    )
 
     # Verify active endpoint reflects the new batch
     active_resp = client.get("/api/v1/ingestion/active", headers=auth_headers)
@@ -181,7 +207,13 @@ def test_dataset_upload_queues_analytics_and_worker_commits_batch(auth_headers, 
 
 def test_upload_rejects_sixteen_workbooks_before_parsing(auth_headers):
     """The server, not only the browser, enforces the governed 15-file limit."""
-    files = [("files", (f"source-{index}.xlsx", b"not-read", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")) for index in range(16)]
+    files = [
+        (
+            "files",
+            (f"source-{index}.xlsx", b"not-read", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+        )
+        for index in range(16)
+    ]
     response = client.post("/api/v1/ingestion/upload", headers=auth_headers, files=files)
     assert response.status_code == 400
     assert "1 and 15" in response.json()["message"]
@@ -191,7 +223,13 @@ def test_upload_rejects_corrupt_xlsx_container(auth_headers):
     response = client.post(
         "/api/v1/ingestion/upload",
         headers=auth_headers,
-        files={"file": ("corrupt.xlsx", b"not-an-ooxml-container", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        files={
+            "file": (
+                "corrupt.xlsx",
+                b"not-an-ooxml-container",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        },
     )
     assert response.status_code == 415
     assert "OOXML" in response.json()["message"]
@@ -206,8 +244,14 @@ def test_multi_file_group_retains_manifest_and_cross_file_lineage(db_session, tm
     pipeline = IngestionPipeline(db_session, tenant_id="group-lineage-test")
     batch_id = pipeline.process_files(paths, force_new=True, commit_canonical=False)
     try:
-        manifests = db_session.execute(select(IngestionFile).where(IngestionFile.group_batch_id == batch_id)).scalars().all()
-        staging = db_session.execute(select(StagingRecord).where(StagingRecord.ingestion_batch_id == batch_id)).scalars().all()
+        manifests = (
+            db_session.execute(select(IngestionFile).where(IngestionFile.group_batch_id == batch_id)).scalars().all()
+        )
+        staging = (
+            db_session.execute(select(StagingRecord).where(StagingRecord.ingestion_batch_id == batch_id))
+            .scalars()
+            .all()
+        )
         raw = db_session.execute(select(RawRecord).where(RawRecord.ingestion_batch_id == batch_id)).scalars().all()
         assert len(manifests) == 2
         assert {item.original_filename for item in manifests} == {"arrival.xlsx", "sailing.xlsx"}
@@ -224,8 +268,14 @@ def test_fifteen_workbook_group_is_accepted_and_duplicate_rows_are_detected(db_s
     pipeline = IngestionPipeline(db_session, tenant_id="group-limit-test")
     batch_id = pipeline.process_files(paths, force_new=True, commit_canonical=False)
     try:
-        manifests = db_session.execute(select(IngestionFile).where(IngestionFile.group_batch_id == batch_id)).scalars().all()
-        staging = db_session.execute(select(StagingRecord).where(StagingRecord.ingestion_batch_id == batch_id)).scalars().all()
+        manifests = (
+            db_session.execute(select(IngestionFile).where(IngestionFile.group_batch_id == batch_id)).scalars().all()
+        )
+        staging = (
+            db_session.execute(select(StagingRecord).where(StagingRecord.ingestion_batch_id == batch_id))
+            .scalars()
+            .all()
+        )
         assert len(manifests) == 15
         assert sum(row.validation_status == "DUPLICATE" for row in staging) == 14
         assert sum(row.validation_status == "VALID" for row in staging) == 1
@@ -239,13 +289,83 @@ def test_fatal_file_schema_failure_keeps_group_inactive(db_session, tmp_path):
     pipeline = IngestionPipeline(db_session, tenant_id="group-failure-test")
     with pytest.raises(ValueError, match="missing required column"):
         pipeline.process_files([(path, "missing-column.xlsx")], force_new=True, commit_canonical=False)
-    failed = db_session.execute(
-        select(IngestionBatch).where(IngestionBatch.tenant_id == "group-failure-test").order_by(IngestionBatch.created_at.desc())
-    ).scalars().first()
+    failed = (
+        db_session.execute(
+            select(IngestionBatch)
+            .where(IngestionBatch.tenant_id == "group-failure-test")
+            .order_by(IngestionBatch.created_at.desc())
+        )
+        .scalars()
+        .first()
+    )
     assert failed is not None and failed.status == "FAILED" and not failed.is_active
-    manifest = db_session.execute(select(IngestionFile).where(IngestionFile.group_batch_id == failed.batch_id)).scalar_one()
+    manifest = db_session.execute(
+        select(IngestionFile).where(IngestionFile.group_batch_id == failed.batch_id)
+    ).scalar_one()
     assert manifest.parse_status == "FAILED"
     _delete_uncommitted_group(db_session, failed.batch_id)
+
+
+def test_older_worker_cannot_supersede_a_newer_upload_during_processing(db_session, monkeypatch):
+    """A new upload accepted during analytics must remain queued for its own worker.
+
+    This protects the persisted replacement state from the race that previously
+    marked the newer group SUPERSEDED and left the browser polling forever.
+    """
+    from apps.api.core.database import SessionLocal
+
+    tenant_id = "worker-replacement-race-test"
+    old_batch = IngestionBatch(
+        batch_id="worker-race-old",
+        file_name="old.xlsx",
+        file_checksum="old-checksum",
+        status="PROCESSING",
+        tenant_id=tenant_id,
+        is_active=False,
+        created_at=datetime.now(UTC),
+    )
+    db_session.add(old_batch)
+    db_session.commit()
+
+    def accept_newer_upload(*_args, **_kwargs):
+        other_session = SessionLocal()
+        try:
+            other_session.add(
+                IngestionBatch(
+                    batch_id="worker-race-new",
+                    file_name="new.xlsx",
+                    file_checksum="new-checksum",
+                    status="UPLOADED",
+                    tenant_id=tenant_id,
+                    is_active=False,
+                    created_at=datetime.now(UTC) + timedelta(seconds=1),
+                )
+            )
+            other_session.commit()
+        finally:
+            other_session.close()
+
+    monkeypatch.setattr("apps.api.services.ingestion.synthetic.reset_tenant_dataset", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        "apps.api.services.ingestion.pipeline.IngestionPipeline._commit_to_canonical", lambda *_args, **_kwargs: None
+    )
+    monkeypatch.setattr("apps.api.services.pipeline_runner.run_full_analytics_pipeline", accept_newer_upload)
+
+    try:
+        process_ingestion_analytics_task.fn(old_batch.batch_id, tenant_id, old_batch.file_checksum)
+        db_session.expire_all()
+        old = db_session.execute(
+            select(IngestionBatch).where(IngestionBatch.batch_id == "worker-race-old")
+        ).scalar_one()
+        newer = db_session.execute(
+            select(IngestionBatch).where(IngestionBatch.batch_id == "worker-race-new")
+        ).scalar_one()
+        assert old.status == "SUPERSEDED"
+        assert newer.status == "UPLOADED"
+        assert newer.is_active is False
+    finally:
+        db_session.query(IngestionBatch).filter(IngestionBatch.tenant_id == tenant_id).delete()
+        db_session.commit()
 
 
 def test_dataset_removal_clears_active_state(auth_headers, db_session):

@@ -51,7 +51,7 @@ export default function IngestionPage() {
     // persisted batch reaches a terminal state.
     for (let attempt = 0; attempt < 300; attempt += 1) {
       const outcome = await resolveBatchOutcome(batchId)
-      if (outcome?.status === 'COMMITTED' || outcome?.status === 'FAILED') return outcome
+      if (outcome?.status === 'COMMITTED' || outcome?.status === 'FAILED' || outcome?.status === 'SUPERSEDED') return outcome
       await new Promise((resolve) => window.setTimeout(resolve, 2000))
     }
     throw new Error('Upload was accepted but processing is still running. Refresh this page to check its persisted batch status.')
@@ -102,9 +102,11 @@ export default function IngestionPage() {
       }
       const data = await res.json()
       const outcome = await waitForBatchOutcome(data.batch_id)
-      if (outcome?.status === 'FAILED') {
+      if (outcome?.status === 'FAILED' || outcome?.status === 'SUPERSEDED') {
         setUploadState('error')
-        setErrorMessage(outcome.error_message || 'Dataset processing failed.')
+        setErrorMessage(outcome.error_message || (outcome.status === 'SUPERSEDED'
+          ? 'This upload was superseded by a newer dataset upload. Refresh to view its persisted status.'
+          : 'Dataset processing failed.'))
         return
       }
       setUploadedName(targetFiles.length === 1 ? targetFiles[0].name : `${targetFiles.length} workbooks`)

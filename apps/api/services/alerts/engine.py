@@ -6,11 +6,12 @@ Manages:
 - Action item lifecycle (OPEN -> IN_PROGRESS -> COMPLETED)
 - Audit logging for all actions and acknowledgements
 """
+
 import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import desc, select
+from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 
 from apps.api.models.analytics import ActionItem, AlertRule, BottleneckRecord, OperationalAlert, OutlierRecord
@@ -70,6 +71,7 @@ class AlertEngine:
     def __init__(self, db: Session, tenant_id: str = "default-tenant"):
         self.db = db
         self.tenant_id = tenant_id
+        self._open_alerts: dict[tuple[str, str, str], OperationalAlert] | None = None
 
     def seed_default_rules(self) -> None:
         """Ensure standard alert rules exist in analytics.alert_rule."""
@@ -100,8 +102,15 @@ class AlertEngine:
         self.seed_default_rules()
 
         active_rules = {
-            r.rule_code: r
-            for r in self.db.execute(select(AlertRule).where(AlertRule.is_active == True)).scalars().all()
+            r.rule_code: r for r in self.db.execute(select(AlertRule).where(AlertRule.is_active)).scalars().all()
+        }
+        self._open_alerts = {
+            (alert.rule_code, alert.linked_entity_type, alert.linked_entity_id): alert
+            for alert in self.db.execute(
+                select(OperationalAlert).where(OperationalAlert.status.in_(["NEW", "ACKNOWLEDGED"]))
+            )
+            .scalars()
+            .all()
         }
 
         generated_alerts = []
@@ -112,7 +121,7 @@ class AlertEngine:
             review_delays = self.db.execute(
                 select(Delay, VesselCall.vcn)
                 .join(VesselCall, Delay.vessel_call_id == VesselCall.id)
-                .where(Delay.requires_reason_review == True)
+                .where(Delay.requires_reason_review)
             ).all()
 
             for delay, vcn in review_delays:
@@ -139,6 +148,7 @@ class AlertEngine:
 
             # Also check quality issues flagged as DQ-007
             from apps.api.models.quality import QualityIssue, QualityRule
+
             dq7_issues = self.db.execute(
                 select(QualityIssue, VesselCall.vcn)
                 .join(QualityRule, QualityIssue.rule_id == QualityRule.id)
@@ -171,9 +181,11 @@ class AlertEngine:
         if "RULE_CRITICAL_BOTTLENECK" in active_rules:
             rule = active_rules["RULE_CRITICAL_BOTTLENECK"]
             thresh = rule.threshold_config.get("score_threshold", 65.0)
-            bottlenecks = self.db.execute(
-                select(BottleneckRecord).where(BottleneckRecord.overall_bottleneck_score >= thresh)
-            ).scalars().all()
+            bottlenecks = (
+                self.db.execute(select(BottleneckRecord).where(BottleneckRecord.overall_bottleneck_score >= thresh))
+                .scalars()
+                .all()
+            )
 
             for bn in bottlenecks:
                 alert = self._create_or_get_alert(
@@ -200,9 +212,11 @@ class AlertEngine:
         # 3. Evaluate RULE_EXTREME_P90_OUTLIER (DQ-008 & Extreme Outliers)
         if "RULE_EXTREME_P90_OUTLIER" in active_rules:
             rule = active_rules["RULE_EXTREME_P90_OUTLIER"]
-            outliers = self.db.execute(
-                select(OutlierRecord).where(OutlierRecord.severity.in_(["HIGH", "CRITICAL"]))
-            ).scalars().all()
+            outliers = (
+                self.db.execute(select(OutlierRecord).where(OutlierRecord.severity.in_(["HIGH", "CRITICAL"])))
+                .scalars()
+                .all()
+            )
 
             for outl in outliers:
                 alert = self._create_or_get_alert(
@@ -245,7 +259,11 @@ class AlertEngine:
                     ),
                     linked_entity_type="canonical.delay",
                     linked_entity_id=str(delay.id),
-                    evidence={"reason": delay.delay_reason, "category": delay.canonical_category, "hours": delay.total_duration_hours},
+                    evidence={
+                        "reason": delay.delay_reason,
+                        "category": delay.canonical_category,
+                        "hours": delay.total_duration_hours,
+                    },
                 )
                 if alert:
                     generated_alerts.append(alert)
@@ -291,14 +309,19 @@ class AlertEngine:
         evidence: dict[str, Any] | None,
     ) -> OperationalAlert | None:
         """Deduplicate active alerts: don't create if an unresolved one exists for same entity."""
-        existing = self.db.execute(
-            select(OperationalAlert).where(
-                OperationalAlert.rule_code == rule.rule_code,
-                OperationalAlert.linked_entity_type == linked_entity_type,
-                OperationalAlert.linked_entity_id == linked_entity_id,
-                OperationalAlert.status.in_(["NEW", "ACKNOWLEDGED"]),
-            )
-        ).scalar_one_or_none()
+        key = (rule.rule_code, linked_entity_type, linked_entity_id)
+        existing = (
+            self._open_alerts.get(key)
+            if self._open_alerts is not None
+            else self.db.execute(
+                select(OperationalAlert).where(
+                    OperationalAlert.rule_code == rule.rule_code,
+                    OperationalAlert.linked_entity_type == linked_entity_type,
+                    OperationalAlert.linked_entity_id == linked_entity_id,
+                    OperationalAlert.status.in_(["NEW", "ACKNOWLEDGED"]),
+                )
+            ).scalar_one_or_none()
+        )
 
         if existing:
             return existing
@@ -317,6 +340,8 @@ class AlertEngine:
             evidence=evidence,
         )
         self.db.add(alert)
+        if self._open_alerts is not None:
+            self._open_alerts[key] = alert
         return alert
 
     def list_alerts(
@@ -340,33 +365,41 @@ class AlertEngine:
 
         query = query.order_by(desc(OperationalAlert.created_at)).limit(limit)
         alerts = self.db.execute(query).scalars().all()
+        alert_ids = [alert.id for alert in alerts]
+        action_counts = {}
+        if alert_ids:
+            action_counts = dict(
+                self.db.execute(
+                    select(ActionItem.alert_id, func.count(ActionItem.id))
+                    .where(ActionItem.alert_id.in_(alert_ids))
+                    .group_by(ActionItem.alert_id)
+                ).all()
+            )
 
         results = []
         for a in alerts:
-            actions = self.db.execute(
-                select(ActionItem).where(ActionItem.alert_id == a.id)
-            ).scalars().all()
-
-            results.append({
-                "id": str(a.id),
-                "rule_code": a.rule_code,
-                "severity": a.severity,
-                "title": a.title,
-                "description": a.description,
-                "vessel_call_id": str(a.vessel_call_id) if a.vessel_call_id else None,
-                "vcn": a.vcn,
-                "status": a.status,
-                "acknowledged_at": a.acknowledged_at.isoformat() if a.acknowledged_at else None,
-                "acknowledged_by": a.acknowledged_by,
-                "resolved_at": a.resolved_at.isoformat() if a.resolved_at else None,
-                "resolved_by": a.resolved_by,
-                "resolution_notes": a.resolution_notes,
-                "linked_entity_type": a.linked_entity_type,
-                "linked_entity_id": a.linked_entity_id,
-                "evidence": a.evidence,
-                "created_at": a.created_at.isoformat() if a.created_at else None,
-                "actions_count": len(actions),
-            })
+            results.append(
+                {
+                    "id": str(a.id),
+                    "rule_code": a.rule_code,
+                    "severity": a.severity,
+                    "title": a.title,
+                    "description": a.description,
+                    "vessel_call_id": str(a.vessel_call_id) if a.vessel_call_id else None,
+                    "vcn": a.vcn,
+                    "status": a.status,
+                    "acknowledged_at": a.acknowledged_at.isoformat() if a.acknowledged_at else None,
+                    "acknowledged_by": a.acknowledged_by,
+                    "resolved_at": a.resolved_at.isoformat() if a.resolved_at else None,
+                    "resolved_by": a.resolved_by,
+                    "resolution_notes": a.resolution_notes,
+                    "linked_entity_type": a.linked_entity_type,
+                    "linked_entity_id": a.linked_entity_id,
+                    "evidence": a.evidence,
+                    "created_at": a.created_at.isoformat() if a.created_at else None,
+                    "actions_count": action_counts.get(a.id, 0),
+                }
+            )
         return results
 
     def acknowledge_alert(self, alert_id: uuid.UUID, actor: str = "operator") -> dict[str, Any]:
@@ -400,12 +433,7 @@ class AlertEngine:
             "acknowledged_by": alert.acknowledged_by,
         }
 
-    def resolve_alert(
-        self,
-        alert_id: uuid.UUID,
-        resolution_notes: str,
-        actor: str = "operator"
-    ) -> dict[str, Any]:
+    def resolve_alert(self, alert_id: uuid.UUID, resolution_notes: str, actor: str = "operator") -> dict[str, Any]:
         """Resolve an operational alert with explanation notes."""
         alert = self.db.execute(select(OperationalAlert).where(OperationalAlert.id == alert_id)).scalar_one_or_none()
         if not alert:
@@ -490,11 +518,7 @@ class AlertEngine:
         }
 
     def update_action_item(
-        self,
-        action_id: uuid.UUID,
-        status: str | None = None,
-        comment: str | None = None,
-        actor: str = "operator"
+        self, action_id: uuid.UUID, status: str | None = None, comment: str | None = None, actor: str = "operator"
     ) -> dict[str, Any]:
         """Update action item status or add comment."""
         action = self.db.execute(select(ActionItem).where(ActionItem.id == action_id)).scalar_one_or_none()
@@ -507,11 +531,13 @@ class AlertEngine:
 
         comments = list(action.comments or [])
         if comment:
-            comments.append({
-                "author": actor,
-                "text": comment,
-                "timestamp": datetime.now(UTC).isoformat(),
-            })
+            comments.append(
+                {
+                    "author": actor,
+                    "text": comment,
+                    "timestamp": datetime.now(UTC).isoformat(),
+                }
+            )
             action.comments = comments
 
         audit = AuditEvent(

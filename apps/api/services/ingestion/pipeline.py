@@ -5,9 +5,10 @@ import shutil
 import uuid
 
 import polars as pl
-from sqlalchemy import select
+from sqlalchemy import insert, select
 from sqlalchemy.orm import Session
 
+from apps.api.core.config import settings
 from apps.api.models.canonical import (
     CargoOperation,
     Delay,
@@ -17,7 +18,6 @@ from apps.api.models.canonical import (
 )
 from apps.api.models.config import EventDefinition
 from apps.api.models.ingestion import IngestionBatch, IngestionFile, RawRecord, StagingRecord
-from apps.api.core.config import settings
 from apps.api.services.delays.mapping import map_to_canonical_category
 
 
@@ -29,6 +29,7 @@ class IngestionPipeline:
         "CargoOps": {"VCN"},
         "Delays": {"VCN"},
     }
+
     def __init__(self, db: Session, tenant_id: str = "default-tenant"):
         self.db = db
         self.tenant_id = tenant_id
@@ -65,8 +66,11 @@ class IngestionPipeline:
         commit_canonical: bool = True,
     ) -> str:
         return self.process_files(
-            [(file_path, filename)], is_synthetic=is_synthetic, dry_run=dry_run,
-            force_new=force_new, commit_canonical=commit_canonical,
+            [(file_path, filename)],
+            is_synthetic=is_synthetic,
+            dry_run=dry_run,
+            force_new=force_new,
+            commit_canonical=commit_canonical,
         )
 
     def process_files(
@@ -118,12 +122,15 @@ class IngestionPipeline:
 
         try:
             manifests = []
-            for (file_path, filename), file_checksum in zip(files, checksums):
+            for (file_path, filename), file_checksum in zip(files, checksums, strict=True):
                 manifest = IngestionFile(
-                    group_batch_id=batch_id, original_filename=filename,
-                    file_checksum=file_checksum, byte_size=__import__("os").path.getsize(file_path),
+                    group_batch_id=batch_id,
+                    original_filename=filename,
+                    file_checksum=file_checksum,
+                    byte_size=__import__("os").path.getsize(file_path),
                     storage_reference=self._store_original(file_path, batch_id, file_checksum, filename),
-                    parse_status="QUEUED", validation_status="PENDING",
+                    parse_status="QUEUED",
+                    validation_status="PENDING",
                 )
                 self.db.add(manifest)
                 manifests.append((file_path, manifest))
@@ -184,30 +191,36 @@ class IngestionPipeline:
             if missing_columns:
                 raise ValueError(f"{sheet_name} is missing required column(s): {', '.join(sorted(missing_columns))}")
 
-            records = []
+            # Raw lineage is intentionally cell-level, but creating one ORM object
+            # per cell makes ordinary workbooks needlessly slow over a remote
+            # database connection.  Core bulk inserts preserve exactly the same
+            # immutable values and source-file/sheet/row/column lineage while
+            # using bounded database round trips.
+            records: list[dict] = []
             for row_idx, row in enumerate(df.iter_rows(named=True), start=2):
                 for col_name, val in row.items():
                     val_str = "" if val is None else str(val)
-                    record = RawRecord(
-                        file_checksum=source_file.file_checksum if source_file else batch.file_checksum,
-                        worksheet_name=sheet_name,
-                        row_number=row_idx,
-                        column_name=col_name,
-                        original_value=val_str,
-                        ingestion_batch_id=batch.batch_id,
-                        source_record_id=row.get("VCN") or row.get("Source_Call_ID") or "",
-                        source_file_id=str(source_file.id) if source_file else None,
+                    records.append(
+                        {
+                            "file_checksum": source_file.file_checksum if source_file else batch.file_checksum,
+                            "worksheet_name": sheet_name,
+                            "row_number": row_idx,
+                            "column_name": col_name,
+                            "original_value": val_str,
+                            "ingestion_batch_id": batch.batch_id,
+                            "source_record_id": row.get("VCN") or row.get("Source_Call_ID") or "",
+                            "source_file_id": str(source_file.id) if source_file else None,
+                        }
                     )
-                    records.append(record)
 
-                if len(records) > 5000:
-                    self.db.add_all(records)
-                    self.db.commit()
+                if len(records) >= 5000:
+                    self.db.execute(insert(RawRecord), records)
+                    self.db.flush()
                     records = []
 
             if records:
-                self.db.add_all(records)
-                self.db.commit()
+                self.db.execute(insert(RawRecord), records)
+                self.db.flush()
 
         batch.status = "PARSED"
         self.db.commit()
@@ -238,11 +251,16 @@ class IngestionPipeline:
                 # staging identity. This is what makes file/sheet/row lineage exact.
                 row_key = (r.source_file_id, r.row_number)
                 if row_key not in row_map:
-                    row_map[row_key] = {"data": {}, "source_record_id": r.source_record_id, "source_file_id": r.source_file_id, "file_checksum": r.file_checksum}
+                    row_map[row_key] = {
+                        "data": {},
+                        "source_record_id": r.source_record_id,
+                        "source_file_id": r.source_file_id,
+                        "file_checksum": r.file_checksum,
+                    }
                 if isinstance(row_map[row_key], dict) and isinstance(row_map[row_key].get("data"), dict):
                     row_map[row_key]["data"][str(r.column_name)] = r.original_value  # type: ignore
 
-            staging_records = []
+            staging_records: list[dict] = []
             for (_, row_idx), row_info in row_map.items():
                 parsed_data = row_info["data"]
                 canonical_table = ""
@@ -257,30 +275,34 @@ class IngestionPipeline:
                 elif sheet == "Delays":
                     canonical_table = "delay"
 
-                staging_record = StagingRecord(
-                    file_checksum=row_info["file_checksum"],
-                    worksheet_name=sheet,
-                    row_number=row_idx,
-                    parsed_data=parsed_data,
-                    errors={},
-                    ingestion_batch_id=batch.batch_id,
-                    validation_status="PENDING",
-                    source_record_id=row_info["source_record_id"],
-                    canonical_table=canonical_table,
-                    source_file_id=row_info["source_file_id"],
+                staging_records.append(
+                    {
+                        "file_checksum": row_info["file_checksum"],
+                        "worksheet_name": sheet,
+                        "row_number": row_idx,
+                        "parsed_data": parsed_data,
+                        "errors": {},
+                        "ingestion_batch_id": batch.batch_id,
+                        "validation_status": "PENDING",
+                        "source_record_id": row_info["source_record_id"],
+                        "canonical_table": canonical_table,
+                        "source_file_id": row_info["source_file_id"],
+                    }
                 )
-                staging_records.append(staging_record)
 
-            self.db.add_all(staging_records)
+            if staging_records:
+                self.db.execute(insert(StagingRecord), staging_records)
             self.db.commit()
 
         batch.status = "MAPPED"
         self.db.commit()
 
     def _validate_staging(self, batch: IngestionBatch):
-        rows = self.db.execute(
-            select(StagingRecord).where(StagingRecord.ingestion_batch_id == batch.batch_id)
-        ).scalars().all()
+        rows = (
+            self.db.execute(select(StagingRecord).where(StagingRecord.ingestion_batch_id == batch.batch_id))
+            .scalars()
+            .all()
+        )
         if not any(row.canonical_table == "vessel_call" for row in rows):
             raise ValueError("Dataset group requires at least one VesselCalls worksheet")
         seen: set[tuple[str, str]] = set()
@@ -477,7 +499,11 @@ class IngestionPipeline:
             except Exception:
                 return None
 
-        service_records = [r for r in batch_staging if r.canonical_table == "service_request" and r.validation_status not in {"DUPLICATE", "EXCLUDED"}]
+        service_records = [
+            r
+            for r in batch_staging
+            if r.canonical_table == "service_request" and r.validation_status not in {"DUPLICATE", "EXCLUDED"}
+        ]
         for r in service_records:
             pd_data = r.parsed_data
             vcn = pd_data.get("VCN")
@@ -514,7 +540,11 @@ class IngestionPipeline:
             )
             self.db.add(exe)
 
-        delay_records = [r for r in batch_staging if r.canonical_table == "delay" and r.validation_status not in {"DUPLICATE", "EXCLUDED"}]
+        delay_records = [
+            r
+            for r in batch_staging
+            if r.canonical_table == "delay" and r.validation_status not in {"DUPLICATE", "EXCLUDED"}
+        ]
         for r in delay_records:
             pd_data = r.parsed_data
             vcn = pd_data.get("VCN")
@@ -594,7 +624,11 @@ class IngestionPipeline:
             )
             self.db.add(alloc)
 
-        cargo_records = [r for r in batch_staging if r.canonical_table == "cargo_ops" and r.validation_status not in {"DUPLICATE", "EXCLUDED"}]
+        cargo_records = [
+            r
+            for r in batch_staging
+            if r.canonical_table == "cargo_ops" and r.validation_status not in {"DUPLICATE", "EXCLUDED"}
+        ]
         for r in cargo_records:
             pd_data = r.parsed_data
             vcn = pd_data.get("VCN")
