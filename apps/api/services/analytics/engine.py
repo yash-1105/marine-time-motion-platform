@@ -50,7 +50,7 @@ def within_tolerance(actual: float | None, expected: float | None, tolerance: fl
 class AnalyticsEngine:
     """Engine for computing lead-time metrics and statistical aggregates over governed canonical data."""
 
-    def __init__(self, db: Session, tenant_id: str = "synthetic-tenant", exclude_quarantined: bool = True):
+    def __init__(self, db: Session, tenant_id: str, exclude_quarantined: bool = True):
         self.db = db
         self.tenant_id = tenant_id
         self.exclude_quarantined = exclude_quarantined
@@ -418,9 +418,14 @@ class AnalyticsEngine:
         defn = self.db.execute(select(LeadTimeDefinition).where(LeadTimeDefinition.id == definition_id)).scalar_one()
 
         # Query all LeadTimeResults for this definition
-        results = (
-            self.db.execute(select(LeadTimeResult).where(LeadTimeResult.definition_id == definition_id)).scalars().all()
-        )
+        results = self.db.execute(
+            select(LeadTimeResult)
+            .join(VesselCall, VesselCall.id == LeadTimeResult.vessel_call_id)
+            .where(
+                LeadTimeResult.definition_id == definition_id,
+                VesselCall.tenant_id == self.tenant_id,
+            )
+        ).scalars().all()
 
         total_eligible = len(results)
         available_rows = [r for r in results if r.status == "AVAILABLE" and r.duration_hours is not None]
@@ -431,11 +436,13 @@ class AnalyticsEngine:
             select(StatisticalAggregate).where(
                 StatisticalAggregate.definition_id == definition_id,
                 StatisticalAggregate.cohort_key == cohort_key,
+                StatisticalAggregate.tenant_id == self.tenant_id,
             )
         ).scalar_one_or_none()
 
         if not agg:
             agg = StatisticalAggregate(
+                tenant_id=self.tenant_id,
                 definition_id=definition_id,
                 cohort_key=cohort_key,
             )

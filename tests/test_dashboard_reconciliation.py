@@ -132,9 +132,9 @@ def test_three_way_reconciliation_endpoint(auth_headers):
 
 def test_direct_three_way_reconciliation_with_db(db_session, auth_headers):
     """Direct verification of Dashboard, Repository, and SQL query."""
-    svc = ExecutiveDashboardService(db_session, tenant_id="synthetic-tenant")
+    svc = ExecutiveDashboardService(db_session, tenant_id="tenant-synthetic-01")
     repo = VesselCallRepository(db_session)
-    scope = DataScope(tenant_id="synthetic-tenant")
+    scope = DataScope(tenant_id="tenant-synthetic-01")
 
     combos = [
         ("All Calls", {}),
@@ -154,7 +154,7 @@ def test_direct_three_way_reconciliation_with_db(db_session, auth_headers):
         # 3. Direct SQL Total
         q = select(func.count(VesselCall.id)).where(
             VesselCall.is_merged == False,
-            VesselCall.tenant_id == "synthetic-tenant",
+            VesselCall.tenant_id == "tenant-synthetic-01",
         )
         if "vessel_type" in filters:
             q = q.where(VesselCall.vessel_type == filters["vessel_type"])

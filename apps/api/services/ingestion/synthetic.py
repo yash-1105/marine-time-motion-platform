@@ -35,8 +35,8 @@ def reset_tenant_dataset(db: Session, tenant_id: str, keep_batches: bool = False
     db.execute(text("DELETE FROM analytics.operational_alert"))
     db.execute(text("DELETE FROM analytics.outlier_record"))
     db.execute(text("DELETE FROM analytics.bottleneck_record"))
-    db.execute(text("DELETE FROM analytics.kpi_result"))
-    db.execute(text("DELETE FROM analytics.statistical_aggregate"))
+    db.execute(text("DELETE FROM analytics.kpi_result WHERE tenant_id = :t"), {"t": tenant_id})
+    db.execute(text("DELETE FROM analytics.statistical_aggregate WHERE tenant_id = :t"), {"t": tenant_id})
     db.execute(
         text(
             "DELETE FROM analytics.lead_time_result WHERE vessel_call_id IN (SELECT id FROM canonical.vessel_call WHERE tenant_id = :t)"

@@ -2,6 +2,7 @@
   "filename": "Synthetic_Marine_Time_Motion_Test_Data.xlsx",
   "sha256": "90919984816264e44f0e83bf47a6ef11cc98f000ca375bebc77bf3f7e49b0763",
   "synthetic": true,
+  "tenant_id": "tenant-synthetic-01",
   "sheets": {
     "README": 11,
     "VesselCalls": 74,

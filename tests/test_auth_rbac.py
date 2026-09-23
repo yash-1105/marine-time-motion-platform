@@ -248,6 +248,10 @@ def test_audit_logging_and_sensitive_export(db_session):
         .first()
     )
     assert load_audit is not None
+    # Keep the shared governed fixture population stable for downstream modules.
+    # The prior tenant-alias split accidentally hid this leaked test row.
+    db_session.delete(sens_call)
+    db_session.commit()
 
 
 def test_session_lifecycle_and_revocation():

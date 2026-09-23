@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from apps.api.auth.dependencies import require
 from apps.api.auth.principal import UserPrincipal
+from apps.api.auth.tenant import resolve_principal_tenant
 from apps.api.core.database import get_db
 from apps.api.models.canonical import VesselCall
 from apps.api.models.identity import MatchCandidate, MatchEvidence, MergeDecision
@@ -64,7 +65,7 @@ def run_identity_resolution(
     Scans unmerged vessel calls, evaluates pairwise deterministic and probabilistic matching rules,
     persists explainable evidence, and merges qualifying duplicates.
     """
-    tenant_id = principal.data_scope.tenant_id
+    tenant_id = resolve_principal_tenant(principal)
     engine = IdentityEngine(db, tenant_id=tenant_id)
     candidates = engine.generate_candidates()
 
@@ -300,7 +301,7 @@ def get_population_summary(
     """
     Returns the total rows, merged rows, and active consolidated population count.
     """
-    target_tenant = tenant_id or principal.data_scope.tenant_id
+    target_tenant = resolve_principal_tenant(principal, tenant_id)
     all_calls = db.execute(
         select(VesselCall).where(VesselCall.tenant_id == target_tenant)
     ).scalars().all()

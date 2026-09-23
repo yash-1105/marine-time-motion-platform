@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from apps.api.auth.dependencies import require
 from apps.api.auth.principal import UserPrincipal
+from apps.api.auth.tenant import resolve_principal_tenant
 from apps.api.core.database import get_db
 from apps.api.models.analytics import (
     LeadTimeDefinition,
@@ -39,11 +40,7 @@ class CustomLeadTimeRequest(BaseModel):
 
 
 def _resolve_target_tenant(principal: UserPrincipal, explicit_tenant: str | None = None) -> str:
-    if explicit_tenant:
-        return explicit_tenant
-    if principal.data_scope.tenant_id in ("*", "tenant-synthetic-01"):
-        return "synthetic-tenant"
-    return principal.data_scope.tenant_id
+    return resolve_principal_tenant(principal, explicit_tenant)
 
 
 @router.post("/compute")
@@ -188,15 +185,16 @@ def get_metric_statistics(
     if not defn:
         raise HTTPException(status_code=404, detail="LeadTimeDefinition not found")
 
+    target_tenant = _resolve_target_tenant(principal)
     agg = db.execute(
         select(StatisticalAggregate).where(
+            StatisticalAggregate.tenant_id == target_tenant,
             StatisticalAggregate.definition_id == definition_id,
             StatisticalAggregate.cohort_key == cohort_key,
         )
     ).scalar_one_or_none()
 
     if not agg:
-        target_tenant = _resolve_target_tenant(principal)
         engine = AnalyticsEngine(db, tenant_id=target_tenant)
         agg = engine.compute_statistics(definition_id, cohort_key=cohort_key)
         db.commit()

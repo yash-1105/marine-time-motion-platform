@@ -40,7 +40,7 @@ from apps.api.services.outliers.engine import OutlierEngine
 
 
 class ExecutiveDashboardService:
-    def __init__(self, db: Session, tenant_id: str = "synthetic-tenant"):
+    def __init__(self, db: Session, tenant_id: str):
         self.db = db
         self.tenant_id = tenant_id
 

@@ -36,9 +36,9 @@ def reconstructed_fixture(db_session):
     reconstruction end to end, exactly as `make validate` does."""
     load_synthetic_dataset(db_session, "fixtures/Synthetic_Marine_Time_Motion_Test_Data.xlsx")
     DataQualityEngine(db_session).run_all()
-    IdentityEngine(db_session, tenant_id="synthetic-tenant").auto_merge_candidates()
+    IdentityEngine(db_session, tenant_id="tenant-synthetic-01").auto_merge_candidates()
 
-    engine = JourneyReconstructionEngine(db_session, tenant_id="synthetic-tenant")
+    engine = JourneyReconstructionEngine(db_session, tenant_id="tenant-synthetic-01")
     summary = engine.reconstruct_all()
     return summary
 
@@ -47,7 +47,7 @@ def _synthetic_tenant_instances(db_session) -> list[JourneyInstance]:
     return db_session.execute(
         select(JourneyInstance)
         .join(VesselCall, JourneyInstance.vessel_call_id == VesselCall.id)
-        .where(VesselCall.tenant_id == "synthetic-tenant")
+        .where(VesselCall.tenant_id == "tenant-synthetic-01")
     ).scalars().all()
 
 
@@ -346,7 +346,7 @@ def test_reconstruction_history_is_versioned_not_overwritten(db_session, reconst
     """Re-running reconstruction for a call must append a new history entry, not replace the
     prior one, so a re-run after a rule change stays comparable."""
     vc = db_session.execute(select(VesselCall).where(VesselCall.vcn == "SYNVCN2600009")).scalar_one()
-    engine = JourneyReconstructionEngine(db_session, tenant_id="synthetic-tenant")
+    engine = JourneyReconstructionEngine(db_session, tenant_id="tenant-synthetic-01")
 
     before = db_session.execute(
         select(ReconstructionHistory).where(ReconstructionHistory.vessel_call_id == vc.id)

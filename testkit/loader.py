@@ -5,6 +5,7 @@ from sqlalchemy import text
 from testkit.models import DQCase, ExpectedOutput, ValidationSummary
 from apps.api.services.ingestion.pipeline import IngestionPipeline
 from apps.api.services.ingestion.synthetic import reset_tenant_dataset
+from apps.api.core.config import settings
 
 def load_testkit_oracles(db, file_path):
     sheets = pl.read_excel(file_path, sheet_id=0)
@@ -23,7 +24,7 @@ def load_testkit_oracles(db, file_path):
     db.commit()
 
 def load_synthetic_dataset(db, file_path):
-    reset_tenant_dataset(db,"synthetic-tenant")
-    batch=IngestionPipeline(db,tenant_id="synthetic-tenant").process_file(file_path,"synthetic-workbook.xlsx",is_synthetic=True)
+    reset_tenant_dataset(db, settings.development_tenant_id)
+    batch=IngestionPipeline(db,tenant_id=settings.development_tenant_id).process_file(file_path,"synthetic-workbook.xlsx",is_synthetic=True)
     load_testkit_oracles(db,file_path)
     return batch

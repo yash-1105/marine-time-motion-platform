@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from apps.api.auth.dependencies import require
 from apps.api.auth.principal import UserPrincipal
 from apps.api.auth.scope import DataScope
+from apps.api.auth.tenant import resolve_principal_tenant
 from apps.api.core.database import get_db
 from apps.api.repository.vessel_call import VesselCallRepository
 from apps.api.services.audit import log_audit_event
@@ -33,11 +34,7 @@ class MergeRequest(BaseModel):
 
 
 def _resolve_tenant(principal: UserPrincipal, explicit_tenant: str | None = None) -> str:
-    if explicit_tenant:
-        return explicit_tenant
-    if principal.data_scope.tenant_id in ("*", "tenant-synthetic-01"):
-        return "synthetic-tenant"
-    return principal.data_scope.tenant_id
+    return resolve_principal_tenant(principal, explicit_tenant)
 
 
 @router.get("/vessel-calls")

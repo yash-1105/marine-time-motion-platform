@@ -48,7 +48,7 @@ def get_current_principal(
                 "view", "create", "edit", "approve", "reject", "merge", "unmerge",
                 "recalculate", "publish", "export", "configure", "administer", "audit"
             ],
-            data_scope=DataScope(tenant_id="synthetic-tenant", port_id="*", terminal_id="*"),
+            data_scope=DataScope(tenant_id=settings.development_tenant_id, port_id="*", terminal_id="*"),
             is_service_account=False,
             is_synthetic=True,
         )

@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from apps.api.auth.principal import UserPrincipal
+from apps.api.auth.tenant import resolve_principal_tenant
 from apps.api.core.database import get_db
 from apps.api.routers.auth import require
 from apps.api.services.bottlenecks.engine import BottleneckEngine
@@ -12,9 +13,7 @@ router = APIRouter(prefix="/bottlenecks", tags=["bottlenecks"])
 
 
 def _tenant(p: UserPrincipal) -> str:
-    if p and p.data_scope and p.data_scope.tenant_id and p.data_scope.tenant_id != "*":
-        return p.data_scope.tenant_id
-    return "synthetic-tenant"
+    return resolve_principal_tenant(p)
 
 
 class RecalculateBottlenecksRequest(BaseModel):

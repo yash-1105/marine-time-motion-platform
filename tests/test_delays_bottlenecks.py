@@ -103,7 +103,7 @@ def test_service_timing_preserves_frd_delay_signs_and_legs(db):
 
 def test_service_timing_missing_inputs_and_schedule_chronology_are_explicit(db):
     """Missing inputs remain unavailable, while schedule-before-request becomes a DQ issue."""
-    vc = VesselCall(vessel_name="Delay timing test vessel", vcn="TEST-SERVICE-TIMING", tenant_id="synthetic-tenant")
+    vc = VesselCall(vessel_name="Delay timing test vessel", vcn="TEST-SERVICE-TIMING", tenant_id="tenant-synthetic-01")
     db.add(vc); db.flush()
     request = ServiceRequest(
         vessel_call_id=vc.id, service_type="Pilotage Service", movement_type="Arrival",

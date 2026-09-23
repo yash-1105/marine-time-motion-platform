@@ -12,7 +12,7 @@ from apps.api.services.identity.normalizer import VesselNameNormalizer
 
 
 class IdentityEngine:
-    def __init__(self, db: Session, tenant_id: str = "synthetic-tenant"):
+    def __init__(self, db: Session, tenant_id: str):
         self.db = db
         self.tenant_id = tenant_id
         self.matcher = IdentityMatcher()

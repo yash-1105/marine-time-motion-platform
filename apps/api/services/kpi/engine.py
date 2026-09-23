@@ -39,7 +39,7 @@ from apps.api.services.kpi.registry import CURRENT_FORMULA_VERSION, KPI_REGISTRY
 class KPIEngine:
     """Engine for evaluating governed KPIs, targets, trends, and recalculations."""
 
-    def __init__(self, db: Session, tenant_id: str = "synthetic-tenant", exclude_quarantined: bool = True):
+    def __init__(self, db: Session, tenant_id: str, exclude_quarantined: bool = True):
         self.db = db
         self.tenant_id = tenant_id
         self.exclude_quarantined = exclude_quarantined
@@ -233,6 +233,7 @@ class KPIEngine:
         # If NO_SOURCE_DATA
         if kpi.availability_status == "NO_SOURCE_DATA":
             result = KPIResult(
+                tenant_id=self.tenant_id,
                 kpi_id=kpi.id,
                 value=None,
                 status="NO_SOURCE_DATA",
@@ -276,6 +277,7 @@ class KPIEngine:
                     # Alias provenance requires the primary result identifier.
                     self.db.flush()
                 result = KPIResult(
+                    tenant_id=self.tenant_id,
                     kpi_id=kpi.id,
                     value=primary_res.value,
                     status=primary_res.status,
@@ -323,6 +325,7 @@ class KPIEngine:
         )
 
         result = KPIResult(
+            tenant_id=self.tenant_id,
             kpi_id=kpi.id,
             value=val,
             status=status,
@@ -432,7 +435,11 @@ class KPIEngine:
             raise ValueError(f"KPI {kpi_code} not found.")
 
         prev_res = (
-            self.db.execute(select(KPIResult).where(KPIResult.kpi_id == kpi.id).order_by(desc(KPIResult.calculated_at)))
+            self.db.execute(
+                select(KPIResult)
+                .where(KPIResult.kpi_id == kpi.id, KPIResult.tenant_id == self.tenant_id)
+                .order_by(desc(KPIResult.calculated_at))
+            )
             .scalars()
             .first()
         )
@@ -503,7 +510,11 @@ class KPIEngine:
         results = (
             self.db.execute(
                 select(KPIResult)
-                .where(KPIResult.kpi_id == kpi.id, KPIResult.status == "COMPUTED")
+                .where(
+                    KPIResult.kpi_id == kpi.id,
+                    KPIResult.tenant_id == self.tenant_id,
+                    KPIResult.status == "COMPUTED",
+                )
                 .order_by(desc(KPIResult.calculated_at))
                 .limit(periods)
             )

@@ -292,10 +292,10 @@ def test_fixture_consolidation_reconciles_to_72(db_session):
     db_session.execute(text("DELETE FROM identity.merge_decision"))
     db_session.execute(text("DELETE FROM identity.match_evidence"))
     db_session.execute(text("DELETE FROM identity.match_candidate"))
-    db_session.execute(text("UPDATE canonical.vessel_call SET is_merged = false, merged_into_id = NULL WHERE tenant_id = 'synthetic-tenant'"))
+    db_session.execute(text("UPDATE canonical.vessel_call SET is_merged = false, merged_into_id = NULL WHERE tenant_id = 'tenant-synthetic-01'"))
     db_session.commit()
 
-    id_engine = IdentityEngine(db_session, tenant_id="synthetic-tenant")
+    id_engine = IdentityEngine(db_session, tenant_id="tenant-synthetic-01")
     assert id_engine.get_consolidated_population_count() == 74
 
     # Generate and auto-merge
@@ -333,7 +333,7 @@ def test_identity_api_endpoints(db_session):
     headers = {"Authorization": f"Bearer {token}"}
 
     # 2. Get population summary
-    pop_resp = client.get("/api/v1/identity/population?tenant_id=synthetic-tenant", headers=headers)
+    pop_resp = client.get("/api/v1/identity/population", headers=headers)
     assert pop_resp.status_code == 200
     pop_data = pop_resp.json()
     assert pop_data["consolidated_base_population"] == 72

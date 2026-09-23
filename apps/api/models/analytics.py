@@ -1,4 +1,4 @@
-from sqlalchemy import JSON, Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 
 from .base import BaseModel
 
@@ -57,7 +57,11 @@ class StatisticalAggregate(BaseModel):
     Percentile method: linear interpolation (disclosed in percentile_method column).
     """
     __tablename__ = "statistical_aggregate"
-    __table_args__ = {"schema": "analytics"}
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "definition_id", "cohort_key", name="uq_stat_agg_tenant_def_cohort"),
+        {"schema": "analytics"},
+    )
+    tenant_id = Column(String(100), nullable=False, index=True)
     definition_id = Column(ForeignKey("analytics.lead_time_definition.id"), nullable=False)
     cohort_key = Column(String, nullable=False, default="all")
     cohort_filters = Column(JSON, nullable=True)
@@ -136,6 +140,7 @@ class KPIResult(BaseModel):
     __tablename__ = "kpi_result"
     __table_args__ = {"schema": "analytics"}
 
+    tenant_id = Column(String(100), nullable=False, index=True)
     kpi_id = Column(ForeignKey("analytics.kpi.id", ondelete="CASCADE"), nullable=False)
     vessel_call_id = Column(ForeignKey("canonical.vessel_call.id", ondelete="CASCADE"), nullable=True)
     value = Column(Float, nullable=True)

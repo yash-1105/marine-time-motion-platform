@@ -20,7 +20,7 @@ from apps.api.models.config import EventDefinition
 class CustomLeadTimeBuilder:
     """Service for ad-hoc and user-saved custom event-to-event lead-time calculations."""
 
-    def __init__(self, db: Session, tenant_id: str = "synthetic-tenant"):
+    def __init__(self, db: Session, tenant_id: str):
         self.db = db
         self.tenant_id = tenant_id
 

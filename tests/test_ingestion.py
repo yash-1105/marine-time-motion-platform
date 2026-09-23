@@ -11,9 +11,10 @@ from sqlalchemy.orm import sessionmaker
 
 from apps.api.core.config import settings
 from apps.api.main import app
-from apps.api.models.analytics import DashboardSnapshot, KPIResult
-from apps.api.models.canonical import VesselCall
+from apps.api.models.analytics import DashboardSnapshot, KPIResult, StatisticalAggregate
+from apps.api.models.canonical import ServiceAssignment, ServiceExecution, ServiceRequest, VesselCall
 from apps.api.models.ingestion import IngestionBatch, IngestionFile, RawRecord, StagingRecord
+from apps.api.models.journey import JourneyInstance, StageOccurrence
 from apps.api.services.ingestion.pipeline import IngestionPipeline
 from apps.api.services.ingestion.synthetic import reset_tenant_dataset
 from apps.worker.main import process_ingestion_analytics_task
@@ -88,7 +89,7 @@ def test_dashboard_persisted_snapshot_reuse(auth_headers, db_session):
         db_session.execute(
             select(DashboardSnapshot)
             .where(
-                DashboardSnapshot.tenant_id == "synthetic-tenant",
+                DashboardSnapshot.tenant_id == "tenant-synthetic-01",
                 DashboardSnapshot.is_active.is_(True),
                 DashboardSnapshot.filters_hash == "unfiltered",
             )
@@ -158,7 +159,7 @@ def test_dataset_upload_queues_analytics_and_worker_commits_batch(auth_headers, 
     active_batches = (
         db_session.execute(
             select(IngestionBatch).where(
-                IngestionBatch.tenant_id == "synthetic-tenant",
+                IngestionBatch.tenant_id == "tenant-synthetic-01",
                 IngestionBatch.is_active.is_(True),
             )
         )
@@ -172,7 +173,7 @@ def test_dataset_upload_queues_analytics_and_worker_commits_batch(auth_headers, 
     active_snapshot = (
         db_session.execute(
             select(DashboardSnapshot).where(
-                DashboardSnapshot.tenant_id == "synthetic-tenant",
+                DashboardSnapshot.tenant_id == "tenant-synthetic-01",
                 DashboardSnapshot.is_active.is_(True),
             )
         )
@@ -185,12 +186,12 @@ def test_dataset_upload_queues_analytics_and_worker_commits_batch(auth_headers, 
     assert db_session.execute(select(KPIResult)).scalars().first() is not None
 
     # Delivery retry is idempotent: an already active committed group is not reinserted.
-    process_ingestion_analytics_task.fn(new_batch_id, "synthetic-tenant", upload_data["batch_id"])
+    process_ingestion_analytics_task.fn(new_batch_id, "tenant-synthetic-01", upload_data["batch_id"])
     db_session.expire_all()
     assert (
         len(
             db_session.execute(
-                select(VesselCall).where(VesselCall.tenant_id == "synthetic-tenant", VesselCall.is_merged.is_(False))
+                select(VesselCall).where(VesselCall.tenant_id == "tenant-synthetic-01", VesselCall.is_merged.is_(False))
             )
             .scalars()
             .all()
@@ -203,6 +204,128 @@ def test_dataset_upload_queues_analytics_and_worker_commits_batch(auth_headers, 
     assert active_resp.status_code == 200
     assert active_resp.json()["batch"]["batch_id"] == new_batch_id
     assert active_resp.json()["batch"]["file_name"] == "2 workbooks"
+
+
+def test_governed_two_file_acceptance_exposes_service_timings_and_statistics(auth_headers, db_session, monkeypatch):
+    """Two governed copies exercise cross-file dedupe and the complete tenant-scoped pipeline."""
+    monkeypatch.setattr(
+        "apps.api.routers.ingestion.process_ingestion_analytics_task.send",
+        lambda batch_id, tenant_id, checksum: process_ingestion_analytics_task.fn(batch_id, tenant_id, checksum),
+    )
+    fixture_path = "fixtures/Synthetic_Marine_Time_Motion_Test_Data.xlsx"
+    with open(fixture_path, "rb") as fixture:
+        content = fixture.read()
+    prior_active = db_session.execute(
+        select(IngestionBatch).where(
+            IngestionBatch.tenant_id == "tenant-synthetic-01",
+            IngestionBatch.is_active.is_(True),
+        )
+    ).scalar_one()
+
+    response = client.post(
+        "/api/v1/ingestion/upload",
+        headers=auth_headers,
+        files=[
+            ("files", ("governed-a.xlsx", content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")),
+            ("files", ("governed-b.xlsx", content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")),
+        ],
+    )
+    assert response.status_code == 202
+    batch_id = response.json()["batch_id"]
+    db_session.expire_all()
+
+    batch = db_session.execute(select(IngestionBatch).where(IngestionBatch.batch_id == batch_id)).scalar_one()
+    assert batch.status == "COMMITTED"
+    assert batch.is_active is True
+    assert prior_active.status == "SUPERSEDED"
+    assert db_session.execute(
+        select(IngestionBatch).where(
+            IngestionBatch.tenant_id == "tenant-synthetic-01",
+            IngestionBatch.is_active.is_(True),
+        )
+    ).scalars().all() == [batch]
+
+    manifests = db_session.execute(
+        select(IngestionFile).where(IngestionFile.group_batch_id == batch_id)
+    ).scalars().all()
+    assert len(manifests) == 2
+    assert len({manifest.file_checksum for manifest in manifests}) == 1
+    source_file_ids = {str(manifest.id) for manifest in manifests}
+    assert {
+        row.source_file_id
+        for row in db_session.execute(
+            select(StagingRecord).where(StagingRecord.ingestion_batch_id == batch_id)
+        ).scalars()
+    } == source_file_ids
+    assert db_session.execute(
+        select(StagingRecord).where(
+            StagingRecord.ingestion_batch_id == batch_id,
+            StagingRecord.validation_status == "DUPLICATE",
+        )
+    ).scalars().first() is not None
+
+    calls = db_session.execute(
+        select(VesselCall).where(
+            VesselCall.tenant_id == "tenant-synthetic-01",
+            VesselCall.is_merged.is_(False),
+        )
+    ).scalars().all()
+    assert len(calls) == 72
+    call_ids = [call.id for call in calls]
+    assert db_session.execute(
+        select(JourneyInstance).where(JourneyInstance.vessel_call_id.in_(call_ids))
+    ).scalars().all().__len__() == 72
+    shifting_count = len(
+        db_session.execute(
+            select(StageOccurrence)
+            .join(JourneyInstance, StageOccurrence.journey_instance_id == JourneyInstance.id)
+            .where(
+                JourneyInstance.vessel_call_id.in_(call_ids),
+                StageOccurrence.stage_name == "Optional Shifting",
+                StageOccurrence.availability == "AVAILABLE",
+            )
+        ).scalars().all()
+    )
+    assert shifting_count == 8
+
+    service_count = len(
+        db_session.execute(
+            select(ServiceExecution)
+            .join(ServiceAssignment, ServiceExecution.service_assignment_id == ServiceAssignment.id)
+            .join(ServiceRequest, ServiceAssignment.service_request_id == ServiceRequest.id)
+            .where(ServiceRequest.vessel_call_id.in_(call_ids))
+        ).scalars().all()
+    )
+    assert service_count == 432
+
+    timings = client.get("/api/v1/delays/service-timings", headers=auth_headers)
+    assert timings.status_code == 200
+    assert timings.json()["total"] == 432
+    assert sum(item["execution_delay_status"] == "EARLY" for item in timings.json()["items"]) == 60
+    arrival = client.get("/api/v1/delays/service-timings?leg=ARRIVAL_INWARD", headers=auth_headers).json()
+    sailing = client.get("/api/v1/delays/service-timings?leg=SAILING_OUTWARD", headers=auth_headers).json()
+    shifting = client.get("/api/v1/delays/service-timings?leg=SHIFTING", headers=auth_headers).json()
+    assert arrival["total"] > 0
+    assert sailing["total"] > 0
+    assert shifting["total"] == 0  # Fixture has shifting events, but no shifting service rows.
+    assert all(item["leg"] == "ARRIVAL_INWARD" for item in arrival["items"])
+    assert all(item["leg"] == "SAILING_OUTWARD" for item in sailing["items"])
+
+    aggregates = db_session.execute(
+        select(StatisticalAggregate).where(StatisticalAggregate.tenant_id == "tenant-synthetic-01")
+    ).scalars().all()
+    assert aggregates
+    assert any(
+        aggregate.observation_count
+        and aggregate.p75_hours is not None
+        and aggregate.p90_hours is not None
+        and aggregate.min_hours is not None
+        and aggregate.max_hours is not None
+        for aggregate in aggregates
+    )
+    scorecard = client.get("/api/v1/kpis/scorecard", headers=auth_headers)
+    assert scorecard.status_code == 200
+    assert scorecard.json()["total_kpis"] == 55
 
 
 def test_upload_rejects_sixteen_workbooks_before_parsing(auth_headers):
@@ -394,7 +517,7 @@ def test_reset_removes_staging_rows_before_batch_rows(db_session):
     """A tenant reset must not leave stale staging evidence for a later dataset."""
     batch = load_synthetic_dataset(db_session, "fixtures/Synthetic_Marine_Time_Motion_Test_Data.xlsx")
     assert db_session.execute(select(StagingRecord).where(StagingRecord.ingestion_batch_id == batch)).scalars().first()
-    reset_tenant_dataset(db_session, "synthetic-tenant")
+    reset_tenant_dataset(db_session, "tenant-synthetic-01")
     assert (
         db_session.execute(select(StagingRecord).where(StagingRecord.ingestion_batch_id == batch)).scalars().first()
         is None

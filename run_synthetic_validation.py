@@ -26,6 +26,8 @@ import polars as pl
 from sqlalchemy import create_engine, select, text
 from sqlalchemy.orm import Session, sessionmaker
 
+from apps.api.core.config import settings
+
 from apps.api.models.analytics import (
     BottleneckRecord,
     LeadTimeDefinition,
@@ -333,7 +335,8 @@ def run_full_validation() -> Dict[str, Any]:
         file_size_bytes = os.path.getsize(fixture_file)
 
         # Step 2: Reset isolated synthetic test tenant and ingest data
-        print("1. Resetting synthetic-tenant and ingesting fixture worksheets...")
+        tenant_id = settings.development_tenant_id
+        print(f"1. Resetting {tenant_id} and ingesting fixture worksheets...")
         batch_id = load_synthetic_dataset(db, fixture_file)
 
         # Step 3: Execute Quality Engine
@@ -343,14 +346,14 @@ def run_full_validation() -> Dict[str, Any]:
 
         # Step 4: Execute Identity Resolution Engine (74 -> 72 base calls)
         print("3. Running Identity Resolution Engine...")
-        id_engine = IdentityEngine(db, tenant_id="synthetic-tenant")
+        id_engine = IdentityEngine(db, tenant_id=tenant_id)
         initial_pop = id_engine.get_consolidated_population_count()
         merge_decisions = id_engine.auto_merge_candidates()
         final_pop = id_engine.get_consolidated_population_count()
 
         # Step 5: Execute Journey Reconstruction Engine
         print("4. Running Journey Reconstruction Engine...")
-        journey_engine = JourneyReconstructionEngine(db, tenant_id="synthetic-tenant")
+        journey_engine = JourneyReconstructionEngine(db, tenant_id=tenant_id)
         journey_summary = journey_engine.reconstruct_all()
 
         shifting_calls = 0
@@ -367,36 +370,36 @@ def run_full_validation() -> Dict[str, Any]:
 
         # Step 6: Execute Analytics Engine (duration calculations & statistics)
         print("5. Running Analytics Engine...")
-        analytics_engine = AnalyticsEngine(db, tenant_id="synthetic-tenant")
+        analytics_engine = AnalyticsEngine(db, tenant_id=tenant_id)
         analytics_engine.compute_all_metrics()
         analytics_engine.compute_all_statistics()
         recon_report = reconcile_expected_outputs(db, tolerance=0.02)
 
         # Step 7: Execute Governed KPI Engine
         print("6. Running Governed KPI Engine...")
-        kpi_engine = KPIEngine(db, tenant_id="synthetic-tenant")
+        kpi_engine = KPIEngine(db, tenant_id=tenant_id)
         kpi_summary = kpi_engine.calculate_all_kpis()
 
         # Step 8: Execute Delays, Bottlenecks, Outliers, Criticality, Alerts
         print("7. Running Delay, Bottleneck, Outlier, and Alert Engines...")
-        outlier_engine = OutlierEngine(db, tenant_id="synthetic-tenant")
+        outlier_engine = OutlierEngine(db, tenant_id=tenant_id)
         detected_outliers = outlier_engine.detect_all_outliers(persist=True)
 
-        bottleneck_engine = BottleneckEngine(db, tenant_id="synthetic-tenant")
+        bottleneck_engine = BottleneckEngine(db, tenant_id=tenant_id)
         ranked_bottlenecks = bottleneck_engine.calculate_bottlenecks(persist=True)
 
-        alert_engine = AlertEngine(db, tenant_id="synthetic-tenant")
+        alert_engine = AlertEngine(db, tenant_id=tenant_id)
         active_alerts = alert_engine.evaluate_rules()
 
-        delay_service = DelayService(db, tenant_id="synthetic-tenant")
+        delay_service = DelayService(db, tenant_id=tenant_id)
         delays_summary = delay_service.get_delays_summary()
 
         # Step 8: Executive Dashboard & 3-Way Reconciliation (spec §20.13, §21A.5.10)
         print("8. Running Executive Dashboard & 3-Way Reconciliation Engine...")
-        dash_svc = ExecutiveDashboardService(db, tenant_id="synthetic-tenant")
+        dash_svc = ExecutiveDashboardService(db, tenant_id=tenant_id)
         dash_summary = dash_svc.get_executive_summary()
         repo = VesselCallRepository(db)
-        scope = DataScope(tenant_id="synthetic-tenant")
+        scope = DataScope(tenant_id=tenant_id)
 
         recon_combos = [
             ("All Calls (Unfiltered)", {}),
@@ -423,7 +426,7 @@ def run_full_validation() -> Dict[str, Any]:
             else:
                 a_tot = repo.count(scope=scope, is_merged=False, **api_filters)
 
-            q = select(func.count(VesselCall.id)).where(VesselCall.is_merged == False, VesselCall.tenant_id == "synthetic-tenant")
+            q = select(func.count(VesselCall.id)).where(VesselCall.is_merged == False, VesselCall.tenant_id == tenant_id)
             if "vessel_type" in c_filters:
                 q = q.where(VesselCall.vessel_type == c_filters["vessel_type"])
             if "cargo_type" in c_filters:
@@ -450,19 +453,19 @@ def run_full_validation() -> Dict[str, Any]:
         dq_passed_count = sum(1 for d in dq_results if d["status"] == "PASS")
 
         # Step 10: Count worksheets and database table totals for consistency check
-        db_calls = db.execute(select(VesselCall).where(VesselCall.is_merged == False, VesselCall.tenant_id == "synthetic-tenant")).scalars().all()
+        db_calls = db.execute(select(VesselCall).where(VesselCall.is_merged == False, VesselCall.tenant_id == tenant_id)).scalars().all()
         db_delays = db.execute(
-            select(Delay).join(VesselCall, Delay.vessel_call_id == VesselCall.id).where(VesselCall.tenant_id == "synthetic-tenant")
+            select(Delay).join(VesselCall, Delay.vessel_call_id == VesselCall.id).where(VesselCall.tenant_id == tenant_id)
         ).scalars().all()
         db_cargo = db.execute(
-            select(CargoOperation).join(VesselCall, CargoOperation.vessel_call_id == VesselCall.id).where(VesselCall.tenant_id == "synthetic-tenant")
+            select(CargoOperation).join(VesselCall, CargoOperation.vessel_call_id == VesselCall.id).where(VesselCall.tenant_id == tenant_id)
         ).scalars().all()
         db_services = db.execute(
             select(ServiceExecution)
             .join(ServiceAssignment, ServiceExecution.service_assignment_id == ServiceAssignment.id)
             .join(ServiceRequest, ServiceAssignment.service_request_id == ServiceRequest.id)
             .join(VesselCall, ServiceRequest.vessel_call_id == VesselCall.id)
-            .where(VesselCall.tenant_id == "synthetic-tenant")
+            .where(VesselCall.tenant_id == tenant_id)
         ).scalars().all()
 
         exec_time = round(time.time() - start_time, 2)

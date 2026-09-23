@@ -7,6 +7,7 @@ import polars as pl
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from apps.api.auth.principal import UserPrincipal
+from apps.api.auth.tenant import resolve_principal_tenant
 from apps.api.core.config import settings
 from apps.api.models.analytics import LeadTimeDefinition, LeadTimeResult, KPI
 from apps.api.models.canonical import VesselCall
@@ -23,7 +24,7 @@ TOOL_ARGUMENTS = {
  "vessel_journey": {"vessel_call_id": str},
  "correlation_analysis": {"left_metric": str, "right_metric": str},
 }
-def tenant(p: UserPrincipal) -> str: return "synthetic-tenant" if p.data_scope.tenant_id in ("*", "tenant-synthetic-01") else p.data_scope.tenant_id
+def tenant(p: UserPrincipal) -> str: return resolve_principal_tenant(p)
 
 class GovernedTools:
  def __init__(self, db: Session, principal: UserPrincipal): self.db, self.p, self.tenant = db, principal, tenant(principal)

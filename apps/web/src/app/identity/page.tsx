@@ -98,7 +98,7 @@ export default function IdentityPage() {
       }
 
       // 1. Population summary
-      const popRes = await fetch(`${API_URL}/identity/population?tenant_id=synthetic-tenant`, { headers })
+      const popRes = await fetch(`${API_URL}/identity/population`, { headers })
       if (popRes.ok) {
         const popData = await popRes.json()
         setPopulation(popData)

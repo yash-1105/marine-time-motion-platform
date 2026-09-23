@@ -24,7 +24,7 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 
 from apps.api.main import app, settings
-from apps.api.models.analytics import KPI, KPIFormulaVersion
+from apps.api.models.analytics import KPI, KPIFormulaVersion, KPIResult
 from apps.api.models.audit import AuditEvent
 from apps.api.models.canonical import (
     CargoOperation,
@@ -77,9 +77,9 @@ def governed_kpi_api_dataset():
     try:
         load_synthetic_dataset(session, "fixtures/Synthetic_Marine_Time_Motion_Test_Data.xlsx")
         DataQualityEngine(session).run_all()
-        IdentityEngine(session, tenant_id="synthetic-tenant").auto_merge_candidates()
-        JourneyReconstructionEngine(session, tenant_id="synthetic-tenant").reconstruct_all()
-        analytics = AnalyticsEngine(session, tenant_id="synthetic-tenant", exclude_quarantined=True)
+        IdentityEngine(session, tenant_id="tenant-synthetic-01").auto_merge_candidates()
+        JourneyReconstructionEngine(session, tenant_id="tenant-synthetic-01").reconstruct_all()
+        analytics = AnalyticsEngine(session, tenant_id="tenant-synthetic-01", exclude_quarantined=True)
         analytics.compute_all_metrics()
         analytics.compute_all_statistics()
         yield
@@ -143,7 +143,7 @@ def test_alias_pairs_primary_and_alias_status(db_session):
 
 def test_no_source_data_kpis_never_produce_number(db_session):
     """Verifies that all source-limited KPIs return NO_SOURCE_DATA, never zero."""
-    engine = KPIEngine(db_session, tenant_id="synthetic-tenant")
+    engine = KPIEngine(db_session, tenant_id="tenant-synthetic-01")
     kpi_map = engine.ensure_registry()
 
     no_src_codes = [code for code, k in kpi_map.items() if k.availability_status == "NO_SOURCE_DATA"]
@@ -422,7 +422,7 @@ def test_green_amber_red_banding_logic():
 
 def test_permissioned_recalculation_audited(db_session):
     """Verifies that recalculation produces a versioned result and writes an audit event."""
-    engine = KPIEngine(db_session, tenant_id="synthetic-tenant")
+    engine = KPIEngine(db_session, tenant_id="tenant-synthetic-01")
     actor = "steward-007"
     reason = "Quality rule validation run"
 
@@ -445,7 +445,24 @@ def test_permissioned_recalculation_audited(db_session):
 
 def test_trend_calculation_rolling_average(db_session):
     """Verifies trend points, rolling average, and direction classification."""
-    engine = KPIEngine(db_session, tenant_id="synthetic-tenant")
+    engine = KPIEngine(db_session, tenant_id="tenant-synthetic-01")
+    kpi = db_session.execute(select(KPI).where(KPI.code == "KPI-01")).scalar_one()
+    now = datetime.now(UTC)
+    db_session.add_all(
+        [
+            KPIResult(
+                tenant_id="tenant-synthetic-01",
+                kpi_id=kpi.id,
+                value=value,
+                status="COMPUTED",
+                band="GREEN",
+                period_start=now - timedelta(days=30 * offset),
+                calculated_at=now - timedelta(days=30 * offset),
+            )
+            for offset, value in ((2, 12.0), (1, 11.0), (0, 10.0))
+        ]
+    )
+    db_session.flush()
     trend = engine.get_trends("KPI-01", grain="MONTHLY", periods=4)
 
     assert trend["status"] == "COMPUTED"

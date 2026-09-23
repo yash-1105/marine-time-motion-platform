@@ -8,6 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from apps.api.auth.dependencies import require
+from apps.api.auth.tenant import resolve_principal_tenant
 from apps.api.core.database import get_db
 from apps.api.models.analytics import OutlierRecord
 from apps.api.models.canonical import Delay, EventOccurrence, ServiceAssignment, ServiceExecution, ServiceRequest, VesselCall
@@ -56,7 +57,7 @@ def run_quality_engine(db: Session = Depends(get_db)):
 
 
 def _tenant(principal) -> str:
-    return "synthetic-tenant" if principal.data_scope.tenant_id in ("*", "tenant-synthetic-01") else principal.data_scope.tenant_id
+    return resolve_principal_tenant(principal)
 
 
 def _reference_object(db: Session, reference: str):

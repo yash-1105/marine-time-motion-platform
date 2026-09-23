@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from apps.api.auth.dependencies import require
 from apps.api.auth.principal import UserPrincipal
+from apps.api.auth.tenant import resolve_principal_tenant
 from apps.api.core.database import get_db
 from apps.api.models.reporting import ReportArtifact, ReportDelivery, ReportRun, ReportSchedule, ReportTemplate
 from apps.api.services.audit import log_audit_event
@@ -17,7 +18,7 @@ from apps.api.services.reporting.service import ReportService, register_template
 
 router = APIRouter(prefix="/reports", tags=["reporting"])
 
-def tenant(p: UserPrincipal) -> str: return "synthetic-tenant" if p.data_scope.tenant_id in ("*", "tenant-synthetic-01") else p.data_scope.tenant_id
+def tenant(p: UserPrincipal) -> str: return resolve_principal_tenant(p)
 class CreateReport(BaseModel):
     template_id: str = "daily-operations"; formats: list[str] = Field(default=["PDF", "XLSX", "PPTX", "DOCX"])
     period_start: datetime | None = None; period_end: datetime | None = None; filters: dict = Field(default_factory=dict)

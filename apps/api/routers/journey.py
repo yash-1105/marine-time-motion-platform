@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from apps.api.auth.dependencies import require
 from apps.api.auth.principal import UserPrincipal
+from apps.api.auth.tenant import resolve_principal_tenant
 from apps.api.core.database import get_db
 from apps.api.models.canonical import VesselCall
 from apps.api.models.journey import (
@@ -32,6 +33,16 @@ class CorrectionRequest(BaseModel):
     approval_state: str = "APPROVED"
 
 
+def _require_scoped_vessel_call(db: Session, principal: UserPrincipal, vessel_call_id: str) -> VesselCall:
+    tenant_id = resolve_principal_tenant(principal)
+    vessel_call = db.execute(
+        select(VesselCall).where(VesselCall.id == vessel_call_id, VesselCall.tenant_id == tenant_id)
+    ).scalar_one_or_none()
+    if not vessel_call:
+        raise HTTPException(status_code=404, detail="VesselCall not found")
+    return vessel_call
+
+
 @router.post("/reconstruct")
 def run_reconstruction(
     vessel_call_id: str | None = Query(None),
@@ -42,12 +53,10 @@ def run_reconstruction(
     Reconstructs the journey for one vessel call, or every unmerged vessel call in the
     principal's tenant when no id is given.
     """
-    target_tenant = "synthetic-tenant" if principal.data_scope.tenant_id in ("*", "tenant-synthetic-01") else principal.data_scope.tenant_id
+    target_tenant = resolve_principal_tenant(principal)
     engine = JourneyReconstructionEngine(db, tenant_id=target_tenant)
     if vessel_call_id:
-        vc = db.execute(select(VesselCall).where(VesselCall.id == vessel_call_id)).scalar_one_or_none()
-        if not vc:
-            raise HTTPException(status_code=404, detail="VesselCall not found")
+        vc = _require_scoped_vessel_call(db, principal, vessel_call_id)
         instance = engine.reconstruct_vessel_call(vc, triggered_by="MANUAL")
         db.commit()
         return {"status": "success", "vessel_call_id": vessel_call_id, "journey_instance_id": str(instance.id)}
@@ -63,9 +72,7 @@ def get_journey(
     principal: UserPrincipal = Depends(require("view", "vessel_call")),
 ):
     """Unified chronological timeline, stage grouping, decomposition, and deviation report."""
-    vc = db.execute(select(VesselCall).where(VesselCall.id == vessel_call_id)).scalar_one_or_none()
-    if not vc:
-        raise HTTPException(status_code=404, detail="VesselCall not found")
+    vc = _require_scoped_vessel_call(db, principal, vessel_call_id)
 
     instance = db.execute(
         select(JourneyInstance).where(JourneyInstance.vessel_call_id == vessel_call_id)
@@ -139,6 +146,7 @@ def get_conflicts(
     principal: UserPrincipal = Depends(require("view", "vessel_call")),
 ):
     """Canonical occurrence selection decisions, with every retained observation visible."""
+    _require_scoped_vessel_call(db, principal, vessel_call_id)
     rows = db.execute(
         select(CanonicalObservation).where(CanonicalObservation.vessel_call_id == vessel_call_id)
     ).scalars().all()
@@ -169,6 +177,7 @@ def get_vessel_events(
     from apps.api.models.canonical import EventOccurrence
     from apps.api.models.config import EventDefinition
 
+    _require_scoped_vessel_call(db, principal, vessel_call_id)
     events = db.execute(
         select(EventOccurrence, EventDefinition)
         .join(EventDefinition, EventOccurrence.event_definition_id == EventDefinition.id)
@@ -204,7 +213,8 @@ def get_service_timings(
     """Compact journey drill-down for Requested, Scheduled, Served and FRD delays."""
     from apps.api.services.delays.service import DelayService
 
-    tenant = "synthetic-tenant" if principal.data_scope.tenant_id in ("*", "tenant-synthetic-01") else principal.data_scope.tenant_id
+    _require_scoped_vessel_call(db, principal, vessel_call_id)
+    tenant = resolve_principal_tenant(principal)
     items = DelayService(db, tenant_id=tenant).list_service_timings()["items"]
     return [item for item in items if item["vessel_call_id"] == vessel_call_id]
 
@@ -220,6 +230,7 @@ def create_correction(
     Creates a new canonical observation superseding the prior one, with reason, actor, timestamp
     and approval state. Never mutates raw. Triggers recalculation once approved.
     """
+    _require_scoped_vessel_call(db, principal, vessel_call_id)
     try:
         correction = JourneyCorrectionService.create_correction(
             db=db,
@@ -250,6 +261,7 @@ def list_corrections(
     db: Session = Depends(get_db),
     principal: UserPrincipal = Depends(require("view", "vessel_call")),
 ):
+    _require_scoped_vessel_call(db, principal, vessel_call_id)
     rows = db.execute(
         select(ObservationCorrection)
         .where(ObservationCorrection.vessel_call_id == vessel_call_id)
@@ -277,6 +289,7 @@ def generate_narrative(
     principal: UserPrincipal = Depends(require("view", "vessel_call")),
 ):
     """Generates a grounded, factual AI narrative citing internal record ids."""
+    _require_scoped_vessel_call(db, principal, vessel_call_id)
     try:
         narrative = JourneyNarrativeService.generate(db, vessel_call_id)
     except ValueError as e:
@@ -299,6 +312,7 @@ def get_reconstruction_history(
     db: Session = Depends(get_db),
     principal: UserPrincipal = Depends(require("view", "vessel_call")),
 ):
+    _require_scoped_vessel_call(db, principal, vessel_call_id)
     rows = db.execute(
         select(ReconstructionHistory)
         .where(ReconstructionHistory.vessel_call_id == vessel_call_id)
@@ -323,9 +337,7 @@ def get_coverage_summary(
     principal: UserPrincipal = Depends(require("view", "vessel_call")),
 ):
     """Aggregate reconstruction coverage across all active vessel calls in scope."""
-    target_tenant = tenant_id or (
-        "synthetic-tenant" if principal.data_scope.tenant_id in ("*", "tenant-synthetic-01") else principal.data_scope.tenant_id
-    )
+    target_tenant = resolve_principal_tenant(principal, tenant_id)
     vessel_calls = db.execute(
         select(VesselCall).where(VesselCall.tenant_id == target_tenant, VesselCall.is_merged == False)  # noqa: E712
     ).scalars().all()

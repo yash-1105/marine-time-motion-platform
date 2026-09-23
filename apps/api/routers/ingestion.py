@@ -7,6 +7,7 @@ from sqlalchemy import desc, select, text
 from sqlalchemy.orm import Session
 
 from apps.api.auth.dependencies import require
+from apps.api.auth.tenant import resolve_principal_tenant
 from apps.api.core.config import settings
 from apps.api.core.database import get_db
 from apps.api.models.ingestion import IngestionBatch, IngestionFile
@@ -19,9 +20,7 @@ router = APIRouter(prefix="/ingestion", tags=["ingestion"])
 
 
 def _resolve_tenant(principal) -> str:
-    if principal.data_scope.tenant_id in ("*", "tenant-synthetic-01"):
-        return "synthetic-tenant"
-    return principal.data_scope.tenant_id
+    return resolve_principal_tenant(principal)
 
 
 @router.post("/upload", status_code=202)

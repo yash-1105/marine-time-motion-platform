@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from apps.api.auth.dependencies import require
 from apps.api.auth.principal import UserPrincipal
+from apps.api.auth.tenant import resolve_principal_tenant
 from apps.api.core.database import get_db
 from apps.api.models.analytics import KPI, KPIFormulaVersion, KPIResult, LeadTimeDefinition, StatisticalAggregate
 from apps.api.models.canonical import ServiceAssignment, ServiceExecution, ServiceRequest, VesselCall
@@ -91,11 +92,7 @@ def _service_line_rows(
 
 
 def _resolve_tenant(principal: UserPrincipal, explicit_tenant: str | None = None) -> str:
-    if explicit_tenant:
-        return explicit_tenant
-    if principal.data_scope.tenant_id in ("*", "tenant-synthetic-01"):
-        return "synthetic-tenant"
-    return principal.data_scope.tenant_id
+    return resolve_principal_tenant(principal, explicit_tenant)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -170,6 +167,7 @@ def get_scorecard(
     # snapshot is not available or predates the active committed batch.
     kpi_map = engine.ensure_registry()
     snapshot_filter = (
+        KPIResult.tenant_id == target_tenant,
         KPIResult.period_start.is_(None),
         KPIResult.period_end.is_(None),
         KPIResult.grain == "ALL",
@@ -390,10 +388,14 @@ def list_governed_statistics(
     These are produced by AnalyticsEngine/Polars during the ingestion pipeline; this
     route intentionally never recalculates a percentile in a second implementation.
     """
+    tenant_id = _resolve_tenant(principal)
     rows = db.execute(
         select(StatisticalAggregate, LeadTimeDefinition)
         .join(LeadTimeDefinition, LeadTimeDefinition.id == StatisticalAggregate.definition_id)
-        .where(StatisticalAggregate.cohort_key == "all")
+        .where(
+            StatisticalAggregate.tenant_id == tenant_id,
+            StatisticalAggregate.cohort_key == "all",
+        )
         .order_by(LeadTimeDefinition.name.asc())
     ).all()
     return {
@@ -591,8 +593,13 @@ def get_kpi_detail(
 
     formula_versions = db.execute(select(KPIFormulaVersion).where(KPIFormulaVersion.kpi_id == kpi.id)).scalars().all()
 
+    tenant_id = _resolve_tenant(principal)
     latest_result = (
-        db.execute(select(KPIResult).where(KPIResult.kpi_id == kpi.id).order_by(desc(KPIResult.calculated_at)))
+        db.execute(
+            select(KPIResult)
+            .where(KPIResult.kpi_id == kpi.id, KPIResult.tenant_id == tenant_id)
+            .order_by(desc(KPIResult.calculated_at))
+        )
         .scalars()
         .first()
     )
@@ -655,9 +662,13 @@ def get_kpi_results(
     if not kpi:
         raise HTTPException(status_code=404, detail=f"KPI '{id_or_code}' not found.")
 
+    tenant_id = _resolve_tenant(principal)
     results = (
         db.execute(
-            select(KPIResult).where(KPIResult.kpi_id == kpi.id).order_by(desc(KPIResult.calculated_at)).limit(limit)
+            select(KPIResult)
+            .where(KPIResult.kpi_id == kpi.id, KPIResult.tenant_id == tenant_id)
+            .order_by(desc(KPIResult.calculated_at))
+            .limit(limit)
         )
         .scalars()
         .all()

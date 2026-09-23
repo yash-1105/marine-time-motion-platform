@@ -98,12 +98,7 @@ class VesselCallRepository:
     def get_by_id(self, scope: DataScope, call_id: str) -> VesselCall | None:
         builder = ScopedQueryBuilder(VesselCall, scope)
         query = builder.filter(VesselCall.id == call_id).build(self.db)
-        call = query.first()
-        if not call and scope.tenant_id in ("synthetic-tenant", "tenant-synthetic-01"):
-            alt_tenant = "tenant-synthetic-01" if scope.tenant_id == "synthetic-tenant" else "synthetic-tenant"
-            alt_scope = DataScope(tenant_id=alt_tenant, port_id=scope.port_id, terminal_id=scope.terminal_id)
-            call = ScopedQueryBuilder(VesselCall, alt_scope).filter(VesselCall.id == call_id).build(self.db).first()
-        return call
+        return query.first()
 
     def create(self, scope: DataScope, **attributes) -> VesselCall:
         # Enforce tenant assignment from scope

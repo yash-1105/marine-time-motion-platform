@@ -7,6 +7,10 @@ class Settings(BaseSettings):
 
     # Environment
     environment: str = "development"
+    # Server-owned identity for the governed synthetic development/test tenant.
+    # Persisted tenant-scoped data must always use the authenticated principal's
+    # tenant; this setting only supplies that identity to seed/test principals.
+    development_tenant_id: str = "tenant-synthetic-01"
 
     # Database & Cache
     database_url: str = "postgresql://admin:password@localhost:5434/marine_platform"

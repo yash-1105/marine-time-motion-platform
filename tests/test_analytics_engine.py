@@ -53,10 +53,10 @@ def analytics_fixture(db_session):
     """End-to-end pipeline run matching `make validate`: ingestion → DQ → identity → journey → analytics."""
     load_synthetic_dataset(db_session, "fixtures/Synthetic_Marine_Time_Motion_Test_Data.xlsx")
     DataQualityEngine(db_session).run_all()
-    IdentityEngine(db_session, tenant_id="synthetic-tenant").auto_merge_candidates()
-    JourneyReconstructionEngine(db_session, tenant_id="synthetic-tenant").reconstruct_all()
+    IdentityEngine(db_session, tenant_id="tenant-synthetic-01").auto_merge_candidates()
+    JourneyReconstructionEngine(db_session, tenant_id="tenant-synthetic-01").reconstruct_all()
 
-    engine = AnalyticsEngine(db_session, tenant_id="synthetic-tenant", exclude_quarantined=True)
+    engine = AnalyticsEngine(db_session, tenant_id="tenant-synthetic-01", exclude_quarantined=True)
     summary = engine.compute_all_metrics()
     engine.compute_all_statistics()
     return summary
@@ -97,7 +97,7 @@ def test_all_8_reconciliation_metrics_compute(db_session, analytics_fixture):
 
 def test_repeated_metric_compute_is_idempotent(db_session, analytics_fixture):
     """A repeated governed recalculation must not multiply result rows."""
-    engine = AnalyticsEngine(db_session, tenant_id="synthetic-tenant")
+    engine = AnalyticsEngine(db_session, tenant_id="tenant-synthetic-01")
     engine.compute_all_metrics()
     engine.compute_all_metrics()
     definition = db_session.execute(
@@ -247,7 +247,7 @@ def test_governed_statistics_expose_p75_min_max_and_extremes(db_session, analyti
     from apps.api.services.analytics.engine import AnalyticsEngine
 
     definition = ensure_catalogue(db_session)["Turnaround"]
-    aggregate = AnalyticsEngine(db_session, tenant_id="synthetic-tenant").compute_statistics(definition.id)
+    aggregate = AnalyticsEngine(db_session, tenant_id="tenant-synthetic-01").compute_statistics(definition.id)
     available = db_session.execute(
         select(LeadTimeResult).where(
             LeadTimeResult.definition_id == definition.id,
@@ -346,7 +346,7 @@ def test_no_source_data_metrics_registered_unavailable(db_session, analytics_fix
 
 def test_custom_builder_handles_event_pairs_and_repeated_occurrences(db_session, analytics_fixture):
     """Verifies that CustomLeadTimeBuilder computes ad-hoc event durations and handles occurrence selection."""
-    builder = CustomLeadTimeBuilder(db_session, tenant_id="synthetic-tenant")
+    builder = CustomLeadTimeBuilder(db_session, tenant_id="tenant-synthetic-01")
 
     # 1. First occurrence
     res_first = builder.build(

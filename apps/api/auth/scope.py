@@ -14,8 +14,6 @@ class DataScope(BaseModel):
     def allows_tenant(self, tenant: str) -> bool:
         if self.tenant_id == "*":
             return True
-        if self.tenant_id in ("tenant-synthetic-01", "synthetic-tenant") and tenant in ("tenant-synthetic-01", "synthetic-tenant"):
-            return True
         return self.tenant_id == tenant
 
     def allows_port(self, port: str | None) -> bool:

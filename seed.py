@@ -183,7 +183,7 @@ def seed_users():
             user = User(
                 email=email,
                 full_name=f"{role_name} User",
-                tenant_id="tenant-synthetic-01",
+                tenant_id=settings.development_tenant_id,
                 port_id="*" if "Administrator" in role_name or "Auditor" in role_name or "Executive" in role_name else "ZADUR",
                 terminal_id="*" if "Administrator" in role_name else "DCT",
                 is_active=True,
@@ -215,7 +215,7 @@ def seed_service_accounts():
             client_secret_hash=secret_hash,
             name="PMS Connector Service Account",
             role_id=role.id,
-            tenant_id="tenant-synthetic-01",
+            tenant_id=settings.development_tenant_id,
             port_id="ZADUR",
             terminal_id="DCT",
             is_active=True,
