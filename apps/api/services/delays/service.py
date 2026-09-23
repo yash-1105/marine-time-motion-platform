@@ -18,11 +18,14 @@ from apps.api.models.audit import AuditEvent
 from apps.api.models.canonical import (
     Delay,
     DelayAllocation,
+    EventOccurrence,
     ServiceAssignment,
     ServiceExecution,
     ServiceRequest,
     VesselCall,
 )
+from apps.api.models.config import EventDefinition
+from apps.api.models.journey import CanonicalObservation
 from apps.api.services.analytics.duration_semantics import (
     compute_execution_delay,
     compute_lead_time,
@@ -52,8 +55,9 @@ class DelayService:
     def list_service_timings(self, leg: str = "ALL") -> dict[str, Any]:
         """Expose governed service timing semantics without treating duration as delay.
 
-        Service end timestamps are not supplied by the current source contract, so
-        `service_duration_hours` is deliberately UNAVAILABLE rather than inferred.
+        The item list is leg-filtered. Aggregate overview and duration-range widgets
+        intentionally represent the complete governed dataset and are never filtered
+        by the table controls.
         """
         stmt = (
             select(ServiceRequest, ServiceAssignment, ServiceExecution, VesselCall)
@@ -65,13 +69,9 @@ class DelayService:
         if self.tenant_id != "*":
             stmt = stmt.where(VesselCall.tenant_id == self.tenant_id)
 
-        rows = []
-        service_types: set[str] = set()
+        all_rows = []
         for request, assignment, execution, vessel_call in self.db.execute(stmt).all():
-            service_types.add(request.service_type)
             movement_leg = self._leg(request.movement_type)
-            if leg != "ALL" and movement_leg != leg:
-                continue
 
             planning_result = compute_planning_lead_time(request.submission_time, request.requested_time)
             scheduled_time = assignment.scheduled_time if assignment else None
@@ -101,7 +101,7 @@ class DelayService:
             delay_status = (
                 "UNAVAILABLE" if execution_delay is None else "EARLY" if execution_delay < 0 else "ON_TIME" if execution_delay == 0 else "LATE"
             )
-            rows.append({
+            all_rows.append({
                 "service_request_id": str(request.id), "service_assignment_id": str(assignment.id) if assignment else None, "service_execution_id": str(execution.id) if execution else None,
                 "vessel_call_id": str(vessel_call.id), "vcn": vessel_call.vcn, "vessel_name": vessel_call.vessel_name,
                 "movement": request.movement_type, "leg": movement_leg, "service_type": request.service_type,
@@ -117,13 +117,14 @@ class DelayService:
                 "source_record_ids": [str(record.id) for record in (request, assignment, execution) if record],
                 "data_quality_status": dq_status, "unavailable_inputs": unavailable,
             })
+        rows = [row for row in all_rows if leg == "ALL" or row["leg"] == leg]
         return {
             "leg": leg,
             "formula_version": "service-timing-v1.0",
             "items": rows,
             "total": len(rows),
-            "delay_overview": self._service_delay_overview(rows, leg),
-            "duration_ranges": self._service_duration_ranges(rows, service_types, leg),
+            "delay_overview": self._service_delay_overview(all_rows, "ALL"),
+            "duration_ranges": self._service_duration_ranges(),
         }
 
     @staticmethod
@@ -220,33 +221,110 @@ class DelayService:
             self._anchorage_wait_summary(leg),
         ]
 
-    @staticmethod
-    def _service_duration_ranges(
-        rows: list[dict[str, Any]],
-        service_types: set[str],
-        leg: str,
-    ) -> list[dict[str, Any]]:
+    def _event_pair_durations(self, start_name: str, end_name: str) -> list[float]:
+        """Return governed, tenant-scoped durations for an explicit event pair.
+
+        Canonical-observation winners take precedence when a source conflict was
+        resolved. Quarantined and superseded observations never enter the range.
+        Negative ordered durations remain DQ sequence violations and are excluded.
+        """
+        definitions = {
+            definition.name: definition.id
+            for definition in self.db.execute(
+                select(EventDefinition).where(EventDefinition.name.in_([start_name, end_name]))
+            ).scalars()
+        }
+        start_id, end_id = definitions.get(start_name), definitions.get(end_name)
+        if not start_id or not end_id:
+            return []
+
+        vessel_calls = self.db.execute(
+            select(VesselCall).where(
+                VesselCall.tenant_id == self.tenant_id,
+                VesselCall.is_merged.is_(False),
+            )
+        ).scalars().all()
+        vessel_call_ids = [call.id for call in vessel_calls]
+        if not vessel_call_ids:
+            return []
+
+        occurrences = self.db.execute(
+            select(EventOccurrence).where(
+                EventOccurrence.vessel_call_id.in_(vessel_call_ids),
+                EventOccurrence.event_definition_id.in_([start_id, end_id]),
+                EventOccurrence.is_superseded.is_(False),
+                EventOccurrence.is_quarantined.is_(False),
+            ).order_by(EventOccurrence.occurrence_index, EventOccurrence.utc_value)
+        ).scalars().all()
+        occurrence_by_id = {occurrence.id: occurrence for occurrence in occurrences}
+        candidates: dict[tuple[Any, Any], list[EventOccurrence]] = {}
+        for occurrence in occurrences:
+            candidates.setdefault(
+                (occurrence.vessel_call_id, occurrence.event_definition_id), []
+            ).append(occurrence)
+
+        winners = {
+            (observation.vessel_call_id, observation.event_definition_id): observation.selected_event_occurrence_id
+            for observation in self.db.execute(
+                select(CanonicalObservation).where(
+                    CanonicalObservation.vessel_call_id.in_(vessel_call_ids),
+                    CanonicalObservation.event_definition_id.in_([start_id, end_id]),
+                )
+            ).scalars()
+        }
+
+        def selected(call_id: Any, definition_id: Any) -> EventOccurrence | None:
+            winner = occurrence_by_id.get(winners.get((call_id, definition_id)))
+            if winner:
+                return winner
+            options = candidates.get((call_id, definition_id), [])
+            return options[0] if options else None
+
+        values = []
+        for vessel_call in vessel_calls:
+            start = selected(vessel_call.id, start_id)
+            end = selected(vessel_call.id, end_id)
+            if start and end and end.utc_value >= start.utc_value:
+                values.append((end.utc_value - start.utc_value).total_seconds() / 3600.0)
+        return values
+
+    def _service_duration_ranges(self) -> list[dict[str, Any]]:
+        pairs = [
+            {
+                "service_type": "Pilotage Service",
+                "start_event": "PILOT_ON_BOARD_ARRIVAL",
+                "end_event": "PILOT_DISEMBARK_ARRIVAL",
+                "formula": "PILOT_DISEMBARK_ARRIVAL − PILOT_ON_BOARD_ARRIVAL",
+                "unavailable_reason": "No eligible pilot-on-board to pilot-disembark observations are available.",
+            },
+            {
+                "service_type": "Towage / Tug Service",
+                "start_event": "TUG_SERVICE_START_ARRIVAL",
+                "end_event": "TUG_SERVICE_END_ARRIVAL",
+                "formula": "TUG_SERVICE_END_ARRIVAL − TUG_SERVICE_START_ARRIVAL",
+                "unavailable_reason": "A governed tug service-end event is not present in the active dataset.",
+            },
+            {
+                "service_type": "Berthing Service",
+                "start_event": "FIRST_LINE_TIED_ARRIVAL",
+                "end_event": "ALL_FAST_ARRIVAL",
+                "formula": "ALL_FAST_ARRIVAL − FIRST_LINE_TIED_ARRIVAL",
+                "unavailable_reason": "No eligible first-line-tied to all-fast observations are available.",
+            },
+        ]
         ranges = []
-        for service_type in sorted(service_types):
-            values = [
-                row["service_duration_hours"]
-                for row in rows
-                if row["service_type"] == service_type and row.get("service_duration_hours") is not None
-            ]
+        for pair in pairs:
+            values = self._event_pair_durations(pair["start_event"], pair["end_event"])
             ranges.append({
-                "service_type": service_type,
+                **pair,
                 "status": "AVAILABLE" if values else "UNAVAILABLE",
-                "min_hours": min(values) if values else None,
-                "max_hours": max(values) if values else None,
+                "min_hours": round(min(values), 6) if values else None,
+                "max_hours": round(max(values), 6) if values else None,
                 "observation_count": len(values),
                 "unit": "hours",
-                "formula_version": "service-timing-v1.0",
-                "unavailable_reason": None if values else (
-                    "No service duration observations are available for this leg."
-                    if not any(row["service_type"] == service_type for row in rows)
-                    else "No service-end timestamp is supplied by the source contract."
-                ),
-                "leg": leg,
+                "formula_version": "service-duration-range-v1.1",
+                "unavailable_reason": None if values else pair["unavailable_reason"],
+                "leg": "ALL",
             })
         return ranges
 
