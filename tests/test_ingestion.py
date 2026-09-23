@@ -37,6 +37,19 @@ def _workbook(path: Path, vcn: str, include_vessel_name: bool = True) -> str:
     return str(path)
 
 
+def _supplemental_workbook(path: Path, sheet_name: str = "Notes") -> str:
+    """Create a valid XLSX that contains no governed operational worksheet."""
+    from openpyxl import Workbook
+
+    book = Workbook()
+    sheet = book.active
+    sheet.title = sheet_name
+    sheet.append(["Information"])
+    sheet.append(["Supplemental workbook retained for source evidence only."])
+    book.save(path)
+    return str(path)
+
+
 def _delete_uncommitted_group(db_session, batch_id: str) -> None:
     """Remove an isolated parse-only test group without touching the active dataset."""
     for model in (StagingRecord, RawRecord):
@@ -342,6 +355,84 @@ def test_upload_rejects_sixteen_workbooks_before_parsing(auth_headers):
     assert "1 and 15" in response.json()["message"]
 
 
+def test_upload_response_exposes_skipped_supplemental_file(auth_headers, db_session, monkeypatch, tmp_path):
+    monkeypatch.setattr("apps.api.routers.ingestion.process_ingestion_analytics_task.send", lambda *_args: None)
+    governed_path = Path(_workbook(tmp_path / "vessel-calls.xlsx", "API-MIXED-001"))
+    supplemental_path = Path(_supplemental_workbook(tmp_path / "notes.xlsx"))
+    response = client.post(
+        "/api/v1/ingestion/upload",
+        headers=auth_headers,
+        files=[
+            (
+                "files",
+                (
+                    governed_path.name,
+                    governed_path.read_bytes(),
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                ),
+            ),
+            (
+                "files",
+                (
+                    supplemental_path.name,
+                    supplemental_path.read_bytes(),
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                ),
+            ),
+        ],
+    )
+    assert response.status_code == 202
+    payload = response.json()
+    try:
+        assert payload["governed_file_count"] == 1
+        assert payload["skipped_file_count"] == 1
+        by_name = {item["filename"]: item for item in payload["file_results"]}
+        assert by_name["vessel-calls.xlsx"]["parse_status"] == "PARSED"
+        assert by_name["notes.xlsx"] == {
+            "filename": "notes.xlsx",
+            "byte_size": supplemental_path.stat().st_size,
+            "parse_status": "SKIPPED",
+            "validation_status": "SKIPPED",
+            "message": IngestionPipeline.NON_GOVERNED_MESSAGE,
+        }
+    finally:
+        _delete_uncommitted_group(db_session, payload["batch_id"])
+
+
+def test_upload_rejects_group_without_any_governed_worksheet(auth_headers, db_session, tmp_path):
+    paths = [
+        Path(_supplemental_workbook(tmp_path / "notes.xlsx", "Notes")),
+        Path(_supplemental_workbook(tmp_path / "documentation.xlsx", "Documentation")),
+    ]
+    response = client.post(
+        "/api/v1/ingestion/upload",
+        headers=auth_headers,
+        files=[
+            (
+                "files",
+                (
+                    path.name,
+                    path.read_bytes(),
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                ),
+            )
+            for path in paths
+        ],
+    )
+    assert response.status_code == 400
+    assert "No governed worksheets were found across the uploaded files" in response.json()["message"]
+    failed = db_session.execute(
+        select(IngestionBatch)
+        .where(
+            IngestionBatch.tenant_id == "tenant-synthetic-01",
+            IngestionBatch.status == "FAILED",
+        )
+        .order_by(IngestionBatch.created_at.desc())
+    ).scalars().first()
+    assert failed is not None
+    _delete_uncommitted_group(db_session, failed.batch_id)
+
+
 def test_upload_rejects_corrupt_xlsx_container(auth_headers):
     response = client.post(
         "/api/v1/ingestion/upload",
@@ -383,6 +474,73 @@ def test_multi_file_group_retains_manifest_and_cross_file_lineage(db_session, tm
         assert {item.source_file_id for item in raw} == {str(item.id) for item in manifests}
     finally:
         _delete_uncommitted_group(db_session, batch_id)
+
+
+def test_mixed_group_skips_non_governed_workbook(db_session, tmp_path):
+    governed_path = _workbook(tmp_path / "vessel-calls.xlsx", "MIXED-001")
+    supplemental_path = _supplemental_workbook(tmp_path / "notes.xlsx")
+    pipeline = IngestionPipeline(db_session, tenant_id="mixed-file-test")
+    batch_id = pipeline.process_files(
+        [(governed_path, "vessel-calls.xlsx"), (supplemental_path, "notes.xlsx")],
+        force_new=True,
+        commit_canonical=False,
+    )
+    try:
+        manifests = db_session.execute(
+            select(IngestionFile).where(IngestionFile.group_batch_id == batch_id)
+        ).scalars().all()
+        by_name = {manifest.original_filename: manifest for manifest in manifests}
+        assert by_name["vessel-calls.xlsx"].parse_status == "PARSED"
+        assert by_name["vessel-calls.xlsx"].validation_status == "VALIDATED"
+        assert by_name["notes.xlsx"].parse_status == "SKIPPED"
+        assert by_name["notes.xlsx"].validation_status == "SKIPPED"
+        assert by_name["notes.xlsx"].error_message == IngestionPipeline.NON_GOVERNED_MESSAGE
+        skipped_id = str(by_name["notes.xlsx"].id)
+        assert not db_session.execute(
+            select(RawRecord).where(
+                RawRecord.ingestion_batch_id == batch_id,
+                RawRecord.source_file_id == skipped_id,
+            )
+        ).scalars().all()
+        assert not db_session.execute(
+            select(StagingRecord).where(
+                StagingRecord.ingestion_batch_id == batch_id,
+                StagingRecord.source_file_id == skipped_id,
+            )
+        ).scalars().all()
+    finally:
+        _delete_uncommitted_group(db_session, batch_id)
+
+
+def test_non_governed_only_group_fails_with_explicit_skipped_manifests(db_session, tmp_path):
+    paths = [
+        (_supplemental_workbook(tmp_path / "notes.xlsx", "Notes"), "notes.xlsx"),
+        (_supplemental_workbook(tmp_path / "documentation.xlsx", "Documentation"), "documentation.xlsx"),
+    ]
+    pipeline = IngestionPipeline(db_session, tenant_id="supplemental-only-test")
+    with pytest.raises(ValueError, match="No governed worksheets were found across the uploaded files"):
+        pipeline.process_files(paths, force_new=True, commit_canonical=False)
+
+    failed = db_session.execute(
+        select(IngestionBatch)
+        .where(IngestionBatch.tenant_id == "supplemental-only-test")
+        .order_by(IngestionBatch.created_at.desc())
+    ).scalars().first()
+    assert failed is not None
+    try:
+        assert failed.status == "FAILED"
+        assert failed.is_active is False
+        manifests = db_session.execute(
+            select(IngestionFile).where(IngestionFile.group_batch_id == failed.batch_id)
+        ).scalars().all()
+        assert len(manifests) == 2
+        assert all(manifest.parse_status == "SKIPPED" for manifest in manifests)
+        assert all(manifest.validation_status == "SKIPPED" for manifest in manifests)
+        assert not db_session.execute(
+            select(RawRecord).where(RawRecord.ingestion_batch_id == failed.batch_id)
+        ).scalars().all()
+    finally:
+        _delete_uncommitted_group(db_session, failed.batch_id)
 
 
 def test_fifteen_workbook_group_is_accepted_and_duplicate_rows_are_detected(db_session, tmp_path):

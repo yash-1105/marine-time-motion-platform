@@ -11,6 +11,62 @@ const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
 type UploadState = 'idle' | 'uploading' | 'error'
 
+type FileResult = {
+  filename: string
+  byte_size: number
+  parse_status: string
+  validation_status: string
+  error_message?: string | null
+  message?: string | null
+}
+
+type BatchOutcome = {
+  batch_id: string
+  status: string
+  error_message?: string | null
+  files?: FileResult[]
+}
+
+function FileHandlingSummary({ files, batchStatus }: { files: FileResult[]; batchStatus: string }) {
+  if (!files.length) return null
+  const skipped = files.filter((file) => file.parse_status === 'SKIPPED').length
+  const displayStatus = (file: FileResult) => {
+    if (file.parse_status === 'SKIPPED') return { label: 'Skipped — No governed worksheet', tone: 'warning' as const }
+    if (file.parse_status === 'FAILED' || file.validation_status === 'FAILED') return { label: 'Failed', tone: 'critical' as const }
+    if (batchStatus === 'COMMITTED') return { label: 'Completed', tone: 'good' as const }
+    if (file.parse_status === 'QUEUED') return { label: 'Uploading', tone: 'neutral' as const }
+    return { label: 'Processing', tone: 'neutral' as const }
+  }
+
+  return (
+    <div className="mt-5 border-t border-[var(--color-border)] pt-4 text-left">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <p className="text-xs font-semibold text-[var(--color-text-primary)]">File handling</p>
+        <p className="text-[11px] text-[var(--color-text-tertiary)]">
+          {files.length - skipped} governed · {skipped} skipped
+        </p>
+      </div>
+      <ul className="space-y-2">
+        {files.map((file, index) => {
+          const state = displayStatus(file)
+          const explanation = file.message || file.error_message
+          return (
+            <li key={`${file.filename}-${index}`} className="flex items-start justify-between gap-4 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-subtle)] px-3 py-2.5">
+              <div className="min-w-0">
+                <p className="truncate text-xs font-medium text-[var(--color-text-primary)]" title={file.filename}>{file.filename}</p>
+                <p className="mt-0.5 text-[11px] text-[var(--color-text-tertiary)]">
+                  {(file.byte_size / 1024 / 1024).toFixed(2)} MB{explanation ? ` · ${explanation}` : ''}
+                </p>
+              </div>
+              <StatusBadge label={state.label} tone={state.tone} />
+            </li>
+          )
+        })}
+      </ul>
+    </div>
+  )
+}
+
 export default function IngestionPage() {
   const { can, token, refreshAccessToken, logout } = useAuth()
   const { status: datasetStatus, fileName, refresh: refreshDataset, clearDataset } = useDatasetStatus()
@@ -18,6 +74,8 @@ export default function IngestionPage() {
   const [uploadState, setUploadState] = useState<UploadState>('idle')
   const [uploadedName, setUploadedName] = useState<string>('')
   const [errorMessage, setErrorMessage] = useState<string>('')
+  const [fileResults, setFileResults] = useState<FileResult[]>([])
+  const [batchStatus, setBatchStatus] = useState<string>('')
   const [confirmingRemoval, setConfirmingRemoval] = useState(false)
   const [removing, setRemoving] = useState(false)
   const addNewInputRef = useRef<HTMLInputElement>(null)
@@ -41,7 +99,7 @@ export default function IngestionPage() {
   const resolveBatchOutcome = async (batchId: string) => {
     const res = await fetch(`${API}/api/v1/ingestion/batches`, { headers: getActiveAuthHeaders() })
     if (!res.ok) return null
-    const batches: Array<{ batch_id: string; status: string; error_message?: string | null }> = await res.json()
+    const batches: BatchOutcome[] = await res.json()
     return batches.find((b) => b.batch_id === batchId) || null
   }
 
@@ -51,6 +109,10 @@ export default function IngestionPage() {
     // persisted batch reaches a terminal state.
     for (let attempt = 0; attempt < 300; attempt += 1) {
       const outcome = await resolveBatchOutcome(batchId)
+      if (outcome) {
+        setBatchStatus(outcome.status)
+        if (outcome.files) setFileResults(outcome.files)
+      }
       if (outcome?.status === 'COMMITTED' || outcome?.status === 'FAILED' || outcome?.status === 'SUPERSEDED') return outcome
       await new Promise((resolve) => window.setTimeout(resolve, 2000))
     }
@@ -60,6 +122,13 @@ export default function IngestionPage() {
   const processUpload = async (targetFiles: File[]) => {
     setUploadState('uploading')
     setErrorMessage('')
+    setBatchStatus('UPLOADING')
+    setFileResults(targetFiles.map((targetFile) => ({
+      filename: targetFile.name,
+      byte_size: targetFile.size,
+      parse_status: 'QUEUED',
+      validation_status: 'PENDING',
+    })))
 
     const formData = new FormData()
     targetFiles.forEach((targetFile) => formData.append('files', targetFile))
@@ -101,6 +170,8 @@ export default function IngestionPage() {
         throw new Error(parsedMessage)
       }
       const data = await res.json()
+      if (Array.isArray(data.file_results)) setFileResults(data.file_results)
+      setBatchStatus(data.status)
       const outcome = await waitForBatchOutcome(data.batch_id)
       if (outcome?.status === 'FAILED' || outcome?.status === 'SUPERSEDED') {
         setUploadState('error')
@@ -141,6 +212,8 @@ export default function IngestionPage() {
   const retry = () => {
     setUploadState('idle')
     setErrorMessage('')
+    setFileResults([])
+    setBatchStatus('')
   }
 
   const handleConfirmRemove = async () => {
@@ -179,10 +252,12 @@ export default function IngestionPage() {
         {uploadState === 'uploading' ? (
           <Card>
             <LoadingState label="Uploading and processing dataset…" />
+            <FileHandlingSummary files={fileResults} batchStatus={batchStatus} />
           </Card>
         ) : uploadState === 'error' ? (
           <Card>
             <ErrorState title="Dataset processing failed" description={errorMessage} onRetry={retry} />
+            <FileHandlingSummary files={fileResults} batchStatus={batchStatus} />
           </Card>
         ) : datasetStatus === 'loading' ? (
           <Card>
@@ -226,6 +301,7 @@ export default function IngestionPage() {
                 </button>
               </div>
             </div>
+            <FileHandlingSummary files={fileResults} batchStatus={batchStatus || 'COMMITTED'} />
           </Card>
         ) : (
           <div className="space-y-4">

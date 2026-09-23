@@ -29,6 +29,8 @@ class IngestionPipeline:
         "CargoOps": {"VCN"},
         "Delays": {"VCN"},
     }
+    GOVERNED_WORKSHEETS = frozenset(REQUIRED_COLUMNS)
+    NON_GOVERNED_MESSAGE = "No supported Marine Time & Motion worksheet found."
 
     def __init__(self, db: Session, tenant_id: str = "default-tenant"):
         self.db = db
@@ -135,20 +137,35 @@ class IngestionPipeline:
                 self.db.add(manifest)
                 manifests.append((file_path, manifest))
             self.db.commit()
+            governed_sheets: set[str] = set()
             for file_path, manifest in manifests:
                 try:
-                    self._parse_to_raw(file_path, batch, manifest)
-                    manifest.parse_status = "PARSED"
+                    file_governed_sheets = self._parse_to_raw(file_path, batch, manifest)
+                    if file_governed_sheets:
+                        governed_sheets.update(file_governed_sheets)
+                        manifest.parse_status = "PARSED"
+                    else:
+                        # A valid workbook may be supplemental evidence rather
+                        # than an operational data source. Keep its immutable
+                        # manifest/checksum, but do not create raw or staging
+                        # records and do not weaken validation of governed tabs.
+                        manifest.parse_status = "SKIPPED"
+                        manifest.validation_status = "SKIPPED"
+                        manifest.error_message = self.NON_GOVERNED_MESSAGE
+                    self.db.commit()
                 except Exception as exc:
                     manifest.parse_status = "FAILED"
                     manifest.validation_status = "FAILED"
                     manifest.error_message = str(exc)
                     self.db.commit()
                     raise
+            if not governed_sheets:
+                raise ValueError("No governed worksheets were found across the uploaded files.")
             self._map_to_staging(batch)
             self._validate_staging(batch)
             for _, manifest in manifests:
-                manifest.validation_status = "VALIDATED"
+                if manifest.parse_status == "PARSED":
+                    manifest.validation_status = "VALIDATED"
 
             if dry_run:
                 try:
@@ -175,17 +192,21 @@ class IngestionPipeline:
             self.db.commit()
             raise e
 
-    def _parse_to_raw(self, file_path: str, batch: IngestionBatch, source_file: IngestionFile | None = None):
+    def _parse_to_raw(
+        self,
+        file_path: str,
+        batch: IngestionBatch,
+        source_file: IngestionFile | None = None,
+    ) -> set[str]:
         # Polars/fastexcel is the deterministic parser. No AI/OCR/mapping path is
         # reachable from this governed workbook flow.
         workbook = pl.read_excel(file_path, sheet_id=0)
-        target_sheets = ["VesselCalls", "Events", "Services", "CargoOps", "Delays"]
-        seen_sheets = set(workbook).intersection(target_sheets)
+        seen_sheets = set(workbook).intersection(self.GOVERNED_WORKSHEETS)
         if not seen_sheets:
-            raise ValueError("Workbook has no governed worksheet (VesselCalls, Events, Services, CargoOps, or Delays)")
+            return set()
 
         for sheet_name, df in workbook.items():
-            if sheet_name not in target_sheets:
+            if sheet_name not in self.GOVERNED_WORKSHEETS:
                 continue
             missing_columns = self.REQUIRED_COLUMNS[sheet_name].difference(df.columns)
             if missing_columns:
@@ -224,6 +245,7 @@ class IngestionPipeline:
 
         batch.status = "PARSED"
         self.db.commit()
+        return seen_sheets
 
     def _map_to_staging(self, batch: IngestionBatch):
         sheets = (

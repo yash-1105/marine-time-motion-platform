@@ -80,7 +80,34 @@ def upload_file(
         # Redis/Dramatiq is the durable execution boundary shared with the worker.
         process_ingestion_analytics_task.send(batch_id, tenant_id, checksum)
 
-        return {"batch_id": batch_id, "file_count": len(temp_files), "files": [name for _, name in temp_files], "status": "PROCESSING"}
+        manifests = (
+            db.execute(
+                select(IngestionFile)
+                .where(IngestionFile.group_batch_id == batch_id)
+                .order_by(IngestionFile.created_at, IngestionFile.id)
+            )
+            .scalars()
+            .all()
+        )
+        skipped_count = sum(manifest.parse_status == "SKIPPED" for manifest in manifests)
+        return {
+            "batch_id": batch_id,
+            "file_count": len(temp_files),
+            "files": [name for _, name in temp_files],
+            "file_results": [
+                {
+                    "filename": manifest.original_filename,
+                    "byte_size": manifest.byte_size,
+                    "parse_status": manifest.parse_status,
+                    "validation_status": manifest.validation_status,
+                    "message": manifest.error_message,
+                }
+                for manifest in manifests
+            ],
+            "governed_file_count": len(manifests) - skipped_count,
+            "skipped_file_count": skipped_count,
+            "status": "PROCESSING",
+        }
     except HTTPException:
         if db is not None:
             db.rollback()
@@ -161,7 +188,12 @@ def list_batches(db: Session = Depends(get_db), principal=Depends(require("view"
         .all()
     )
     manifests: dict[str, list[IngestionFile]] = {}
-    for manifest in db.execute(select(IngestionFile).where(IngestionFile.group_batch_id.in_([b.batch_id for b in batches]))).scalars().all():
+    manifest_query = (
+        select(IngestionFile)
+        .where(IngestionFile.group_batch_id.in_([b.batch_id for b in batches]))
+        .order_by(IngestionFile.created_at, IngestionFile.id)
+    )
+    for manifest in db.execute(manifest_query).scalars().all():
         manifests.setdefault(manifest.group_batch_id, []).append(manifest)
     return [
         {
