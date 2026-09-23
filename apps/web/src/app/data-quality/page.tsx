@@ -413,7 +413,7 @@ function DataQualityContent() {
       )}
 
       {/* Issues Data Table */}
-      <div className="overflow-x-auto bg-[var(--color-surface)]">
+      <div className="w-full bg-[var(--color-surface)]">
         {loading ? (
           <LoadingState label="Loading Data Quality issues from governance engine…" />
         ) : error ? (
@@ -428,21 +428,29 @@ function DataQualityContent() {
             description="No data quality issues match the selected criteria."
           />
         ) : (
-          <table className="w-full border-collapse text-left text-xs" aria-label="Data Quality Issues Table">
+          <table className="w-full table-fixed border-collapse text-left text-xs" aria-label="Data Quality Issues Table">
+            <colgroup>
+              <col className="w-[3%]" />
+              <col className="w-[8%]" />
+              <col className="w-[7%]" />
+              <col className="w-[23%]" />
+              <col className="w-[11%]" />
+              <col className="w-[22%]" />
+              <col className="w-[9%]" />
+              <col className="w-[9%]" />
+              <col className="w-[8%]" />
+            </colgroup>
             <thead className="bg-[var(--color-surface-muted)] text-[var(--color-text-secondary)] sticky top-0 z-10 select-none">
               <tr>
-                <th className="px-3 py-2.5 border-b border-[var(--color-border)]"><input aria-label="Select all filtered quality issues" type="checkbox" checked={filteredIssues.length > 0 && filteredIssues.filter((issue) => issue.issue_class !== 'OUTLIER').every((issue) => selectedIssueIds.includes(issue.id))} onChange={(event) => setSelectedIssueIds(event.target.checked ? filteredIssues.filter((issue) => issue.issue_class !== 'OUTLIER').map((issue) => issue.id) : [])} /></th>
-                <th className="px-3 py-2.5 font-semibold border-b border-[var(--color-border)] whitespace-nowrap">Rule ID</th>
-                <th className="px-3 py-2.5 font-semibold border-b border-[var(--color-border)] whitespace-nowrap">Severity</th>
-                <th className="px-3 py-2.5 font-semibold border-b border-[var(--color-border)] min-w-[260px]">Issue</th>
-                <th className="px-3 py-2.5 font-semibold border-b border-[var(--color-border)]">Affected Record (VCN)</th>
-                <th className="px-3 py-2.5 font-semibold border-b border-[var(--color-border)] whitespace-nowrap">Scope / Domain</th>
-                <th className="px-3 py-2.5 font-semibold border-b border-[var(--color-border)]">Record Reference</th>
-                <th className="px-3 py-2.5 font-semibold border-b border-[var(--color-border)]">Source / Original value</th>
-                <th className="px-3 py-2.5 font-semibold border-b border-[var(--color-border)] whitespace-nowrap">Disposition</th>
-                <th className="px-3 py-2.5 font-semibold border-b border-[var(--color-border)]">Rule Expression &amp; Guidance</th>
-                <th className="px-3 py-2.5 font-semibold border-b border-[var(--color-border)] whitespace-nowrap">Workflow State</th>
-                <th className="px-3 py-2.5 font-semibold border-b border-[var(--color-border)] text-center">Action</th>
+                <th className="px-2 py-2.5 border-b border-[var(--color-border)]"><input aria-label="Select all filtered quality issues" type="checkbox" checked={filteredIssues.length > 0 && filteredIssues.filter((issue) => issue.issue_class !== 'OUTLIER').every((issue) => selectedIssueIds.includes(issue.id))} onChange={(event) => setSelectedIssueIds(event.target.checked ? filteredIssues.filter((issue) => issue.issue_class !== 'OUTLIER').map((issue) => issue.id) : [])} /></th>
+                <th className="px-2 py-2.5 font-semibold border-b border-[var(--color-border)]">Rule ID</th>
+                <th className="px-2 py-2.5 font-semibold border-b border-[var(--color-border)]">Severity</th>
+                <th className="px-2 py-2.5 font-semibold border-b border-[var(--color-border)]">Issue</th>
+                <th className="px-2 py-2.5 font-semibold border-b border-[var(--color-border)]">Affected Record</th>
+                <th className="px-2 py-2.5 font-semibold border-b border-[var(--color-border)]">Source / Original Value</th>
+                <th className="px-2 py-2.5 font-semibold border-b border-[var(--color-border)]">Disposition</th>
+                <th className="px-2 py-2.5 font-semibold border-b border-[var(--color-border)]">Workflow State</th>
+                <th className="px-2 py-2.5 font-semibold border-b border-[var(--color-border)] text-center">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--color-border)] bg-[var(--color-surface)]">
@@ -451,24 +459,33 @@ function DataQualityContent() {
 
                 return (
                   <tr key={iss.id} className="hover:bg-[var(--color-surface-muted)] transition-colors">
-                    <td className="px-3 py-2"><input aria-label={`Select ${iss.rule_id} issue`} disabled={iss.issue_class === 'OUTLIER' || isResolved} type="checkbox" checked={selectedIssueIds.includes(iss.id)} onChange={() => toggleSelected(iss.id)} /></td>
+                    <td className="px-2 py-2 align-top"><input aria-label={`Select ${iss.rule_id} issue`} disabled={iss.issue_class === 'OUTLIER' || isResolved} type="checkbox" checked={selectedIssueIds.includes(iss.id)} onChange={() => toggleSelected(iss.id)} /></td>
                     {/* Rule ID */}
-                    <td className="px-3 py-2 font-mono font-semibold text-[var(--color-text-primary)] whitespace-nowrap">
+                    <td className="break-words px-2 py-2 align-top font-mono text-[10px] font-semibold text-[var(--color-text-primary)]">
                       {iss.rule_id}
                     </td>
 
                     {/* Severity Badge */}
-                    <td className="px-3 py-2 whitespace-nowrap">
+                    <td className="px-2 py-2 align-top">
                       <StatusBadge status={iss.severity || 'MEDIUM'} />
                     </td>
 
                     {/* Human-readable issue */}
-                    <td className="px-3 py-2 min-w-[260px] max-w-sm text-[11px] leading-4 text-[var(--color-text-primary)]">
-                      {issueDescription(iss)}
+                    <td className="break-words px-2 py-2 align-top text-[11px] leading-4 text-[var(--color-text-primary)]">
+                      <div className="font-medium">{issueDescription(iss)}</div>
+                      <div className="mt-1 text-[10px] text-[var(--color-text-tertiary)]">
+                        {iss.scope || 'VALIDITY'}
+                        {iss.rule_name ? ` · ${iss.rule_name}` : ''}
+                      </div>
+                      {iss.remediation_guidance && (
+                        <div className="mt-1 text-[10px] text-[var(--color-text-tertiary)]">
+                          Guidance: {iss.remediation_guidance}
+                        </div>
+                      )}
                     </td>
 
                     {/* Affected Record */}
-                    <td className="px-3 py-2">
+                    <td className="break-words px-2 py-2 align-top">
                       {iss.vcn ? (
                         <div>
                           <Link
@@ -478,7 +495,7 @@ function DataQualityContent() {
                           >
                             {iss.vcn}
                           </Link>
-                          <div className="text-[10px] text-[var(--color-text-tertiary)] truncate max-w-[160px]">
+                          <div className="mt-0.5 break-words text-[10px] text-[var(--color-text-tertiary)]">
                             {iss.vessel_name || '—'}
                           </div>
                         </div>
@@ -487,47 +504,23 @@ function DataQualityContent() {
                       )}
                     </td>
 
-                    {/* Scope */}
-                    <td className="px-3 py-2 font-mono text-[10px] text-[var(--color-text-secondary)] whitespace-nowrap">
-                      {iss.scope || 'VALIDITY'}
-                    </td>
-
-                    {/* Record Reference */}
-                    <td
-                      className="px-3 py-2 font-mono text-[10px] text-[var(--color-text-tertiary)] truncate max-w-[140px]"
-                      title={iss.record_reference}
-                    >
-                      {iss.record_reference}
-                    </td>
-
-                    <td className="px-3 py-2 max-w-[230px]">
-                      <div className="font-medium text-[var(--color-text-primary)] truncate" title={iss.source_file || ''}>{iss.source_file || 'Lineage unavailable'}</div>
-                      {iss.source_sheet && <div className="font-mono text-[10px] text-[var(--color-text-tertiary)]">{iss.source_sheet} · row {iss.source_row ?? '—'} · {iss.source_field || 'record'}</div>}
-                      {iss.original_values && <div className="font-mono text-[10px] text-[var(--color-text-tertiary)] truncate" title={JSON.stringify(iss.original_values)}>{JSON.stringify(iss.original_values)}</div>}
+                    <td className="break-words px-2 py-2 align-top">
+                      <div className="font-medium text-[var(--color-text-primary)]">{iss.source_file || 'Lineage unavailable'}</div>
+                      {iss.source_sheet && <div className="mt-0.5 break-words font-mono text-[10px] text-[var(--color-text-tertiary)]">{iss.source_sheet} · row {iss.source_row ?? '—'} · {iss.source_field || 'record'}</div>}
+                      <div className="mt-0.5 break-all font-mono text-[10px] text-[var(--color-text-tertiary)]" title={iss.record_reference}>{iss.record_reference}</div>
+                      {iss.original_values && <div className="mt-1 break-all font-mono text-[10px] leading-4 text-[var(--color-text-tertiary)]" title={JSON.stringify(iss.original_values)}>{JSON.stringify(iss.original_values)}</div>}
                     </td>
 
                     {/* Disposition */}
-                    <td className="px-3 py-2 whitespace-nowrap">
+                    <td className="px-2 py-2 align-top">
                       <StatusBadge
                         label={iss.disposition || 'FLAGGED'}
                         tone={iss.disposition === 'QUARANTINED' ? 'critical' : 'neutral'}
                       />
                     </td>
 
-                    {/* Rule Expression & Guidance */}
-                    <td className="px-3 py-2 max-w-xs">
-                      <div className="font-medium text-[var(--color-text-primary)] text-[11px] truncate" title={iss.rule_name || ''}>
-                        {iss.rule_name || iss.rule_id}
-                      </div>
-                      {iss.remediation_guidance && (
-                        <div className="text-[10px] text-[var(--color-text-tertiary)] truncate" title={iss.remediation_guidance}>
-                          Guidance: {iss.remediation_guidance}
-                        </div>
-                      )}
-                    </td>
-
                     {/* Workflow State */}
-                    <td className="px-3 py-2 whitespace-nowrap">
+                    <td className="px-2 py-2 align-top">
                       <StatusBadge
                         status={iss.issue_status}
                         tone={isResolved ? 'good' : statusToTone(iss.issue_status)}
@@ -535,8 +528,8 @@ function DataQualityContent() {
                     </td>
 
                     {/* Action */}
-                    <td className="px-3 py-2 text-center whitespace-nowrap">
-                      <div className="flex items-center justify-center gap-1.5">
+                    <td className="px-2 py-2 align-top text-center">
+                      <div className="flex flex-col items-stretch justify-center gap-1.5">
                         {iss.vcn && (
                           <Link
                             href={`/vessel-journey?vcn=${iss.vcn}`}
