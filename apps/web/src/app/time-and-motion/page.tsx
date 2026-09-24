@@ -376,25 +376,38 @@ function TimeAndMotionContent() {
               ) : definitions.length === 0 ? (
                 <EmptyState title="No metric definitions found" />
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs text-left border-collapse">
+                <div className="w-full min-w-0">
+                  <table className="w-full table-fixed text-[10px] text-left border-collapse">
+                    <colgroup>
+                      <col className="w-[22.5%]" />
+                      <col className="w-[5%]" />
+                      <col className="w-[5%]" />
+                      <col className="w-[5.5%]" />
+                      <col className="w-[5.5%]" />
+                      <col className="w-[5.5%]" />
+                      <col className="w-[5.5%]" />
+                      <col className="w-[5.5%]" />
+                      <col className="w-[9%]" />
+                      <col className="w-[9%]" />
+                      <col className="w-[5%]" />
+                      <col className="w-[7%]" />
+                      <col className="w-[10%]" />
+                    </colgroup>
                     <thead>
                       <tr className="border-b border-[var(--color-border)] bg-[var(--color-surface-muted)] text-[var(--color-text-secondary)] font-semibold">
-                        <th className="py-2.5 px-3">Metric Name</th>
-                        <th className="py-2.5 px-3">Formula / Events</th>
-                        <th className="py-2.5 px-3">Status</th>
-                        <th className="py-2.5 px-3 text-right">Obs Count</th>
-                        <th className="py-2.5 px-3 text-right">Mean</th>
-                        <th className="py-2.5 px-3 text-right">Median</th>
-                        <th className="py-2.5 px-3 text-right">Std Dev</th>
-                        <th className="py-2.5 px-3 text-right">P75</th>
-                        <th className="py-2.5 px-3 text-right">P90</th>
-                        <th className="py-2.5 px-3 text-right">Min / Fastest</th>
-                        <th className="py-2.5 px-3 text-right">Max / Slowest</th>
-                        <th className="py-2.5 px-3 text-right">CV (σ/μ)</th>
-                        <th className="py-2.5 px-3 text-right">Tail Risk (P90/Med)</th>
-                        <th className="py-2.5 px-3">Outlier Vessels</th>
-                        <th className="py-2.5 px-3 text-center">Action</th>
+                        <th className="py-2.5 px-2">Metric / Details</th>
+                        <th className="py-2.5 px-1 text-center text-[9px]">Status</th>
+                        <th className="py-2.5 px-1 text-right leading-tight">Obs<br />Count</th>
+                        <th className="py-2.5 px-1 text-right">Mean</th>
+                        <th className="py-2.5 px-1 text-right">Median</th>
+                        <th className="py-2.5 px-1 text-right leading-tight">Std<br />Dev</th>
+                        <th className="py-2.5 px-1 text-right">P75</th>
+                        <th className="py-2.5 px-1 text-right">P90</th>
+                        <th className="py-2.5 px-1 text-right leading-tight">Min /<br />Fastest</th>
+                        <th className="py-2.5 px-1 text-right leading-tight">Max /<br />Slowest</th>
+                        <th className="py-2.5 px-1 text-right">CV</th>
+                        <th className="py-2.5 px-1 text-right leading-tight">Tail<br />Risk</th>
+                        <th className="py-2.5 px-1">Outlier Vessels</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[var(--color-border)]">
@@ -403,65 +416,78 @@ function TimeAndMotionContent() {
                         const isNoSource = d.availability_status === 'NO_SOURCE_DATA'
                         return (
                           <tr key={d.id} className="hover:bg-[var(--color-surface-muted)] transition-colors">
-                            <td className="py-2.5 px-3 font-semibold text-[var(--color-text-primary)]">
-                              <div>{d.name}</div>
-                              {d.description && (
-                                <div className="text-[10px] text-[var(--color-text-tertiary)] font-normal">{d.description}</div>
-                              )}
-                            </td>
-                            <td className="py-2.5 px-3 font-mono text-[11px] text-[var(--color-text-secondary)]">
-                              {d.is_execution_delay
-                                ? `${d.execution_delay_movement} Pilotage (Served − Sched)`
-                                : `${d.start_event} → ${d.end_event}`}
-                            </td>
-                            <td className="py-2.5 px-3">
-                              <StatusBadge status={d.availability_status} tone={isNoSource ? 'neutral' : 'good'} />
-                            </td>
-                            <td className="py-2.5 px-3 text-right font-medium text-[var(--color-text-primary)]">
-                              {isNoSource ? '—' : st?.observation_count ?? '—'}
-                            </td>
-                            <td className="py-2.5 px-3 text-right font-mono text-[var(--color-text-primary)]">
-                              {isNoSource ? '—' : st?.mean_hours != null ? `${st.mean_hours.toFixed(2)}h` : '—'}
-                            </td>
-                            <td className="py-2.5 px-3 text-right font-mono text-[var(--color-text-primary)]">
-                              {isNoSource ? '—' : st?.median_hours != null ? `${st.median_hours.toFixed(2)}h` : '—'}
-                            </td>
-                            <td className="py-2.5 px-3 text-right font-mono text-[var(--color-text-primary)]">
-                              {isNoSource ? '—' : st?.std_hours != null ? `${st.std_hours.toFixed(2)}h` : '—'}
-                            </td>
-                            <td className="py-2.5 px-3 text-right font-mono text-[var(--color-text-primary)]">
-                              {isNoSource ? '—' : st?.p75_hours != null ? `${st.p75_hours.toFixed(2)}h` : '—'}
-                            </td>
-                            <td className="py-2.5 px-3 text-right font-mono text-[var(--color-text-primary)]">
-                              {isNoSource ? '—' : st?.p90_hours != null ? `${st.p90_hours.toFixed(2)}h` : '—'}
-                            </td>
-                            <td className="py-2.5 px-3 text-right font-mono text-[var(--color-text-primary)]">
-                              {isNoSource || st?.min_hours == null ? '—' : <><span>{st.min_hours.toFixed(2)}h</span><span className="block text-[10px] text-[var(--color-text-tertiary)]">{st.fastest_vcn || 'Call unavailable'}</span></>}
-                            </td>
-                            <td className="py-2.5 px-3 text-right font-mono text-[var(--color-text-primary)]">
-                              {isNoSource || st?.max_hours == null ? '—' : <><span>{st.max_hours.toFixed(2)}h</span><span className="block text-[10px] text-[var(--color-text-tertiary)]">{st.slowest_vcn || 'Call unavailable'}</span></>}
-                            </td>
-                            <td className="py-2.5 px-3 text-right font-mono text-[var(--color-text-primary)]">
-                              {isNoSource ? '—' : st?.cv != null ? st.cv.toFixed(2) : '—'}
-                            </td>
-                            <td className="py-2.5 px-3 text-right font-mono text-[var(--color-text-primary)]">
-                              {isNoSource ? '—' : st?.tail_risk_ratio != null ? `${st.tail_risk_ratio.toFixed(2)}x` : '—'}
-                            </td>
-                            <td className="py-2.5 px-3 text-[10px] text-[var(--color-text-secondary)]">
-                              {isNoSource ? '—' : st?.outlier_vcns?.length ? st.outlier_vcns.join(', ') : 'None'}
-                            </td>
-                            <td className="py-2.5 px-3 text-center">
-                              {!isNoSource && (
+                            <td className="py-2.5 px-2 align-top font-semibold text-[var(--color-text-primary)] break-words">
+                              {!isNoSource ? (
                                 <button
+                                  type="button"
                                   onClick={() => {
                                     setSelectedDefId(d.id)
                                     setActiveTab('explorer')
                                   }}
-                                  className="text-[var(--color-accent)] hover:text-[var(--color-accent-hover)] font-semibold text-[11px] underline cursor-pointer"
+                                  className="text-left text-[11px] font-semibold text-[var(--color-accent)] hover:text-[var(--color-accent-hover)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] rounded-sm cursor-pointer"
+                                  aria-label={`Drill down into ${d.name}`}
                                 >
-                                  Drill down
+                                  {d.name}
                                 </button>
+                              ) : (
+                                <div className="text-[11px]">{d.name}</div>
                               )}
+                              {d.description && (
+                                <div className="mt-0.5 text-[9px] leading-3 text-[var(--color-text-tertiary)] font-normal line-clamp-2">{d.description}</div>
+                              )}
+                            </td>
+                            <td className="py-2.5 px-1 align-top text-center">
+                              {isNoSource ? (
+                                <span
+                                  className="inline-flex flex-col items-center text-[9px] leading-3 text-[var(--color-text-tertiary)]"
+                                  title="No source data"
+                                  aria-label="No source data"
+                                >
+                                  <span aria-hidden="true" className="text-[var(--color-text-secondary)]">—</span>
+                                  <span>No source</span>
+                                </span>
+                              ) : (
+                                <span
+                                  className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-[var(--color-good-bg)] text-[10px] font-bold text-[var(--color-good)]"
+                                  title="Computable"
+                                  aria-label="Computable"
+                                >
+                                  ✓
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-2.5 px-1 align-top text-right font-medium tabular-nums text-[var(--color-text-primary)]">
+                              {isNoSource ? '—' : st?.observation_count ?? '—'}
+                            </td>
+                            <td className="py-2.5 px-1 align-top text-right font-mono tabular-nums text-[var(--color-text-primary)]">
+                              {isNoSource ? '—' : st?.mean_hours != null ? `${st.mean_hours.toFixed(2)}h` : '—'}
+                            </td>
+                            <td className="py-2.5 px-1 align-top text-right font-mono tabular-nums text-[var(--color-text-primary)]">
+                              {isNoSource ? '—' : st?.median_hours != null ? `${st.median_hours.toFixed(2)}h` : '—'}
+                            </td>
+                            <td className="py-2.5 px-1 align-top text-right font-mono tabular-nums text-[var(--color-text-primary)]">
+                              {isNoSource ? '—' : st?.std_hours != null ? `${st.std_hours.toFixed(2)}h` : '—'}
+                            </td>
+                            <td className="py-2.5 px-1 align-top text-right font-mono tabular-nums text-[var(--color-text-primary)]">
+                              {isNoSource ? '—' : st?.p75_hours != null ? `${st.p75_hours.toFixed(2)}h` : '—'}
+                            </td>
+                            <td className="py-2.5 px-1 align-top text-right font-mono tabular-nums text-[var(--color-text-primary)]">
+                              {isNoSource ? '—' : st?.p90_hours != null ? `${st.p90_hours.toFixed(2)}h` : '—'}
+                            </td>
+                            <td className="py-2.5 px-1 align-top text-right font-mono tabular-nums text-[var(--color-text-primary)] break-words">
+                              {isNoSource || st?.min_hours == null ? '—' : <><span>{st.min_hours.toFixed(2)}h</span><span className="block text-[8px] leading-3 text-[var(--color-text-tertiary)]">{st.fastest_vcn || 'Unavailable'}</span></>}
+                            </td>
+                            <td className="py-2.5 px-1 align-top text-right font-mono tabular-nums text-[var(--color-text-primary)] break-words">
+                              {isNoSource || st?.max_hours == null ? '—' : <><span>{st.max_hours.toFixed(2)}h</span><span className="block text-[8px] leading-3 text-[var(--color-text-tertiary)]">{st.slowest_vcn || 'Unavailable'}</span></>}
+                            </td>
+                            <td className="py-2.5 px-1 align-top text-right font-mono tabular-nums text-[var(--color-text-primary)]">
+                              {isNoSource ? '—' : st?.cv != null ? st.cv.toFixed(2) : '—'}
+                            </td>
+                            <td className="py-2.5 px-1 align-top text-right font-mono tabular-nums text-[var(--color-text-primary)]">
+                              {isNoSource ? '—' : st?.tail_risk_ratio != null ? `${st.tail_risk_ratio.toFixed(2)}x` : '—'}
+                            </td>
+                            <td className="py-2.5 px-1 align-top text-[8px] leading-3 break-words text-[var(--color-text-secondary)]">
+                              {isNoSource ? '—' : st?.outlier_vcns?.length ? st.outlier_vcns.join(', ') : 'None'}
                             </td>
                           </tr>
                         )

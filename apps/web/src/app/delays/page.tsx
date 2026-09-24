@@ -211,14 +211,14 @@ function severityTone(severity: string): 'good' | 'warning' | 'critical' | 'neut
   return 'good'
 }
 
-function compactDuration(hours: number | null | undefined, signed = false): string {
+function compactDuration(hours: number | null | undefined, preserveNegative = false): string {
   if (hours == null) return 'Unavailable'
   const totalMinutes = Math.round(Math.abs(hours) * 60)
   const hourPart = Math.floor(totalMinutes / 60)
   const minutePart = totalMinutes % 60
   const value = hourPart > 0 ? `${hourPart}h ${minutePart}m` : `${minutePart}m`
-  if (!signed) return value
-  return `${hours > 0 ? '+' : hours < 0 ? '−' : ''}${value}`
+  if (!preserveNegative) return value
+  return `${hours < 0 ? '−' : ''}${value}`
 }
 
 export default function DelaysAndBottlenecksPage() {
@@ -858,7 +858,7 @@ export default function DelaysAndBottlenecksPage() {
 
             <Card padded={false} className="overflow-hidden">
               <div className="px-3 py-2 border-b border-[var(--color-border)] flex justify-between"><span className="text-sm font-semibold">Service timing — {legFilter.replace('_', ' ')}</span><span className="text-xs text-[var(--color-text-secondary)]">Scheduling and execution delay are separate from time taken</span></div>
-              <div className="overflow-x-auto"><table className="w-full text-left text-xs"><thead><tr className="bg-[var(--color-surface-muted)]"><th className="p-2">Service / Vessel</th><th className="p-2">Leg</th><th className="p-2 text-right">Scheduling gap</th><th className="p-2 text-right">Execution delay</th><th className="p-2">Time taken</th><th className="p-2">Status</th></tr></thead><tbody>{serviceTimings.slice(0, 12).map((row) => <tr key={row.service_request_id} className="border-t border-[var(--color-border)]"><td className="p-2 font-medium">{row.service_type}<span className="block text-[var(--color-text-tertiary)]">{row.vcn || row.vessel_name}</span></td><td className="p-2">{row.leg}</td><td className="p-2 text-right tabular-nums">{row.scheduling_gap_hours == null ? '—' : `${row.scheduling_gap_hours >= 0 ? '+' : ''}${(row.scheduling_gap_hours * 60).toFixed(0)}m`}</td><td className="p-2 text-right tabular-nums">{row.execution_delay_hours == null ? '—' : `${row.execution_delay_hours >= 0 ? '+' : ''}${(row.execution_delay_hours * 60).toFixed(0)}m`}</td><td className="p-2">{row.service_duration_hours == null ? 'Unavailable — no end timestamp' : `${row.service_duration_hours.toFixed(2)}h`}</td><td className="p-2"><StatusBadge label={`${row.execution_delay_status} · ${row.data_quality_status}`} tone={row.execution_delay_status === 'EARLY' ? 'good' : row.execution_delay_status === 'LATE' ? 'warning' : 'neutral'} /></td></tr>)}</tbody></table></div>
+              <div className="overflow-x-auto"><table className="w-full text-left text-xs"><thead><tr className="bg-[var(--color-surface-muted)]"><th className="p-2">Service / Vessel</th><th className="p-2">Leg</th><th className="p-2 text-right">Scheduling gap</th><th className="p-2 text-right">Execution delay</th><th className="p-2">Time taken</th><th className="p-2">Status</th></tr></thead><tbody>{serviceTimings.slice(0, 12).map((row) => <tr key={row.service_request_id} className="border-t border-[var(--color-border)]"><td className="p-2 font-medium">{row.service_type}<span className="block text-[var(--color-text-tertiary)]">{row.vcn || row.vessel_name}</span></td><td className="p-2">{row.leg}</td><td className="p-2 text-right tabular-nums">{compactDuration(row.scheduling_gap_hours, true)}</td><td className="p-2 text-right tabular-nums">{compactDuration(row.execution_delay_hours, true)}</td><td className="p-2">{row.service_duration_hours == null ? 'Unavailable — no end timestamp' : `${row.service_duration_hours.toFixed(2)}h`}</td><td className="p-2"><StatusBadge label={`${row.execution_delay_status} · ${row.data_quality_status}`} tone={row.execution_delay_status === 'EARLY' ? 'good' : row.execution_delay_status === 'LATE' ? 'warning' : 'neutral'} /></td></tr>)}</tbody></table></div>
             </Card>
 
             {/* Delays Table */}
@@ -1118,7 +1118,7 @@ export default function DelaysAndBottlenecksPage() {
                             {o.benchmark_or_p90 || '—'}h
                           </td>
                           <td className="py-2.5 px-3 text-right font-semibold text-[var(--color-critical)] tabular-nums">
-                            +{o.divergence || 0}h
+                            {o.divergence || 0}h
                           </td>
                           <td className="py-2.5 px-3">
                             <StatusBadge label={o.severity} tone={severityTone(o.severity)} showGlyph={false} />
@@ -1485,7 +1485,7 @@ export default function DelaysAndBottlenecksPage() {
             </h3>
             <p className="text-xs text-[var(--color-text-secondary)]">
               Vessel <span className="font-semibold text-[var(--color-text-primary)]">{outlierModal.vcn}</span>:{' '}
-              {outlierModal.metric_name} observed {outlierModal.observed_value}h (divergence +{outlierModal.divergence}h).
+              {outlierModal.metric_name} observed {outlierModal.observed_value}h (divergence {outlierModal.divergence}h).
             </p>
 
             <div className="space-y-2 text-xs">
