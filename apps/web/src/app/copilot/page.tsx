@@ -3,6 +3,7 @@
 import { FormEvent, useState } from 'react'
 import { ExternalLink, Send, Sparkles } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
+import Link from 'next/link'
 import { Card, EmptyState, PageHeader, StatusBadge } from '@/components/ui'
 
 const api = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000') + '/api/v1'
@@ -11,6 +12,8 @@ type Reply = {
   answer: string
   conversation_id: string
   tool: string
+  source_label: string
+  analysis_path?: string | null
   evidence: string[]
   result: unknown
   method: string
@@ -18,27 +21,30 @@ type Reply = {
   suggested_action: string
 }
 
+type ChatItem = { question: string; reply: Reply }
+
 export default function CopilotPage() {
   const { token } = useAuth()
   const [q, setQ] = useState('')
-  const [items, setItems] = useState<Reply[]>([])
+  const [items, setItems] = useState<ChatItem[]>([])
   const [busy, setBusy] = useState(false)
   const [cid, setCid] = useState<string>()
 
   async function send(e: FormEvent) {
     e.preventDefault()
-    if (!q.trim()) return
+    const question = q.trim()
+    if (!question) return
     setBusy(true)
     try {
       const r = await fetch(`${api}/copilot/ask`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token || 'dev-token'}` },
-        body: JSON.stringify({ question: q, conversation_id: cid }),
+        body: JSON.stringify({ question, conversation_id: cid }),
       })
       const d = await r.json()
       if (!r.ok) throw new Error(d.message || 'Copilot request failed')
       setCid(d.conversation_id)
-      setItems((x) => [...x, d])
+      setItems((x) => [...x, { question, reply: d }])
       setQ('')
     } finally {
       setBusy(false)
@@ -55,14 +61,18 @@ export default function CopilotPage() {
             <div><h2 className="text-sm font-semibold text-[var(--color-text-primary)]">Operational intelligence workspace</h2><p className="text-[11px] text-[var(--color-text-secondary)]">Source data is treated as evidence, never as instructions.</p></div>
           </div>
           <div className="flex-1 space-y-4 overflow-y-auto bg-[var(--color-surface-subtle)] p-5">
-            {items.length === 0 ? <EmptyState icon={<Sparkles size={20} />} title="Start with an operational question" description="Ask about lead times, delays, KPIs, vessel journeys, cohorts, or governed trends." /> : items.map((r, i) => (
-              <article key={i} className="max-w-3xl rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-[var(--shadow-xs)]">
+            {items.length === 0 ? <EmptyState icon={<Sparkles size={20} />} title="Start with an operational question" description="Ask about outliers, data quality, delays, statistics, KPIs, vessel journeys, or uploaded files." /> : items.map(({ question, reply: r }, i) => (
+              <div key={i} className="space-y-3">
+                <p className="ml-auto max-w-2xl rounded-[var(--radius-lg)] rounded-br-sm border border-[var(--color-accent-soft-border)] bg-[var(--color-accent-soft)] px-4 py-3 text-sm text-[var(--color-text-primary)]">{question}</p>
+                <article className="max-w-3xl rounded-[var(--radius-lg)] rounded-tl-sm border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-[var(--shadow-xs)]">
                 <p className="text-sm font-medium leading-6 text-[var(--color-text-primary)]">{r.answer}</p>
-                <div className="mt-3 flex flex-wrap gap-2"><StatusBadge label={r.tool} tone="neutral" showGlyph={false} /><StatusBadge label={r.method} tone="inferred" showGlyph={false} /></div>
-                <p className="mt-3 border-l-2 border-[var(--color-warning-border)] pl-3 text-xs leading-5 text-[var(--color-text-secondary)]">{r.data_quality_caveat}</p>
+                <div className="mt-3 flex flex-wrap gap-2"><StatusBadge label={`Source: ${r.source_label}`} tone="neutral" showGlyph={false} /><StatusBadge label={r.method} tone="inferred" showGlyph={false} /></div>
+                {r.data_quality_caveat && <p className="mt-3 border-l-2 border-[var(--color-warning-border)] pl-3 text-xs leading-5 text-[var(--color-text-secondary)]">{r.data_quality_caveat}</p>}
+                {r.analysis_path && <Link href={r.analysis_path} className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-[var(--color-accent)] hover:underline">View analysis <ExternalLink size={11} /></Link>}
                 {r.evidence.length > 0 && <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-[var(--color-text-secondary)]"><span className="font-semibold">Evidence</span>{r.evidence.map((x) => <a className="inline-flex items-center gap-1 text-[var(--color-accent)] hover:underline" href={x} key={x}>Open source <ExternalLink size={10} /></a>)}</div>}
                 <details className="mt-3 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-subtle)] p-3"><summary className="cursor-pointer text-xs font-semibold text-[var(--color-text-secondary)]">Governed result</summary><pre className="mt-3 max-h-72 overflow-auto whitespace-pre-wrap text-[11px] leading-5 text-[var(--color-text-secondary)]">{JSON.stringify(r.result, null, 2)}</pre></details>
               </article>
+              </div>
             ))}
           </div>
           <form onSubmit={send} className="flex gap-2 border-t border-[var(--color-border)] bg-[var(--color-surface)] p-4">

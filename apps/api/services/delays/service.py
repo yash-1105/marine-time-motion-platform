@@ -259,7 +259,7 @@ class DelayService:
             self._anchorage_wait_summary(leg),
         ]
 
-    def _event_pair_durations(self, start_name: str, end_name: str) -> list[float]:
+    def _event_pair_duration_observations(self, start_name: str, end_name: str) -> list[dict[str, Any]]:
         """Return governed, tenant-scoped durations for an explicit event pair.
 
         Canonical-observation winners take precedence when a source conflict was
@@ -323,7 +323,12 @@ class DelayService:
             start = selected(vessel_call.id, start_id)
             end = selected(vessel_call.id, end_id)
             if start and end and end.utc_value >= start.utc_value:
-                values.append((end.utc_value - start.utc_value).total_seconds() / 3600.0)
+                values.append({
+                    "value": (end.utc_value - start.utc_value).total_seconds() / 3600.0,
+                    "vcn": vessel_call.vcn,
+                    "vessel_name": vessel_call.vessel_name,
+                    "source_record_ids": [str(start.id), str(end.id)],
+                })
         return values
 
     def _service_duration_ranges(self) -> list[dict[str, Any]]:
@@ -352,16 +357,24 @@ class DelayService:
         ]
         ranges = []
         for pair in pairs:
-            values = self._event_pair_durations(pair["start_event"], pair["end_event"])
+            observations = self._event_pair_duration_observations(pair["start_event"], pair["end_event"])
+            minimum = min(observations, key=lambda item: item["value"]) if observations else None
+            maximum = max(observations, key=lambda item: item["value"]) if observations else None
             ranges.append({
                 **pair,
-                "status": "AVAILABLE" if values else "UNAVAILABLE",
-                "min_hours": round(min(values), 6) if values else None,
-                "max_hours": round(max(values), 6) if values else None,
-                "observation_count": len(values),
+                "status": "AVAILABLE" if observations else "UNAVAILABLE",
+                "min_hours": round(minimum["value"], 6) if minimum else None,
+                "max_hours": round(maximum["value"], 6) if maximum else None,
+                "min_vcn": minimum["vcn"] if minimum else None,
+                "min_vessel_name": minimum["vessel_name"] if minimum else None,
+                "max_vcn": maximum["vcn"] if maximum else None,
+                "max_vessel_name": maximum["vessel_name"] if maximum else None,
+                "min_source_record_ids": minimum["source_record_ids"] if minimum else [],
+                "max_source_record_ids": maximum["source_record_ids"] if maximum else [],
+                "observation_count": len(observations),
                 "unit": "hours",
                 "formula_version": "service-duration-range-v1.1",
-                "unavailable_reason": None if values else pair["unavailable_reason"],
+                "unavailable_reason": None if observations else pair["unavailable_reason"],
                 "leg": "ALL",
             })
         return ranges

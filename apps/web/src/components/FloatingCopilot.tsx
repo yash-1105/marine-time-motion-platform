@@ -12,6 +12,8 @@ type CopilotReply = {
   answer: string
   conversation_id: string
   tool: string
+  source_label?: string
+  analysis_path?: string | null
   method: string
   data_quality_caveat: string
   evidence: string[]
@@ -21,29 +23,6 @@ type CopilotReply = {
 type ChatItem = { question: string; reply?: CopilotReply; error?: string }
 
 const STORAGE_KEY = 'marine-copilot-chat'
-
-function describeResult(reply: CopilotReply): string | null {
-  if (reply.result?.status !== 'AVAILABLE') return null
-  const summary = reply.result.summary as Record<string, unknown> | undefined
-  if (!summary) return null
-  const categories = Array.isArray(summary.top_categories) ? summary.top_categories as Array<Record<string, unknown>> : []
-  const bottlenecks = Array.isArray(summary.top_bottlenecks) ? summary.top_bottlenecks as Array<Record<string, unknown>> : []
-  const totalHours = typeof summary.total_delay_hours === 'number' ? summary.total_delay_hours : null
-  const totalCount = typeof summary.total_delays_count === 'number' ? summary.total_delays_count : null
-  const parts: string[] = []
-  if (totalCount !== null && totalHours !== null) {
-    parts.push(`${totalCount} confirmed delays account for ${totalHours.toFixed(1)} hours in the governed population.`)
-  }
-  if (categories.length) {
-    const top = categories.slice(0, 3).map((item) => `${String(item.category)} (${String(item.count)} delays, ${String(item.percentage)}%)`)
-    parts.push(`The most frequent categories are ${top.join(', ')}.`)
-  }
-  if (bottlenecks.length) {
-    const names = bottlenecks.slice(0, 3).map((item) => String(item.stage_or_resource)).filter(Boolean)
-    if (names.length) parts.push(`Highest-ranked bottleneck stages/resources: ${names.join(', ')}.`)
-  }
-  return parts.length ? parts.join(' ') : null
-}
 
 export function FloatingCopilot() {
   const { user, token } = useAuth()
@@ -128,7 +107,7 @@ export function FloatingCopilot() {
             {messages.length === 0 && (
               <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)] p-4 text-[var(--color-text-secondary)] shadow-[var(--shadow-xs)]">
                 <div className="mb-2 flex items-center gap-2 font-semibold text-[var(--color-text-primary)]"><Sparkles size={14} className="text-[var(--color-accent)]" /> Governed operational assistant</div>
-                <p className="leading-5">Ask about delays, lead times, KPIs, vessel journeys, or trends. Every answer is grounded in governed data.</p>
+                <p className="leading-5">Ask about outliers, data quality, delays, statistics, KPIs, vessel journeys, or uploaded files. Every answer is grounded in the matching governed source.</p>
               </div>
             )}
             {messages.map((item, index) => (
@@ -139,12 +118,11 @@ export function FloatingCopilot() {
                 ) : item.reply ? (
                   <div className="mr-5 rounded-[var(--radius-lg)] rounded-tl-sm border border-[var(--color-border)] bg-[var(--color-surface)] px-3.5 py-3 text-[var(--color-text-primary)] shadow-[var(--shadow-xs)]">
                     <p className="whitespace-pre-wrap leading-5">{item.reply.answer}</p>
-                    {describeResult(item.reply) && <p className="mt-2 leading-relaxed text-[var(--color-text-primary)]">{describeResult(item.reply)}</p>}
-                    <p className="mt-2 text-[10px] text-[var(--color-text-tertiary)]">Tool: {item.reply.tool} · {item.reply.method}</p>
-                    <p className="mt-1 text-[10px] text-[var(--color-text-secondary)]">{item.reply.data_quality_caveat}</p>
+                    <p className="mt-2 text-[10px] text-[var(--color-text-tertiary)]">Source: {item.reply.source_label || item.reply.tool} · {item.reply.method}</p>
+                    {item.reply.data_quality_caveat && <p className="mt-1 text-[10px] text-[var(--color-text-secondary)]">{item.reply.data_quality_caveat}</p>}
                     {item.reply.result?.status === 'UNAVAILABLE' && <p className="mt-1 font-medium text-[var(--color-warning)]">UNAVAILABLE: {item.reply.result.reason || 'Required data is not available.'}</p>}
                     <div className="mt-3 flex flex-wrap items-center gap-3">
-                      {(item.reply.tool === 'delay_analysis' || item.reply.tool === 'cohort_statistics') && <Link href="/delays" className="inline-flex items-center gap-1 rounded-md bg-[var(--color-accent)] px-2.5 py-1.5 text-[10px] font-semibold text-white hover:bg-[var(--color-accent-hover)]">View analysis <ExternalLink size={11} /></Link>}
+                      {item.reply.analysis_path && <Link href={item.reply.analysis_path} className="inline-flex items-center gap-1 rounded-md bg-[var(--color-accent)] px-2.5 py-1.5 text-[10px] font-semibold text-white hover:bg-[var(--color-accent-hover)]">View analysis <ExternalLink size={11} /></Link>}
                       {item.reply.evidence.length > 0 && <span className="flex items-center gap-2 text-[10px] text-[var(--color-text-tertiary)]">Evidence: {item.reply.evidence.slice(0, 4).map((href) => <Link key={href} href={href} className="inline-flex items-center gap-0.5 font-medium text-[var(--color-accent)] hover:underline">Open <ExternalLink size={9} /></Link>)}</span>}
                     </div>
                   </div>
