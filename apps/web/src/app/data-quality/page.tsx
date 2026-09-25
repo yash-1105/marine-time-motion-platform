@@ -93,6 +93,9 @@ const ISSUE_DESCRIPTIONS: Record<string, string> = {
 }
 
 function issueDescription(issue: QualityIssue) {
+  if (issue.issue_class === 'OUTLIER') {
+    return issue.rule_name || issue.reason || ISSUE_DESCRIPTIONS.OUTLIER
+  }
   return ISSUE_DESCRIPTIONS[issue.rule_id] || issue.reason || issue.remediation_guidance || issue.rule_name || 'Data quality rule violation detected.'
 }
 

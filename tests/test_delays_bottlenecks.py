@@ -8,7 +8,7 @@ from sqlalchemy import func, select
 
 from apps.api.core.database import SessionLocal
 from apps.api.main import app
-from apps.api.models.analytics import ActionItem, LeadTimeResult, OperationalAlert, OutlierRecord
+from apps.api.models.analytics import ActionItem, LeadTimeDefinition, LeadTimeResult, OperationalAlert, OutlierRecord
 from apps.api.models.canonical import (
     Delay,
     DelayAllocation,
@@ -545,6 +545,19 @@ def test_pre_v2_turnaround_outlier_has_v2_read_category_without_rewriting_lineag
         detected_at=datetime.now(UTC),
     )
     db.add(record)
+    turnaround = db.execute(
+        select(LeadTimeDefinition).where(LeadTimeDefinition.name == "Turnaround")
+    ).scalar_one()
+    lineage = LeadTimeResult(
+        vessel_call_id=call.id,
+        definition_id=turnaround.id,
+        vcn=call.vcn,
+        duration_hours=12,
+        status="AVAILABLE",
+        source_record_ids=["source-event-a", "source-event-b"],
+        calculated_at=datetime.now(UTC),
+    )
+    db.add(lineage)
     db.commit()
     try:
         rows = OutlierEngine(db, tenant_id).list_outliers(outlier_type="Time-based Outlier")
@@ -552,7 +565,62 @@ def test_pre_v2_turnaround_outlier_has_v2_read_category_without_rewriting_lineag
         assert rows[0]["id"] == str(record.id)
         assert rows[0]["outlier_type"] == "Time-based Outlier"
         assert rows[0]["benchmark_or_p90"] == 10
-        assert db.get(OutlierRecord, record.id).outlier_type == "OPERATIONAL_OUTLIER"
+        assert rows[0]["issue_text"] == "Vessel turnaround time exceeded the historical outlier threshold."
+        assert rows[0]["threshold_label"] == "Historical threshold"
+        assert rows[0]["reason"] == "Flagged by the legacy outlier rule used when this dataset was processed."
+        assert rows[0]["movement_leg"] == "Unavailable / Legacy record"
+        assert rows[0]["source_record_ids"] == ["source-event-a", "source-event-b"]
+        assert rows[0]["legacy_record"] is True
+        persisted = db.get(OutlierRecord, record.id)
+        assert persisted.outlier_type == "OPERATIONAL_OUTLIER"
+        assert persisted.issue_text is None
+        assert persisted.threshold_label is None
+        assert persisted.reason is None
+        assert persisted.movement_leg is None
+    finally:
+        db.delete(lineage)
+        db.delete(record)
+        db.flush()
+        db.delete(call)
+        db.commit()
+
+
+def test_v2_outlier_read_model_is_not_downgraded(db):
+    suffix = uuid.uuid4().hex[:8]
+    tenant_id = f"v2-outlier-tenant-{suffix}"
+    call = VesselCall(vessel_name="V2 Vessel", vcn="V2-VCN", tenant_id=tenant_id)
+    db.add(call)
+    db.flush()
+    record = OutlierRecord(
+        tenant_id=tenant_id,
+        vessel_call_id=call.id,
+        vcn=call.vcn,
+        outlier_type="Sequence Outlier",
+        rule_id="OUT-V2-004",
+        metric_name="Arrival Tug Sequence",
+        observed_value=-0.25,
+        benchmark_or_p90=0,
+        divergence=-0.25,
+        issue_text="Tug service started before pilot boarding.",
+        threshold_label="Tug service start ≥ pilot on board",
+        reason="The governed tug timestamp precedes pilot boarding.",
+        movement_leg="ARRIVAL_INWARD",
+        source_record_ids=["tug-source", "pilot-source"],
+        severity="HIGH",
+        detected_at=datetime.now(UTC),
+    )
+    db.add(record)
+    db.commit()
+    try:
+        row = OutlierEngine(db, tenant_id).list_outliers()[0]
+        assert row["outlier_type"] == record.outlier_type
+        assert row["rule_id"] == record.rule_id
+        assert row["issue_text"] == record.issue_text
+        assert row["threshold_label"] == record.threshold_label
+        assert row["reason"] == record.reason
+        assert row["movement_leg"] == record.movement_leg
+        assert row["source_record_ids"] == record.source_record_ids
+        assert row["legacy_record"] is False
     finally:
         db.delete(record)
         db.flush()

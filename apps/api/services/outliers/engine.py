@@ -62,6 +62,15 @@ def presented_outlier_category(outlier_type: str, metric_name: str | None) -> st
     return outlier_type
 
 
+def is_legacy_turnaround_outlier(outlier: OutlierRecord) -> bool:
+    """Identify the single pre-v2 persisted shape without relying on fixture IDs."""
+    return (
+        outlier.outlier_type == "OPERATIONAL_OUTLIER"
+        and outlier.metric_name == "Turnaround"
+        and not outlier.rule_id
+    )
+
+
 class OutlierEngine:
     CATEGORIES = frozenset(
         {
@@ -690,8 +699,29 @@ class OutlierEngine:
         if vcn:
             query = query.where(OutlierRecord.vcn == vcn)
         rows = self.db.execute(query.order_by(desc(OutlierRecord.severity), desc(OutlierRecord.divergence))).all()
-        return [
-            {
+        legacy_call_ids = [row.vessel_call_id for row, _vessel_name in rows if is_legacy_turnaround_outlier(row)]
+        legacy_lineage: dict[uuid.UUID, list[str]] = {}
+        if legacy_call_ids:
+            lineage_results = self.db.execute(
+                select(LeadTimeResult)
+                .join(LeadTimeDefinition, LeadTimeResult.definition_id == LeadTimeDefinition.id)
+                .where(
+                    LeadTimeResult.vessel_call_id.in_(legacy_call_ids),
+                    LeadTimeDefinition.name == "Turnaround",
+                )
+                .order_by(desc(LeadTimeResult.calculated_at))
+            ).scalars()
+            for result in lineage_results:
+                target = legacy_lineage.setdefault(result.vessel_call_id, [])
+                for source_id in result.source_record_ids or []:
+                    if source_id not in target:
+                        target.append(source_id)
+
+        def present(row: OutlierRecord, vessel_name: str | None) -> dict[str, Any]:
+            legacy = is_legacy_turnaround_outlier(row)
+            native_sources = list(row.source_record_ids or [])
+            source_record_ids = native_sources or (legacy_lineage.get(row.vessel_call_id, []) if legacy else [])
+            return {
                 "id": str(row.id),
                 "vessel_call_id": str(row.vessel_call_id),
                 "vcn": row.vcn,
@@ -702,16 +732,24 @@ class OutlierEngine:
                 "observed_value": row.observed_value,
                 "benchmark_or_p90": row.benchmark_or_p90,
                 "divergence": row.divergence,
-                "issue_text": row.issue_text,
-                "threshold_label": row.threshold_label,
-                "reason": row.reason,
-                "movement_leg": row.movement_leg,
-                "source_record_ids": row.source_record_ids or [],
+                "issue_text": row.issue_text or (
+                    "Vessel turnaround time exceeded the historical outlier threshold." if legacy else None
+                ),
+                "threshold_label": row.threshold_label or ("Historical threshold" if legacy else None),
+                "reason": row.reason or (
+                    "Flagged by the legacy outlier rule used when this dataset was processed." if legacy else None
+                ),
+                "movement_leg": row.movement_leg or ("Unavailable / Legacy record" if legacy else None),
+                "source_record_ids": source_record_ids,
                 "is_excluded_from_kpi": row.is_excluded_from_kpi,
                 "exclusion_rationale": row.exclusion_rationale,
                 "severity": row.severity,
                 "evidence": row.evidence,
                 "detected_at": row.detected_at.isoformat() if row.detected_at else None,
+                "legacy_record": legacy,
             }
+
+        return [
+            present(row, vessel_name)
             for row, vessel_name in rows
         ]

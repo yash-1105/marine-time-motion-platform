@@ -161,6 +161,7 @@ interface OutlierItem {
   severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'
   evidence?: Record<string, unknown> | null
   detected_at?: string
+  legacy_record?: boolean
 }
 
 interface CriticalityItem {
@@ -1546,6 +1547,13 @@ export default function DelaysAndBottlenecksPage() {
                 <p className="font-medium text-[var(--color-text-primary)]">{outlierModal.issue_text}</p>
                 {outlierModal.reason && <p className="mt-1">{outlierModal.reason}</p>}
                 {outlierModal.threshold_label && <p className="mt-1 font-medium">{outlierModal.threshold_label}</p>}
+                {outlierModal.movement_leg && <p className="mt-1">Journey leg: {outlierModal.movement_leg.replaceAll('_', ' / ')}</p>}
+                {outlierModal.source_record_ids && outlierModal.source_record_ids.length > 0 && (
+                  <details className="mt-2">
+                    <summary className="cursor-pointer font-medium">Source lineage ({outlierModal.source_record_ids.length})</summary>
+                    <p className="mt-1 break-all font-mono text-[10px]">{outlierModal.source_record_ids.join(', ')}</p>
+                  </details>
+                )}
               </div>
             )}
 
