@@ -19,6 +19,7 @@ from apps.api.models.canonical import (
 from apps.api.models.config import EventDefinition
 from apps.api.models.ingestion import IngestionBatch, IngestionFile, RawRecord, StagingRecord
 from apps.api.services.delays.mapping import map_to_canonical_category
+from apps.api.services.ingestion.standardization import StandardizationRegistry
 
 
 class IngestionPipeline:
@@ -35,6 +36,7 @@ class IngestionPipeline:
     def __init__(self, db: Session, tenant_id: str = "default-tenant"):
         self.db = db
         self.tenant_id = tenant_id
+        self.standardization = StandardizationRegistry()
 
     def calculate_checksum(self, file_path: str) -> str:
         sha256_hash = hashlib.sha256()
@@ -208,7 +210,11 @@ class IngestionPipeline:
         for sheet_name, df in workbook.items():
             if sheet_name not in self.GOVERNED_WORKSHEETS:
                 continue
-            missing_columns = self.REQUIRED_COLUMNS[sheet_name].difference(df.columns)
+            normalized_columns = {
+                self.standardization.canonical_column(sheet_name, str(column))
+                for column in df.columns
+            }
+            missing_columns = self.REQUIRED_COLUMNS[sheet_name].difference(normalized_columns)
             if missing_columns:
                 raise ValueError(f"{sheet_name} is missing required column(s): {', '.join(sorted(missing_columns))}")
 
@@ -284,7 +290,7 @@ class IngestionPipeline:
 
             staging_records: list[dict] = []
             for (_, row_idx), row_info in row_map.items():
-                parsed_data = row_info["data"]
+                parsed_data = self.standardization.normalize_row(sheet, row_info["data"])
                 canonical_table = ""
                 if sheet == "VesselCalls":
                     canonical_table = "vessel_call"
@@ -375,6 +381,7 @@ class IngestionPipeline:
             vc = VesselCall(
                 source_lineage_id=f"{r.source_file_id}:{r.worksheet_name}:{r.row_number}",
                 tenant_id=batch.tenant_id,
+                license_number=get_val(pd, "License_Number"),
                 vessel_name=get_val(pd, "Vessel_Name") or "UNKNOWN",
                 imo_number=get_val(pd, "IMO_Number"),
                 vcn=vcn,
@@ -383,12 +390,18 @@ class IngestionPipeline:
                 flag=get_val(pd, "Flag"),
                 last_port_of_call=get_val(pd, "Last_Port_Of_Call"),
                 next_port_of_call=get_val(pd, "Next_Port_Of_Call"),
+                port_of_lading=get_val(pd, "Port_Of_Lading"),
+                port_of_discharge=get_val(pd, "Port_Of_Discharge"),
                 reason_for_visit=get_val(pd, "Reason_For_Visit"),
                 cargo_type=get_val(pd, "Cargo_Type"),
+                commodity=get_val(pd, "Commodity"),
                 quantity_value=get_float(pd, "Planned_Quantity"),
                 grt=get_float(pd, "GRT"),
                 loa_value=get_float(pd, "LOA_Value"),
                 dwt=get_float(pd, "DWT"),
+                forward_draft_value=get_float(pd, "Forward_Draft"),
+                aft_draft_value=get_float(pd, "Aft_Draft"),
+                call_sign=get_val(pd, "Call_Sign"),
             )
             self.db.add(vc)
             vessels_to_add.append((vcn, vc))
@@ -435,6 +448,7 @@ class IngestionPipeline:
         from dateutil import parser
 
         event_counters = {}
+        event_keys_with_source: set[tuple[object, object]] = set()
         for r in event_records:
             pd = r.parsed_data
             vcn = pd.get("VCN")
@@ -445,7 +459,10 @@ class IngestionPipeline:
                 r.errors = {"VCN": "Orphan event: VCN not found"}
                 continue
 
-            event_name = pd.get("Event_Name")
+            source_event_name = pd.get("Event_Name")
+            event_name = self.standardization.canonical_event_name(
+                str(source_event_name or ""), pd.get("Movement_Type")
+            )
             event_def_id = event_def_map.get(event_name)
 
             timestamp_str = pd.get("Event_Timestamp")
@@ -464,10 +481,13 @@ class IngestionPipeline:
                 except Exception:
                     pass
 
-            scope = "ARRIVAL"
-            if event_name and ("SAILING" in event_name or "DEPARTURE" in event_name or "OUT" in event_name):
+            scope = str(pd.get("Movement_Type") or "").strip().upper()
+            scope = {"INWARD": "ARRIVAL", "OUTWARD": "SAILING", "DEPARTURE": "SAILING"}.get(scope, scope)
+            if scope not in {"ARRIVAL", "SHIFTING", "SAILING"}:
+                scope = "ARRIVAL"
+            if not pd.get("Movement_Type") and event_name and ("SAILING" in event_name or "DEPARTURE" in event_name or "OUT" in event_name):
                 scope = "SAILING"
-            elif event_name and "SHIFT" in event_name:
+            elif not pd.get("Movement_Type") and event_name and "SHIFT" in event_name:
                 scope = "SHIFTING"
 
             confidence_str = pd.get("Confidence_Score")
@@ -496,9 +516,19 @@ class IngestionPipeline:
                     source_system=pd.get("Source_System"),
                     source_record_id=pd.get("Event_ID"),
                     ingestion_batch_id=batch.batch_id,
+                    operation_type=pd.get("Operation_Type"),
+                    attributes={
+                        key: value
+                        for key, value in pd.items()
+                        if key not in {
+                            "VCN", "Event_Name", "Event_Timestamp", "Movement_Type", "Operation_Type",
+                            "Timezone", "Source_System", "Event_ID", "Verification_Status", "Confidence_Score",
+                        } and value not in {None, ""}
+                    } | {"source_event_name": source_event_name},
                     is_quarantined=False,
                 )
                 self.db.add(ev)
+                event_keys_with_source.add((vc_id, event_def_id))
 
         batch_staging = (
             self.db.execute(select(StagingRecord).where(StagingRecord.ingestion_batch_id == batch.batch_id))
@@ -689,8 +719,61 @@ class IngestionPipeline:
                 downtime_hours=parse_flt(pd_data.get("Downtime_Hours")),
                 actual_quantity=parse_flt(pd_data.get("Actual_Quantity")),
                 data_status=pd_data.get("Data_Status"),
+                attributes={
+                    key: value
+                    for key, value in pd_data.items()
+                    if key not in {
+                        "VCN", "Cargo_Operation_ID", "Cargo_Type", "Operation_Type", "Planned_Quantity",
+                        "Unit", "Cargo_Start", "Cargo_End", "Working_Hours", "Resources_Deployed",
+                        "Downtime_Hours", "Actual_Quantity", "Data_Status",
+                    } and value not in {None, ""}
+                },
             )
             self.db.add(cg)
+
+            # Optional FRD-v2 berth timestamps use the governed event envelope.
+            # An explicit Events observation wins; CargoOps supplies the event
+            # only when that call/event slot otherwise has no source.
+            for event_name in self.standardization.berth_datetime_fields:
+                column_name = self.standardization.BERTH_TARGET_COLUMNS.get(event_name, event_name)
+                source_value = pd_data.get(column_name)
+                event_time = dt_parse(source_value)
+                if event_time is None:
+                    continue
+                event_def_id = event_def_map.get(event_name)
+                if event_def_id is None:
+                    definition = EventDefinition(
+                        name=event_name,
+                        category="Berth",
+                        description=f"FRD v2 berth attribute: {event_name}",
+                    )
+                    self.db.add(definition)
+                    self.db.flush()
+                    event_def_id = definition.id
+                    event_def_map[event_name] = event_def_id
+                if (vc_id, event_def_id) in event_keys_with_source:
+                    continue
+                event_counters[(vc_id, event_def_id)] = event_counters.get((vc_id, event_def_id), 0) + 1
+                self.db.add(EventOccurrence(
+                    source_lineage_id=f"{r.source_file_id}:{r.worksheet_name}:{r.row_number}",
+                    vessel_call_id=vc_id,
+                    event_definition_id=event_def_id,
+                    occurrence_index=event_counters[(vc_id, event_def_id)],
+                    movement_scope="ARRIVAL",
+                    operation_type=pd_data.get("Operation_Type"),
+                    attributes={"source_field": event_name, "source_worksheet": "CargoOps"},
+                    original_string=str(source_value),
+                    parsed_value=event_time,
+                    source_timezone="Africa/Johannesburg",
+                    utc_value=event_time,
+                    capture_method="SYSTEM",
+                    verification_status="Unverified",
+                    source_system="CargoOps",
+                    source_record_id=pd_data.get("Cargo_Operation_ID"),
+                    ingestion_batch_id=batch.batch_id,
+                    is_quarantined=False,
+                ))
+                event_keys_with_source.add((vc_id, event_def_id))
 
             # Update vessel_call quantity_unit and quantity_value from cargo ops
             vc = self.db.query(VesselCall).filter_by(id=vc_id).first()

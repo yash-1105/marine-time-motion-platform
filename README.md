@@ -32,6 +32,10 @@ DQ validates deterministic format, completeness, duplicate, conflict, configured
 
 The governed statistical engine calculates count, missing count, mean, median, standard deviation, coefficient of variation, minimum/maximum, P25, P75, P90, configured P95, fastest/slowest observations, and outliers. Percentiles use the configured persisted calculation path (currently linear interpolation); the API is the sole calculator and Time & Motion Explorer/KPI UI expose the method, units, and sample availability.
 
+### Revised FRD v2 alignment
+
+The implementation follows `AI Tool Functional Requirement Document (FRD) - v2.docx` for revised sections 4.2.1, 4.4.3 and 4.4.6. The machine-readable data dictionary (`config/frd_v2_data_dictionary.yaml`) registers 21 vessel/cargo, 135 marine-event and 31 berth attributes without creating fixture data. Service Request Submission, Requested, Scheduled and Actual timestamps remain distinct; delay frequency is reported separately for Arrival/Inward, Sailing/Outward and Shifting with the exact `<40`, `40–60`, `>60` bands. The deterministic outlier registry contains all 43 revised scenarios and exposes the five required categories, while missing weather, tide, availability, resource-norm and crane inputs remain explicitly unavailable. See `docs/audits/frd-v2-alignment.md`.
+
 The active governed KPI registry contains exactly the 55 numbered FRD definitions. Formula version `2.1` is the current executable release version; older results retain their own version attribution. Legacy unnumbered KPI definitions are retained only for historical lineage, marked inactive, and cannot enter current scorecards or calculations. The Governed KPIs experience surfaces persisted P75/P90 statistics and retains KPI formula versions, targets, variance, status, source lineage, and `UNAVAILABLE`/`NO_SOURCE_DATA` semantics. Refresh actions invalidate and reload the scorecard from persisted analytics.
 
 ### Service Line interpretation

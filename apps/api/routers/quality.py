@@ -194,6 +194,7 @@ def list_issues(
     incomplete_only: bool = False,
     chronological_only: bool = False,
     db: Session = Depends(get_db),
+    principal=Depends(require("view", "quality")),
 ):
     query = (
         select(QualityIssue, QualityRule, VesselCall)
@@ -261,17 +262,32 @@ def list_issues(
     # Outliers are not silently treated as bad source data.  They are separate,
     # inspectable analytical signals and are only included when requested.
     if outliers_only:
-        outlier_query = select(OutlierRecord, VesselCall).join(VesselCall, OutlierRecord.vessel_call_id == VesselCall.id)
+        tenant_id = _tenant(principal)
+        outlier_query = (
+            select(OutlierRecord, VesselCall)
+            .join(VesselCall, OutlierRecord.vessel_call_id == VesselCall.id)
+            .where(OutlierRecord.tenant_id == tenant_id, VesselCall.tenant_id == tenant_id)
+        )
         for outlier, vc in db.execute(outlier_query).all():
             if vessel and vessel.lower() not in f"{vc.vcn or ''} {vc.vessel_name or ''}".lower():
                 continue
             results.append(QualityIssueSchema(
-                id=str(outlier.id), rule_id="OUTLIER", vessel_call_id=str(outlier.vessel_call_id),
+                id=str(outlier.id), rule_id=outlier.rule_id or "OUTLIER", vessel_call_id=str(outlier.vessel_call_id),
                 record_reference=f"OutlierRecord:{outlier.id}", issue_status="EXCLUDED" if outlier.is_excluded_from_kpi else "OPEN",
-                rule_name=outlier.metric_name, severity=outlier.severity, scope="OUTLIER", vcn=vc.vcn,
+                rule_name=outlier.issue_text or outlier.metric_name, severity=outlier.severity,
+                scope=outlier.outlier_type, vcn=vc.vcn,
                 vessel_name=vc.vessel_name, disposition="EXCLUDED" if outlier.is_excluded_from_kpi else "REVIEW",
                 workflow_state="EXCLUDED" if outlier.is_excluded_from_kpi else "OPEN", created_at=outlier.detected_at.isoformat() if outlier.detected_at else None,
-                issue_class="OUTLIER", original_values=outlier.evidence, reason="Statistical outlier; review before excluding.",
+                issue_class="OUTLIER",
+                original_values={
+                    "observed_value": outlier.observed_value,
+                    "threshold": outlier.benchmark_or_p90,
+                    "threshold_label": outlier.threshold_label,
+                    "source_record_ids": outlier.source_record_ids or [],
+                    "evidence": outlier.evidence or {},
+                },
+                reason=outlier.reason or outlier.issue_text or "Governed outlier; review before excluding.",
+                movement_scope=outlier.movement_leg,
                 is_excluded=outlier.is_excluded_from_kpi,
             ))
     return results

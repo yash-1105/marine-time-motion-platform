@@ -25,7 +25,7 @@ class ToggleExclusionRequest(BaseModel):
 
 @router.get("", summary="List detected operational and data-quality outliers")
 def list_outliers(
-    outlier_type: str | None = Query(None, description="OPERATIONAL_OUTLIER, DATA_QUALITY_OUTLIER, etc."),
+    outlier_type: str | None = Query(None, description="FRD v2 outlier category, e.g. Time-based Outlier"),
     severity: str | None = Query(None, description="MEDIUM, HIGH, CRITICAL"),
     is_excluded: bool | None = Query(None, description="Filter by KPI exclusion status"),
     vcn: str | None = Query(None, description="Filter by VCN"),

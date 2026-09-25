@@ -107,6 +107,7 @@ interface ServiceTimingRow {
   requested_time?: string | null
   scheduled_time?: string | null
   served_time?: string | null
+  planning_lead_time_hours?: number | null
   scheduling_gap_hours?: number | null
   execution_delay_hours?: number | null
   execution_delay_status: 'EARLY' | 'ON_TIME' | 'LATE' | 'UNAVAILABLE'
@@ -749,7 +750,7 @@ function VesselJourneyContent() {
                     <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3 text-xs">
                       <div className="flex items-center justify-between gap-3 mb-2">
                         <h3 className="font-semibold text-[var(--color-text-primary)]">Service timing</h3>
-                        <span className="text-[var(--color-text-secondary)]">Requested, scheduled, and served are shown separately from time taken.</span>
+                        <span className="text-[var(--color-text-secondary)]">Submission, requested, scheduled, and actual are kept distinct.</span>
                       </div>
                       <div className="space-y-2">
                         {serviceTimings.map((timing) => (
@@ -759,12 +760,14 @@ function VesselJourneyContent() {
                               <p className="text-[10px] text-[var(--color-text-tertiary)]">{timing.movement || 'Unclassified'}</p>
                             </div>
                             <div>
-                              <div className="grid gap-2 sm:grid-cols-3">
+                              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                                <div className="rounded-md bg-[var(--color-surface-muted)] px-2.5 py-2"><span className="block text-[10px] uppercase tracking-wide text-[var(--color-text-tertiary)]">Request Submission</span><strong className="mt-0.5 block font-medium text-[var(--color-text-primary)]">{timing.submission_time ? fmtTs(timing.submission_time) : 'Unavailable'}</strong></div>
                                 <div className="rounded-md bg-[var(--color-surface-muted)] px-2.5 py-2"><span className="block text-[10px] uppercase tracking-wide text-[var(--color-text-tertiary)]">Requested Time</span><strong className="mt-0.5 block font-medium text-[var(--color-text-primary)]">{timing.requested_time ? fmtTs(timing.requested_time) : 'Unavailable'}</strong></div>
                                 <div className="rounded-md bg-[var(--color-surface-muted)] px-2.5 py-2"><span className="block text-[10px] uppercase tracking-wide text-[var(--color-text-tertiary)]">Scheduled / Assigned Time</span><strong className="mt-0.5 block font-medium text-[var(--color-text-primary)]">{timing.scheduled_time ? fmtTs(timing.scheduled_time) : 'Unavailable'}</strong></div>
                                 <div className="rounded-md bg-[var(--color-surface-muted)] px-2.5 py-2"><span className="block text-[10px] uppercase tracking-wide text-[var(--color-text-tertiary)]">Actual / Served Time</span><strong className="mt-0.5 block font-medium text-[var(--color-text-primary)]">{timing.served_time ? fmtTs(timing.served_time) : 'Unavailable'}</strong></div>
                               </div>
                               <div className="mt-2 flex flex-wrap items-center gap-2">
+                                <div className="flex items-center gap-1.5"><span className="text-[10px] font-semibold text-[var(--color-text-secondary)]">Planning Lead Time</span><StatusBadge label={timing.planning_lead_time_hours == null ? 'Unavailable' : fmt(timing.planning_lead_time_hours)} tone="neutral" showGlyph={false} /></div>
                                 <div className="flex items-center gap-1.5"><span className="text-[10px] font-semibold text-[var(--color-text-secondary)]">Scheduling Gap</span><StatusBadge label={schedulingGapLabel(timing.scheduling_gap_hours)} tone={timing.scheduling_gap_hours != null && timing.scheduling_gap_hours < 0 ? 'critical' : 'neutral'} showGlyph={false} /></div>
                                 <div className="flex items-center gap-1.5"><span className="text-[10px] font-semibold text-[var(--color-text-secondary)]">Execution Delay</span><StatusBadge label={executionDelayLabel(timing.execution_delay_hours)} tone={timing.execution_delay_status === 'EARLY' ? 'good' : timing.execution_delay_status === 'LATE' ? 'warning' : 'neutral'} showGlyph={false} /></div>
                                 {timing.service_duration_status === 'UNAVAILABLE' && <span className="text-[10px] text-[var(--color-text-tertiary)]">Time taken unavailable: {timing.service_duration_reason}</span>}

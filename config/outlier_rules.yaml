@@ -1,0 +1,58 @@
+version: "2.0"
+source: "AI Tool Functional Requirement Document (FRD) - v2.docx §4.4.6"
+defaults:
+  unusually_high: P90_LINEAR
+  unusually_low: P30_LINEAR
+categories:
+  - Time-based Outlier
+  - Sequence Outlier
+  - Resource Utilization Outlier
+  - Data Quality Outlier
+  - Operational Performance Outlier
+
+# Rules marked NO_SOURCE_DATA remain governed and visible in documentation but
+# are never evaluated with invented proxy inputs.
+rules:
+  - {id: OUT-V2-001, name: "Vessel turnaround exceeds P90", category: "Time-based Outlier", threshold: P90_LINEAR, status: IMPLEMENTED, required_inputs: [ATA, ATD]}
+  - {id: OUT-V2-002, name: "Pilot boarding delay exceeds historical average by 3 SD", category: "Time-based Outlier", threshold: MEAN_PLUS_3_SAMPLE_SD, status: IMPLEMENTED, required_inputs: [Scheduled_Service_Time, Actual_Service_Time]}
+  - {id: OUT-V2-003, name: "Cargo operations duration unusually high for vessel size", category: "Operational Performance Outlier", threshold: P90_LINEAR_BY_SIZE_COHORT, status: UNAVAILABLE, required_inputs: [Cargo_Start, Cargo_End, Vessel_Size_TEU, Governed_Size_Cohort_Bands], unavailable_reason: "FRD v2 does not define governed vessel-size cohort bands."}
+  - {id: OUT-V2-004, name: "Tug service starts before pilot boarding", category: "Sequence Outlier", threshold: ORDERED_EVENT_PAIR, status: IMPLEMENTED, required_inputs: [TUG_SERVICE_START_ARRIVAL, PILOT_ON_BOARD_ARRIVAL]}
+  - {id: OUT-V2-005, name: "First crane movement very late after all fast", category: "Time-based Outlier", threshold: P90_LINEAR, status: NO_SOURCE_DATA, required_inputs: [ALL_FAST_ARRIVAL, FIRST_CRANE_MOVEMENT]}
+  - {id: OUT-V2-006, name: "Anchorage waiting exceeds P95", category: "Time-based Outlier", threshold: P95_LINEAR, status: IMPLEMENTED, required_inputs: [ANCHORAGE_ARRIVAL, PILOT_ON_BOARD_ARRIVAL]}
+  - {id: OUT-V2-007, name: "Pilot boarding significantly earlier than scheduled", category: "Time-based Outlier", threshold: P30_LINEAR, status: IMPLEMENTED, required_inputs: [Scheduled_Service_Time, Actual_Service_Time]}
+  - {id: OUT-V2-008, name: "Pilot-to-first-line-tied exceeds service standard", category: "Operational Performance Outlier", threshold: CONFIGURED_SERVICE_STANDARD, status: NO_SOURCE_DATA, required_inputs: [PILOT_ON_BOARD_ARRIVAL, FIRST_LINE_TIED_ARRIVAL, Service_Standard]}
+  - {id: OUT-V2-009, name: "Berthing duration unusually high despite normal weather", category: "Operational Performance Outlier", threshold: P90_LINEAR, status: NO_SOURCE_DATA, required_inputs: [FIRST_LINE_TIED_ARRIVAL, ALL_FAST_ARRIVAL, Weather_Normalization]}
+  - {id: OUT-V2-010, name: "Mooring completion exceeds historical upper control limit", category: "Time-based Outlier", threshold: MEAN_PLUS_3_SAMPLE_SD, status: IMPLEMENTED, required_inputs: [FIRST_LINE_TIED_ARRIVAL, ALL_FAST_ARRIVAL]}
+  - {id: OUT-V2-011, name: "Cargo operations start delayed after all fast", category: "Time-based Outlier", threshold: P90_LINEAR, status: IMPLEMENTED, required_inputs: [ALL_FAST_ARRIVAL, CARGO_START]}
+  - {id: OUT-V2-012, name: "Cargo completion to sailing readiness unusually long", category: "Time-based Outlier", threshold: P90_LINEAR, status: IMPLEMENTED, required_inputs: [CARGO_END, PILOT_ON_BOARD_SAILING]}
+  - {id: OUT-V2-013, name: "Vessel remains at berth long after cargo completion", category: "Time-based Outlier", threshold: P90_LINEAR, status: IMPLEMENTED, required_inputs: [CARGO_END, LAST_LINE_UNTIED_SAILING]}
+  - {id: OUT-V2-014, name: "Unmooring before departure clearances", category: "Sequence Outlier", threshold: ORDERED_EVENT_PAIR, status: NO_SOURCE_DATA, required_inputs: [Departure_Clearance, FIRST_LINE_UNTIED_SAILING]}
+  - {id: OUT-V2-015, name: "Unmooring duration exceeds P90", category: "Time-based Outlier", threshold: P90_LINEAR, status: IMPLEMENTED, required_inputs: [FIRST_LINE_UNTIED_SAILING, LAST_LINE_UNTIED_SAILING]}
+  - {id: OUT-V2-016, name: "Pilot disembarks before designated pilot boundary", category: "Sequence Outlier", threshold: ORDERED_EVENT_PAIR, status: NO_SOURCE_DATA, required_inputs: [PILOT_DISEMBARK_SAILING, Designated_Pilot_Boundary]}
+  - {id: OUT-V2-017, name: "Tug utilization unusually high relative to vessel class norm", category: "Resource Utilization Outlier", threshold: P90_LINEAR_BY_VESSEL_CLASS, status: NO_SOURCE_DATA, required_inputs: [Tug_Service_Duration, Vessel_Class, Resource_Capacity]}
+  - {id: OUT-V2-018, name: "Too many tugs for vessel size/class", category: "Resource Utilization Outlier", threshold: CONFIGURED_RESOURCE_STANDARD, status: NO_SOURCE_DATA, required_inputs: [Tug_Count, Vessel_Size, Tug_Requirement_Standard]}
+  - {id: OUT-V2-019, name: "Idle after pilot boarding before inward transit", category: "Time-based Outlier", threshold: P90_LINEAR, status: ALIAS, alias_of: OUT-V2-024, required_inputs: [PILOT_ON_BOARD_ARRIVAL, BREAKWATER_IN]}
+  - {id: OUT-V2-020, name: "Idle after cargo completion before departure pilot boarding", category: "Time-based Outlier", threshold: P90_LINEAR, status: ALIAS, alias_of: OUT-V2-012, required_inputs: [CARGO_END, PILOT_ON_BOARD_SAILING]}
+  - {id: OUT-V2-021, name: "Waiting for berth despite availability", category: "Operational Performance Outlier", threshold: P90_LINEAR, status: NO_SOURCE_DATA, required_inputs: [Berth_Availability, Berth_Wait]}
+  - {id: OUT-V2-022, name: "Waiting for pilot despite availability", category: "Operational Performance Outlier", threshold: P90_LINEAR, status: NO_SOURCE_DATA, required_inputs: [Pilot_Availability, Pilot_Wait]}
+  - {id: OUT-V2-023, name: "Waiting for tugs despite availability", category: "Operational Performance Outlier", threshold: P90_LINEAR, status: NO_SOURCE_DATA, required_inputs: [Tug_Availability, Tug_Wait]}
+  - {id: OUT-V2-024, name: "Pilot boarding to breakwater-in unusually high", category: "Time-based Outlier", threshold: P90_LINEAR, status: IMPLEMENTED, required_inputs: [PILOT_ON_BOARD_ARRIVAL, BREAKWATER_IN]}
+  - {id: OUT-V2-025, name: "Breakwater-in to all-fast unusually high", category: "Time-based Outlier", threshold: P90_LINEAR, status: IMPLEMENTED, required_inputs: [BREAKWATER_IN, ALL_FAST_ARRIVAL]}
+  - {id: OUT-V2-026, name: "Breakwater-out to port-limit-out unusually high", category: "Time-based Outlier", threshold: P90_LINEAR, status: IMPLEMENTED, required_inputs: [BREAKWATER_OUT, PORT_LIMIT_OUT]}
+  - {id: OUT-V2-027, name: "Channel speed unusually low", category: "Operational Performance Outlier", threshold: P30_LINEAR, status: NO_SOURCE_DATA, required_inputs: [Channel_Distance, Transit_Duration, Vessel_Speed]}
+  - {id: OUT-V2-028, name: "Multiple berth shifts in one call", category: "Operational Performance Outlier", threshold: COUNT_GT_1, status: IMPLEMENTED, required_inputs: [SHIFT_PILOT_ON_BOARD]}
+  - {id: OUT-V2-029, name: "Departure delayed after marine services complete", category: "Time-based Outlier", threshold: P90_LINEAR, status: NO_SOURCE_DATA, required_inputs: [Marine_Services_Complete, Departure_From_Berth]}
+  - {id: OUT-V2-030, name: "Same pilot/tug allocated to overlapping movements", category: "Resource Utilization Outlier", threshold: OVERLAPPING_INTERVALS, status: NO_SOURCE_DATA, required_inputs: [Resource_ID, Service_Start, Service_End]}
+  - {id: OUT-V2-031, name: "Timestamp sequence anomaly", category: "Sequence Outlier", threshold: CONFIGURED_DAG, status: IMPLEMENTED, required_inputs: [Configured_Event_DAG]}
+  - {id: OUT-V2-032, name: "Missing or duplicate critical timestamps", category: "Data Quality Outlier", threshold: REQUIRED_UNIQUE_EVENT, status: IMPLEMENTED, required_inputs: [Critical_Event_Registry]}
+  - {id: OUT-V2-033, name: "Planned vs actual berthing variance excessive", category: "Operational Performance Outlier", threshold: P90_LINEAR, status: NO_SOURCE_DATA, required_inputs: [PLANNED_BERTHING_TIME_ARRIVAL, Actual_Berthing_Event]}
+  - {id: OUT-V2-034, name: "Planned vs actual sailing variance excessive", category: "Operational Performance Outlier", threshold: P90_LINEAR, status: IMPLEMENTED, required_inputs: [ETD, ATD]}
+  - {id: OUT-V2-035, name: "Tidal window missed despite readiness", category: "Operational Performance Outlier", threshold: EXPLICIT_WINDOW, status: NO_SOURCE_DATA, required_inputs: [Tidal_Window, Vessel_Readiness]}
+  - {id: OUT-V2-036, name: "Weather-normalized transit unusually slow", category: "Operational Performance Outlier", threshold: P90_LINEAR, status: NO_SOURCE_DATA, required_inputs: [Weather, Transit_Duration]}
+  - {id: OUT-V2-037, name: "Repeated cargo stoppages", category: "Operational Performance Outlier", threshold: CONFIGURED_COUNT, status: NO_SOURCE_DATA, required_inputs: [Cargo_Stoppage_Events]}
+  - {id: OUT-V2-038, name: "Extended berth occupancy without productive activity", category: "Operational Performance Outlier", threshold: P90_LINEAR, status: NO_SOURCE_DATA, required_inputs: [Berth_Occupancy, Productive_Activity_Intervals]}
+  - {id: OUT-V2-039, name: "Call duration abnormal relative to similar cargo-volume peers", category: "Operational Performance Outlier", threshold: P90_LINEAR_BY_CARGO_COHORT, status: UNAVAILABLE, required_inputs: [ATA, ATD, Quantity, Quantity_Unit, Governed_Cargo_Cohort_Bands], unavailable_reason: "FRD v2 does not define governed comparable cargo-volume cohorts."}
+  - {id: OUT-V2-040, name: "Low crane productivity", category: "Operational Performance Outlier", threshold: P30_LINEAR, status: NO_SOURCE_DATA, required_inputs: [Crane_Moves, Crane_Hours, Terminal_Benchmark]}
+  - {id: OUT-V2-041, name: "Unusual pilot-transfer time", category: "Time-based Outlier", threshold: P90_LINEAR, status: NO_SOURCE_DATA, required_inputs: [Pilot_Boat_Start, Pilot_On_Board]}
+  - {id: OUT-V2-042, name: "First-line-tied to last-line-tied excessive", category: "Time-based Outlier", threshold: P90_LINEAR, status: IMPLEMENTED, required_inputs: [FIRST_LINE_TIED_ARRIVAL, LAST_LINE_TIED_ARRIVAL]}
+  - {id: OUT-V2-043, name: "First-line-untied to last-line-untied excessive", category: "Time-based Outlier", threshold: P90_LINEAR, status: ALIAS, alias_of: OUT-V2-015, required_inputs: [FIRST_LINE_UNTIED_SAILING, LAST_LINE_UNTIED_SAILING]}

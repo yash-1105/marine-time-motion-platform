@@ -1,4 +1,7 @@
-# Event definitions
+# Core event definitions. The complete FRD-v2 §4.2.1 source-name/canonical-key
+# registry lives in frd_v2_data_dictionary.yaml and is loaded by deterministic
+# ingestion standardisation. New observed governed keys are registered without
+# requiring one database column per event.
 events:
   - name: "Nomination Details Submission"
     category: "Pre-arrival and clearance"

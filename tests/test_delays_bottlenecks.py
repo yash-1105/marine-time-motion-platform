@@ -4,11 +4,11 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from apps.api.core.database import SessionLocal
 from apps.api.main import app
-from apps.api.models.analytics import ActionItem, OperationalAlert, OutlierRecord
+from apps.api.models.analytics import ActionItem, LeadTimeResult, OperationalAlert, OutlierRecord
 from apps.api.models.canonical import (
     Delay,
     DelayAllocation,
@@ -456,16 +456,28 @@ def test_operational_outlier_is_evidenced_and_exclusion_is_governed(db):
     Production outliers derive from governed observed data, never a fixture oracle;
     each persisted outlier supports a transparent steward exclusion decision.
     """
-    outlier_engine = OutlierEngine(db, tenant_id="test")
+    tenant_id = db.execute(
+        select(VesselCall.tenant_id)
+        .join(LeadTimeResult, LeadTimeResult.vessel_call_id == VesselCall.id)
+        .where(VesselCall.is_merged.is_(False))
+        .group_by(VesselCall.tenant_id)
+        .order_by(func.count(VesselCall.id).desc())
+        .limit(1)
+    ).scalar_one()
+    outlier_engine = OutlierEngine(db, tenant_id=tenant_id)
     outliers = outlier_engine.detect_all_outliers(persist=True)
 
     assert outliers, "The governed outlier rules should identify observed anomalies"
     case = outliers[0]
     assert case["observed_value"] is not None
-    assert case["outlier_type"] in ["DATA_QUALITY_OUTLIER", "OPERATIONAL_OUTLIER", "EXTREME_DELAY_CASE", "PROCESS_VIOLATION"]
+    assert case["outlier_type"] in OutlierEngine.CATEGORIES
 
     # Toggle exclusion
-    outlier_rec = db.execute(select(OutlierRecord).where(OutlierRecord.vcn == case["vcn"], OutlierRecord.metric_name == case["metric_name"])).first()[0]
+    outlier_rec = db.execute(select(OutlierRecord).where(
+        OutlierRecord.tenant_id == tenant_id,
+        OutlierRecord.vcn == case["vcn"],
+        OutlierRecord.rule_id == case["rule_id"],
+    )).first()[0]
     toggled = outlier_engine.toggle_outlier_exclusion(
         outlier_id=outlier_rec.id,
         is_excluded=True,
@@ -474,6 +486,43 @@ def test_operational_outlier_is_evidenced_and_exclusion_is_governed(db):
     )
     assert toggled["is_excluded_from_kpi"] is True
     assert "documented steward" in toggled["exclusion_rationale"]
+
+
+def test_outlier_persistence_is_strictly_tenant_scoped(db):
+    """Overlapping VCNs never make an outlier visible or mutable across tenants."""
+    suffix = uuid.uuid4().hex[:8]
+    tenant_a = f"outlier-tenant-a-{suffix}"
+    tenant_b = f"outlier-tenant-b-{suffix}"
+    call_a = VesselCall(vessel_name="Shared Vessel", vcn="OVERLAPPING-VCN", tenant_id=tenant_a)
+    call_b = VesselCall(vessel_name="Shared Vessel", vcn="OVERLAPPING-VCN", tenant_id=tenant_b)
+    db.add_all([call_a, call_b])
+    db.flush()
+    record_a = OutlierRecord(
+        tenant_id=tenant_a, vessel_call_id=call_a.id, vcn=call_a.vcn,
+        outlier_type="Time-based Outlier", rule_id="OUT-V2-001", metric_name="Turnaround",
+        observed_value=12, benchmark_or_p90=10, divergence=2, severity="HIGH", detected_at=datetime.now(UTC),
+    )
+    record_b = OutlierRecord(
+        tenant_id=tenant_b, vessel_call_id=call_b.id, vcn=call_b.vcn,
+        outlier_type="Time-based Outlier", rule_id="OUT-V2-001", metric_name="Turnaround",
+        observed_value=13, benchmark_or_p90=10, divergence=3, severity="HIGH", detected_at=datetime.now(UTC),
+    )
+    db.add_all([record_a, record_b])
+    db.commit()
+    try:
+        assert {row["id"] for row in OutlierEngine(db, tenant_a).list_outliers()} == {str(record_a.id)}
+        assert {row["id"] for row in OutlierEngine(db, tenant_b).list_outliers()} == {str(record_b.id)}
+        with pytest.raises(ValueError):
+            OutlierEngine(db, tenant_a).toggle_outlier_exclusion(
+                record_b.id, True, "Cross-tenant mutation must be rejected"
+            )
+    finally:
+        db.delete(record_a)
+        db.delete(record_b)
+        db.flush()
+        db.delete(call_a)
+        db.delete(call_b)
+        db.commit()
 
 
 def test_non_duration_only_bottleneck_ranking():

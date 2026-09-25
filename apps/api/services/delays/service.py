@@ -124,8 +124,46 @@ class DelayService:
             "items": rows,
             "total": len(rows),
             "delay_overview": self._service_delay_overview(all_rows, "ALL"),
+            "delay_frequency_by_leg": self._delay_frequency_by_leg(all_rows),
             "duration_ranges": self._service_duration_ranges(),
         }
+
+    @staticmethod
+    def classify_delay_frequency(percentage: float) -> tuple[str, str]:
+        """FRD v2 §4.4.3 boundaries: <40 green, 40–60 orange, >60 red."""
+        if percentage < 40:
+            return "ACCEPTABLE", "GREEN"
+        if percentage <= 60:
+            return "WATCH", "ORANGE"
+        return "CRITICAL", "RED"
+
+    @classmethod
+    def _delay_frequency_by_leg(cls, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        result = []
+        for leg, label in (
+            ("ARRIVAL_INWARD", "Arrival / Inward"),
+            ("SAILING_OUTWARD", "Sailing / Outward"),
+            ("SHIFTING", "Shifting"),
+        ):
+            eligible = [row for row in rows if row["leg"] == leg and row.get("execution_delay_hours") is not None]
+            delayed = [row for row in eligible if row["execution_delay_hours"] > 0]
+            percentage = round((len(delayed) / len(eligible)) * 100, 1) if eligible else None
+            classification, band = cls.classify_delay_frequency(percentage) if percentage is not None else ("UNAVAILABLE", "GRAY")
+            result.append({
+                "leg": leg,
+                "label": label,
+                "status": "AVAILABLE" if percentage is not None else "UNAVAILABLE",
+                "eligible_event_count": len(eligible),
+                "delayed_event_count": len(delayed),
+                "delay_frequency_percent": percentage,
+                "classification": classification,
+                "band": band,
+                "formula": "Delayed eligible events / Total eligible events × 100",
+                "formula_version": "service-delay-frequency-v2.0",
+                "eligibility": "Scheduled Service Time and Actual Service Time are both available",
+                "unavailable_reason": None if eligible else "No eligible scheduled/actual service pairs are available for this leg.",
+            })
+        return result
 
     @staticmethod
     def _service_kind(service_type: str) -> str:

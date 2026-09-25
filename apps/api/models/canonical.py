@@ -19,6 +19,7 @@ class VesselCall(BaseModel):
     __table_args__ = {"schema": "canonical"}
 
     # Master attributes
+    license_number = Column(String, nullable=True)
     vessel_name = Column(String, nullable=False)
     imo_number = Column(String, nullable=True)
     vcn = Column(String, nullable=True)
@@ -65,6 +66,8 @@ class EventOccurrence(BaseModel):
     event_definition_id = Column(ForeignKey("config.event_definition.id"), nullable=False)
     occurrence_index = Column(Integer, default=1, nullable=False)
     movement_scope = Column(String, nullable=False)  # ARRIVAL|SHIFTING|SAILING
+    operation_type = Column(String, nullable=True)
+    attributes = Column(JSON, nullable=True)
 
     # Timestamp envelope
     original_string = Column(String, nullable=True)
@@ -171,3 +174,4 @@ class CargoOperation(BaseModel):
     downtime_hours = Column(Float, nullable=True)
     actual_quantity = Column(Float, nullable=True)
     data_status = Column(String, nullable=True)
+    attributes = Column(JSON, nullable=True)

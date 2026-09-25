@@ -97,6 +97,18 @@ interface ServiceDelayMetric {
   unavailable_reason?: string | null
 }
 
+interface DelayFrequencyMetric {
+  leg: string
+  label: string
+  status: 'AVAILABLE' | 'UNAVAILABLE'
+  eligible_event_count: number
+  delayed_event_count: number
+  delay_frequency_percent?: number | null
+  classification: 'ACCEPTABLE' | 'WATCH' | 'CRITICAL' | 'UNAVAILABLE'
+  band: 'GREEN' | 'ORANGE' | 'RED' | 'GRAY'
+  unavailable_reason?: string | null
+}
+
 interface ServiceDurationRange {
   service_type: string
   status: 'AVAILABLE' | 'UNAVAILABLE'
@@ -134,10 +146,16 @@ interface OutlierItem {
   vcn: string
   vessel_name?: string
   outlier_type: string
+  rule_id?: string
   metric_name: string
-  observed_value: number
-  benchmark_or_p90?: number
-  divergence?: number
+  observed_value: number | null
+  benchmark_or_p90?: number | null
+  divergence?: number | null
+  issue_text?: string
+  threshold_label?: string
+  reason?: string
+  movement_leg?: string
+  source_record_ids?: string[]
   is_excluded_from_kpi: boolean
   exclusion_rationale?: string
   severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'
@@ -235,6 +253,7 @@ export default function DelaysAndBottlenecksPage() {
   const [legFilter, setLegFilter] = useState('ALL')
   const [serviceTimings, setServiceTimings] = useState<ServiceTiming[]>([])
   const [serviceDelayMetrics, setServiceDelayMetrics] = useState<ServiceDelayMetric[]>([])
+  const [delayFrequencyMetrics, setDelayFrequencyMetrics] = useState<DelayFrequencyMetric[]>([])
   const [serviceDurationRanges, setServiceDurationRanges] = useState<ServiceDurationRange[]>([])
   const [categoryFilter, setCategoryFilter] = useState('')
   const [causeStatusFilter, setCauseStatusFilter] = useState('')
@@ -342,6 +361,7 @@ export default function DelaysAndBottlenecksPage() {
       const data = await res.json()
       setServiceTimings(data.items || [])
       setServiceDelayMetrics(data.delay_overview || [])
+      setDelayFrequencyMetrics(data.delay_frequency_by_leg || [])
       setServiceDurationRanges(data.duration_ranges || [])
     }
   }, [token, legFilter])
@@ -764,6 +784,35 @@ export default function DelaysAndBottlenecksPage() {
                   )
                 })}
               </div>
+              <div className="grid gap-2 sm:grid-cols-3">
+                {delayFrequencyMetrics.map((metric) => (
+                  <Card key={metric.leg} className="!p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-[11px] font-semibold text-[var(--color-text-secondary)]">{metric.label}</p>
+                        <p className="mt-1 text-[10px] text-[var(--color-text-tertiary)]">Delay Frequency</p>
+                      </div>
+                      {metric.status === 'AVAILABLE' ? (
+                        <div className="text-right">
+                          <p className="text-xl font-semibold tabular-nums text-[var(--color-text-primary)]">{metric.delay_frequency_percent}%</p>
+                          <StatusBadge
+                            label={metric.classification}
+                            tone={metric.band === 'GREEN' ? 'good' : metric.band === 'ORANGE' ? 'warning' : 'critical'}
+                            showGlyph={false}
+                          />
+                        </div>
+                      ) : (
+                        <StatusBadge label="Unavailable" tone="neutral" showGlyph={false} />
+                      )}
+                    </div>
+                    <p className="mt-2 text-[10px] text-[var(--color-text-tertiary)]">
+                      {metric.status === 'AVAILABLE'
+                        ? `${metric.delayed_event_count} delayed / ${metric.eligible_event_count} eligible`
+                        : metric.unavailable_reason}
+                    </p>
+                  </Card>
+                ))}
+              </div>
             </div>
 
             <Card>
@@ -1077,48 +1126,52 @@ export default function DelaysAndBottlenecksPage() {
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
                     <tr className="bg-[var(--color-surface-muted)] text-[var(--color-text-secondary)] border-b border-[var(--color-border)] font-semibold">
-                      <th className="py-2.5 px-3">VCN / Vessel</th>
-                      <th className="py-2.5 px-3">Metric Name</th>
-                      <th className="py-2.5 px-3">Outlier Classification</th>
-                      <th className="py-2.5 px-3 text-right">Observed</th>
-                      <th className="py-2.5 px-3 text-right">Benchmark / P90</th>
-                      <th className="py-2.5 px-3 text-right">Divergence</th>
+                      <th className="py-2.5 px-3">Category</th>
+                      <th className="py-2.5 px-3">Vessel / VCN</th>
+                      <th className="py-2.5 px-3">Metric / Issue</th>
+                      <th className="py-2.5 px-3">Observed / Threshold</th>
+                      <th className="py-2.5 px-3">Leg</th>
                       <th className="py-2.5 px-3">Severity</th>
-                      <th className="py-2.5 px-3">KPI Exclusion State</th>
+                      <th className="py-2.5 px-3">State</th>
                       <th className="py-2.5 px-3 text-right">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[var(--color-border)]">
                     {outliersLoading ? (
                       <tr>
-                        <td colSpan={9}>
+                        <td colSpan={8}>
                           <LoadingState label="Detecting outliers…" />
                         </td>
                       </tr>
                     ) : outliers.length === 0 ? (
                       <tr>
-                        <td colSpan={9}>
+                        <td colSpan={8}>
                           <EmptyState title="No outliers detected" />
                         </td>
                       </tr>
                     ) : (
                       outliers.map((o) => (
                         <tr key={o.id} className="hover:bg-[var(--color-surface-muted)] transition-colors">
-                          <td className="py-2.5 px-3 font-semibold text-[var(--color-text-primary)]">{o.vcn}</td>
-                          <td className="py-2.5 px-3 font-medium text-[var(--color-text-primary)]">{o.metric_name}</td>
                           <td className="py-2.5 px-3">
-                            <span className="inline-block px-2 py-0.5 rounded-md text-[10px] font-mono bg-[var(--color-surface-muted)] text-[var(--color-text-secondary)]">
+                            <span className="inline-block max-w-36 px-2 py-0.5 rounded-md text-[10px] leading-4 bg-[var(--color-surface-muted)] text-[var(--color-text-secondary)]">
                               {o.outlier_type}
                             </span>
                           </td>
-                          <td className="py-2.5 px-3 text-right font-semibold text-[var(--color-text-primary)] tabular-nums">
-                            {o.observed_value}h
+                          <td className="py-2.5 px-3">
+                            <p className="font-semibold text-[var(--color-text-primary)]">{o.vcn}</p>
+                            {o.vessel_name && <p className="mt-0.5 text-[10px] text-[var(--color-text-tertiary)]">{o.vessel_name}</p>}
                           </td>
-                          <td className="py-2.5 px-3 text-right text-[var(--color-text-secondary)] tabular-nums">
-                            {o.benchmark_or_p90 || '—'}h
+                          <td className="max-w-72 py-2.5 px-3">
+                            <p className="font-medium text-[var(--color-text-primary)]">{o.metric_name}</p>
+                            <p className="mt-0.5 text-[11px] leading-4 text-[var(--color-text-secondary)]">{o.issue_text || o.reason || 'Governed outlier detected.'}</p>
+                            {o.rule_id && <p className="mt-0.5 font-mono text-[9px] text-[var(--color-text-tertiary)]">{o.rule_id}</p>}
                           </td>
-                          <td className="py-2.5 px-3 text-right font-semibold text-[var(--color-critical)] tabular-nums">
-                            {o.divergence || 0}h
+                          <td className="py-2.5 px-3">
+                            <p className="font-semibold text-[var(--color-text-primary)] tabular-nums">{o.observed_value == null ? 'Unavailable' : `${o.observed_value}h`}</p>
+                            <p className="mt-0.5 text-[10px] text-[var(--color-text-tertiary)]">{o.threshold_label || (o.benchmark_or_p90 == null ? 'No numeric benchmark' : `Threshold ${o.benchmark_or_p90}h`)}</p>
+                          </td>
+                          <td className="py-2.5 px-3 text-[var(--color-text-secondary)]">
+                            {o.movement_leg ? o.movement_leg.replaceAll('_', ' / ') : 'All'}
                           </td>
                           <td className="py-2.5 px-3">
                             <StatusBadge label={o.severity} tone={severityTone(o.severity)} showGlyph={false} />
@@ -1485,8 +1538,16 @@ export default function DelaysAndBottlenecksPage() {
             </h3>
             <p className="text-xs text-[var(--color-text-secondary)]">
               Vessel <span className="font-semibold text-[var(--color-text-primary)]">{outlierModal.vcn}</span>:{' '}
-              {outlierModal.metric_name} observed {outlierModal.observed_value}h (divergence {outlierModal.divergence}h).
+              {outlierModal.metric_name} observed {outlierModal.observed_value == null ? 'an unavailable numeric value' : `${outlierModal.observed_value}h`}
+              {outlierModal.divergence == null ? '.' : ` (divergence ${outlierModal.divergence}h).`}
             </p>
+            {(outlierModal.issue_text || outlierModal.reason) && (
+              <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-muted)] p-3 text-xs text-[var(--color-text-secondary)]">
+                <p className="font-medium text-[var(--color-text-primary)]">{outlierModal.issue_text}</p>
+                {outlierModal.reason && <p className="mt-1">{outlierModal.reason}</p>}
+                {outlierModal.threshold_label && <p className="mt-1 font-medium">{outlierModal.threshold_label}</p>}
+              </div>
+            )}
 
             <div className="space-y-2 text-xs">
               <label className="font-medium text-[var(--color-text-secondary)] block">Governance Rationale</label>

@@ -195,13 +195,20 @@ class OutlierRecord(BaseModel):
     __tablename__ = "outlier_record"
     __table_args__ = {"schema": "analytics"}
 
+    tenant_id = Column(String(100), nullable=False, index=True)
     vessel_call_id = Column(ForeignKey("canonical.vessel_call.id", ondelete="CASCADE"), nullable=False)
     vcn = Column(String(100), nullable=False)
-    outlier_type = Column(String(100), nullable=False)  # OPERATIONAL_OUTLIER | DATA_QUALITY_OUTLIER | PROCESS_VIOLATION | EXTREME_DELAY_CASE | HIGH_CRITICALITY_CASE
+    outlier_type = Column(String(100), nullable=False)  # FRD v2 five-category classification
+    rule_id = Column(String(100), nullable=True)
     metric_name = Column(String(100), nullable=False)
-    observed_value = Column(Float, nullable=False)
+    observed_value = Column(Float, nullable=True)
     benchmark_or_p90 = Column(Float, nullable=True)
     divergence = Column(Float, nullable=True)
+    issue_text = Column(Text, nullable=True)
+    threshold_label = Column(String(100), nullable=True)
+    reason = Column(Text, nullable=True)
+    movement_leg = Column(String(50), nullable=True)
+    source_record_ids = Column(JSON, nullable=True)
     is_excluded_from_kpi = Column(Boolean, default=False)
     exclusion_rationale = Column(Text, nullable=True)
     severity = Column(String(20), default="MEDIUM")
