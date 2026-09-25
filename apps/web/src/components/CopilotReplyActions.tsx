@@ -70,13 +70,12 @@ export function CopilotReplyActions({ reply, onNavigate }: { reply: CopilotActio
       {(analysisPath || hasEvidence) && (
         <div className="mt-3 flex flex-wrap items-center gap-2">
           {analysisPath && (
-            <Link
+            <a
               href={analysisPath}
-              onNavigate={() => onNavigate?.()}
               className="inline-flex items-center gap-1 rounded-md bg-[var(--color-accent)] px-2.5 py-1.5 text-[10px] font-semibold text-white transition-colors hover:bg-[var(--color-accent-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] focus-visible:ring-offset-2"
             >
               View analysis <ExternalLink size={11} aria-hidden="true" />
-            </Link>
+            </a>
           )}
           {hasEvidence && (
             <button
