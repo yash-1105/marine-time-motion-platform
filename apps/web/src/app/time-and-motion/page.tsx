@@ -137,6 +137,7 @@ function TimeAndMotionContent() {
   const searchParams = useSearchParams()
   const globalVesselType = searchParams.get('vesselType') || ''
   const globalCargoType = searchParams.get('cargoType') || ''
+  const requestedMetricId = searchParams.get('metric') || ''
   const [customVesselType, setCustomVesselType] = useState(globalVesselType)
   const [customCargoType, setCustomCargoType] = useState(globalCargoType)
 
@@ -144,6 +145,15 @@ function TimeAndMotionContent() {
     if (globalVesselType) setCustomVesselType(globalVesselType)
     if (globalCargoType) setCustomCargoType(globalCargoType)
   }, [globalVesselType, globalCargoType])
+
+  // Copilot (and other governed surfaces) may link to a persisted metric ID.
+  // Only select a definition returned by the tenant-scoped metrics API.
+  useEffect(() => {
+    if (requestedMetricId && definitions.some((definition) => definition.id === requestedMetricId)) {
+      setSelectedDefId(requestedMetricId)
+      setActiveTab('explorer')
+    }
+  }, [definitions, requestedMetricId])
 
   const [events, setEvents] = useState<EventDef[]>([])
   const [customStart, setCustomStart] = useState('')

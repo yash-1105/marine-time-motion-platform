@@ -1,10 +1,10 @@
 'use client'
 
 import { FormEvent, useState } from 'react'
-import { ExternalLink, Send, Sparkles } from 'lucide-react'
+import { Send, Sparkles } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
-import Link from 'next/link'
 import { Card, EmptyState, PageHeader, StatusBadge } from '@/components/ui'
+import { CopilotReplyActions, type CopilotEvidenceContext } from '@/components/CopilotReplyActions'
 
 const api = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000') + '/api/v1'
 
@@ -15,6 +15,7 @@ type Reply = {
   source_label: string
   analysis_path?: string | null
   evidence: string[]
+  evidence_context?: CopilotEvidenceContext
   result: unknown
   method: string
   data_quality_caveat: string
@@ -68,8 +69,7 @@ export default function CopilotPage() {
                 <p className="text-sm font-medium leading-6 text-[var(--color-text-primary)]">{r.answer}</p>
                 <div className="mt-3 flex flex-wrap gap-2"><StatusBadge label={`Source: ${r.source_label}`} tone="neutral" showGlyph={false} /><StatusBadge label={r.method} tone="inferred" showGlyph={false} /></div>
                 {r.data_quality_caveat && <p className="mt-3 border-l-2 border-[var(--color-warning-border)] pl-3 text-xs leading-5 text-[var(--color-text-secondary)]">{r.data_quality_caveat}</p>}
-                {r.analysis_path && <Link href={r.analysis_path} className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-[var(--color-accent)] hover:underline">View analysis <ExternalLink size={11} /></Link>}
-                {r.evidence.length > 0 && <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-[var(--color-text-secondary)]"><span className="font-semibold">Evidence</span>{r.evidence.map((x) => <a className="inline-flex items-center gap-1 text-[var(--color-accent)] hover:underline" href={x} key={x}>Open source <ExternalLink size={10} /></a>)}</div>}
+                <CopilotReplyActions reply={r} />
                 <details className="mt-3 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-subtle)] p-3"><summary className="cursor-pointer text-xs font-semibold text-[var(--color-text-secondary)]">Governed result</summary><pre className="mt-3 max-h-72 overflow-auto whitespace-pre-wrap text-[11px] leading-5 text-[var(--color-text-secondary)]">{JSON.stringify(r.result, null, 2)}</pre></details>
               </article>
               </div>

@@ -1,10 +1,10 @@
 'use client'
 
 import { FormEvent, useEffect, useState } from 'react'
-import Link from 'next/link'
 import { useAuth } from '@/lib/auth-context'
-import { ExternalLink, Send, Sparkles, X } from 'lucide-react'
+import { Send, Sparkles, X } from 'lucide-react'
 import { BrandMark } from './BrandMark'
+import { CopilotReplyActions, type CopilotEvidenceContext } from './CopilotReplyActions'
 
 const API = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000') + '/api/v1'
 
@@ -17,12 +17,11 @@ type CopilotReply = {
   method: string
   data_quality_caveat: string
   evidence: string[]
+  evidence_context?: CopilotEvidenceContext
   result: { status?: string; reason?: string; [key: string]: unknown }
 }
 
 type ChatItem = { question: string; reply?: CopilotReply; error?: string }
-
-const STORAGE_KEY = 'marine-copilot-chat'
 
 export function FloatingCopilot() {
   const { user, token } = useAuth()
@@ -32,21 +31,26 @@ export function FloatingCopilot() {
   const [messages, setMessages] = useState<ChatItem[]>([])
   const [busy, setBusy] = useState(false)
 
+  const storageKey = user ? `marine-copilot-chat:${user.user_id}` : null
+
   useEffect(() => {
+    if (!storageKey) return
+    setConversationId(undefined)
+    setMessages([])
     try {
-      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}')
+      const saved = JSON.parse(localStorage.getItem(storageKey) || '{}')
       if (saved.conversationId) setConversationId(saved.conversationId)
       if (Array.isArray(saved.messages)) setMessages(saved.messages.slice(-8))
     } catch {
       // A corrupt local chat history must never prevent the application loading.
     }
-  }, [])
+  }, [storageKey])
 
   useEffect(() => {
-    if (messages.length || conversationId) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ conversationId, messages: messages.slice(-8) }))
+    if (storageKey && (messages.length || conversationId)) {
+      localStorage.setItem(storageKey, JSON.stringify({ conversationId, messages: messages.slice(-8) }))
     }
-  }, [messages, conversationId])
+  }, [messages, conversationId, storageKey])
 
   if (!user) return null
 
@@ -121,10 +125,7 @@ export function FloatingCopilot() {
                     <p className="mt-2 text-[10px] text-[var(--color-text-tertiary)]">Source: {item.reply.source_label || item.reply.tool} · {item.reply.method}</p>
                     {item.reply.data_quality_caveat && <p className="mt-1 text-[10px] text-[var(--color-text-secondary)]">{item.reply.data_quality_caveat}</p>}
                     {item.reply.result?.status === 'UNAVAILABLE' && <p className="mt-1 font-medium text-[var(--color-warning)]">UNAVAILABLE: {item.reply.result.reason || 'Required data is not available.'}</p>}
-                    <div className="mt-3 flex flex-wrap items-center gap-3">
-                      {item.reply.analysis_path && <Link href={item.reply.analysis_path} className="inline-flex items-center gap-1 rounded-md bg-[var(--color-accent)] px-2.5 py-1.5 text-[10px] font-semibold text-white hover:bg-[var(--color-accent-hover)]">View analysis <ExternalLink size={11} /></Link>}
-                      {item.reply.evidence.length > 0 && <span className="flex items-center gap-2 text-[10px] text-[var(--color-text-tertiary)]">Evidence: {item.reply.evidence.slice(0, 4).map((href) => <Link key={href} href={href} className="inline-flex items-center gap-0.5 font-medium text-[var(--color-accent)] hover:underline">Open <ExternalLink size={9} /></Link>)}</span>}
-                    </div>
+                    <CopilotReplyActions reply={item.reply} onNavigate={() => setOpen(false)} />
                   </div>
                 ) : (
                   <div className="px-3 py-2 text-[var(--color-text-tertiary)]">Using governed tools…</div>

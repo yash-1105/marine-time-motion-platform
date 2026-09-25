@@ -40,6 +40,7 @@ class CopilotResponse(BaseModel):
     analysis_path: str | None
     period_and_filters: dict[str, Any]
     evidence: list[str]
+    evidence_context: dict[str, Any]
     result: dict[str, Any]
     data_quality_caveat: str
     suggested_action: str

@@ -1,6 +1,7 @@
 'use client'
 
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { useAuth } from '../../lib/auth-context'
 import { X } from 'lucide-react'
 import {
@@ -146,6 +147,8 @@ function fmtValue(val?: number | null, unit?: string) {
 
 export default function KPIDashboardPage() {
   const { token, can, isLoading: authLoading } = useAuth()
+  const searchParams = useSearchParams()
+  const requestedKpiCode = searchParams.get('code')?.toUpperCase() || ''
   const headers = { Authorization: `Bearer ${token || 'dev-token'}` }
 
   // State
@@ -164,6 +167,7 @@ export default function KPIDashboardPage() {
   const [serviceLines, setServiceLines] = useState<ServiceLineItem[]>([])
   const [selectedServiceLine, setSelectedServiceLine] = useState<string | null>(null)
   const [serviceLineRecords, setServiceLineRecords] = useState<ServiceLineRecord[]>([])
+  const openedKpiCode = useRef<string>('')
 
   // Fetch Scorecard
   const fetchScorecard = useCallback(async () => {
@@ -231,19 +235,30 @@ export default function KPIDashboardPage() {
   }
 
   // Select KPI for detail drawer
-  const handleSelectKPI = async (item: ScorecardItem) => {
+  const handleSelectKPI = useCallback(async (item: ScorecardItem) => {
     setSelectedKPI(item)
     try {
       const [trendRes, benchRes] = await Promise.all([
-        fetch(`${API}/api/v1/kpis/${item.code}/trends`, { headers }),
-        fetch(`${API}/api/v1/kpis/${item.code}/benchmark`, { headers }),
+        fetch(`${API}/api/v1/kpis/${item.code}/trends`, { headers: { Authorization: `Bearer ${token || 'dev-token'}` } }),
+        fetch(`${API}/api/v1/kpis/${item.code}/benchmark`, { headers: { Authorization: `Bearer ${token || 'dev-token'}` } }),
       ])
       if (trendRes.ok) setKPITrends(await trendRes.json())
       if (benchRes.ok) setKPIBenchmark(await benchRes.json())
     } catch {
       // Ignored
     }
-  }
+  }, [token])
+
+  // A code is only resolved after the current tenant's scorecard has loaded.
+  // This avoids trusting the URL as a data source while making KPI Copilot links useful.
+  useEffect(() => {
+    if (!requestedKpiCode || !scorecard || openedKpiCode.current === requestedKpiCode) return
+    const target = Object.values(scorecard.categories).flat().find((item) => item.code === requestedKpiCode)
+    if (target) {
+      openedKpiCode.current = requestedKpiCode
+      void handleSelectKPI(target)
+    }
+  }, [requestedKpiCode, scorecard, handleSelectKPI])
 
   // Execute Recalculation
   const handleRecalculate = async () => {

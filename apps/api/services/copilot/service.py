@@ -1037,9 +1037,10 @@ class CopilotService:
             "answer": answer,
             "tool": tool,
             "source_label": spec.label,
-            "analysis_path": spec.analysis_path,
+            "analysis_path": self._analysis_path(tool, result, spec),
             "period_and_filters": {"scope": self.principal.data_scope.model_dump()},
             "evidence": result.get("evidence", []),
+            "evidence_context": self._evidence_context(tool, result, spec),
             "result": result,
             "data_quality_caveat": result.get("caveat", ""),
             "suggested_action": "",
@@ -1062,3 +1063,57 @@ class CopilotService:
         self.db.add(message)
         self.db.commit()
         return response, message
+
+    @staticmethod
+    def _analysis_path(tool: str, result: dict[str, Any], spec: ToolSpec) -> str | None:
+        """Return a real application destination for the governed result.
+
+        The route is deliberately derived server-side from the tenant-scoped result,
+        rather than from browser-provided identifiers.  A module-level destination is
+        preferred when the receiving page has no stable record-selection contract.
+        """
+        if result.get("status") in {"UNAVAILABLE", "NO_SOURCE_DATA"}:
+            return None
+        if tool == "time_motion_statistics" and result.get("definition_id"):
+            return f"/time-and-motion?metric={result['definition_id']}"
+        if tool == "kpi_value":
+            code = cast(dict[str, Any], result.get("kpi") or {}).get("code")
+            if code:
+                return f"/kpis?code={code}"
+        if tool == "vessel_journey" and result.get("vcn"):
+            return f"/vessel-journey?vcn={result['vcn']}"
+        return spec.analysis_path
+
+    @staticmethod
+    def _evidence_context(tool: str, result: dict[str, Any], spec: ToolSpec) -> dict[str, Any]:
+        """Hydrate display-only evidence from the already tenant-scoped tool result.
+
+        This neither recalculates a governed result nor dereferences a client-supplied
+        record ID.  It keeps historical and current evidence understandable in the
+        Copilot UI while source-record lineage remains immutable in its owning model.
+        """
+        focus = cast(dict[str, Any], result.get("focus") or {})
+        first_item = next(
+            (item for item in result.get("items", []) if isinstance(item, dict)),
+            {},
+        )
+        kpi = cast(dict[str, Any], result.get("kpi") or {})
+        definition = cast(dict[str, Any], result.get("definition") or {})
+        subject = focus or first_item
+        context: dict[str, Any] = {
+            "source": spec.label,
+            "method": spec.method,
+            "dataset_id": result.get("batch_id"),
+            "vcn": result.get("focus_vcn") or result.get("vcn") or subject.get("vcn"),
+            "vessel_name": result.get("vessel_name") or subject.get("vessel_name"),
+            "metric": result.get("metric") or subject.get("metric_name") or kpi.get("name") or definition.get("name"),
+            "service": result.get("service") or subject.get("service_type"),
+            "rule_id": subject.get("rule_id") or subject.get("quality_rule_id"),
+            "observed_value": subject.get("observed_value"),
+            "threshold": subject.get("threshold_label") or subject.get("benchmark_or_p90"),
+            "reason": subject.get("reason") or subject.get("issue_text") or result.get("reason"),
+            "journey_leg": subject.get("movement_leg") or subject.get("leg") or result.get("leg"),
+            "source_record_ids": subject.get("source_record_ids") or [],
+            "related_paths": result.get("evidence") or [],
+        }
+        return {key: value for key, value in context.items() if value not in (None, "", [], {})}

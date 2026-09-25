@@ -9,7 +9,7 @@ from apps.api.auth.scope import DataScope
 from apps.api.core.config import settings
 from apps.api.models.canonical import VesselCall
 from apps.api.models.copilot import CopilotMessage
-from apps.api.services.copilot.service import CopilotService, GovernedTools
+from apps.api.services.copilot.service import TOOL_REGISTRY, CopilotService, GovernedTools
 
 
 def principal(tenant_id: str = "tenant-a") -> UserPrincipal:
@@ -131,6 +131,50 @@ def test_only_fixed_governed_tools_are_permitted():
     tools = GovernedTools(None, principal())
     with pytest.raises(ValueError):
         tools.validate("drop_database", {})
+
+
+def test_analysis_targets_are_governed_result_links_not_browser_supplied_ids():
+    assert CopilotService._analysis_path(
+        "outlier_analysis", {"status": "AVAILABLE"}, TOOL_REGISTRY["outlier_analysis"]
+    ) == "/delays?tab=outliers"
+    assert CopilotService._analysis_path(
+        "time_motion_statistics",
+        {"status": "AVAILABLE", "definition_id": "metric-tenant-a"},
+        TOOL_REGISTRY["time_motion_statistics"],
+    ) == "/time-and-motion?metric=metric-tenant-a"
+    assert CopilotService._analysis_path(
+        "kpi_value",
+        {"status": "COMPUTED", "kpi": {"code": "KPI-01"}},
+        TOOL_REGISTRY["kpi_value"],
+    ) == "/kpis?code=KPI-01"
+    assert CopilotService._analysis_path(
+        "vessel_journey", {"status": "AVAILABLE", "vcn": "VCN-A"}, TOOL_REGISTRY["vessel_journey"]
+    ) == "/vessel-journey?vcn=VCN-A"
+    assert CopilotService._analysis_path(
+        "outlier_analysis", {"status": "UNAVAILABLE"}, TOOL_REGISTRY["outlier_analysis"]
+    ) is None
+
+
+def test_outlier_evidence_context_uses_existing_governed_lineage_without_recalculation():
+    result = {
+        "focus": {
+            "vcn": "VCN-A",
+            "metric_name": "Turnaround",
+            "rule_id": "OUT-V2-001",
+            "observed_value": 19.5,
+            "threshold_label": "P90 threshold",
+            "reason": "Turnaround exceeds P90.",
+            "movement_leg": "ARRIVAL_INWARD",
+            "source_record_ids": ["source-a", "source-b"],
+        },
+        "evidence": ["/delays?tab=outliers"],
+    }
+    context = CopilotService._evidence_context("outlier_analysis", result, TOOL_REGISTRY["outlier_analysis"])
+    assert context["source"] == "Outlier Analysis"
+    assert context["vcn"] == "VCN-A"
+    assert context["threshold"] == "P90 threshold"
+    assert context["source_record_ids"] == ["source-a", "source-b"]
+    assert context["related_paths"] == ["/delays?tab=outliers"]
 
 
 def test_vessel_call_tool_enforces_authenticated_tenant_with_overlapping_vcn():
