@@ -25,8 +25,14 @@ class Settings(BaseSettings):
     @field_validator("database_url", mode="before")
     @classmethod
     def assemble_db_url(cls, v: str) -> str:
+        # SQLAlchemy 2.1 selects psycopg v3 for an unqualified PostgreSQL URL,
+        # while the established production image intentionally ships
+        # psycopg2-binary. Pin the URL to that installed driver so migrations
+        # and API startup use the same adapter in every environment.
         if isinstance(v, str) and v.startswith("postgres://"):
-            return v.replace("postgres://", "postgresql://", 1)
+            return v.replace("postgres://", "postgresql+psycopg2://", 1)
+        if isinstance(v, str) and v.startswith("postgresql://"):
+            return v.replace("postgresql://", "postgresql+psycopg2://", 1)
         return v
 
     # OIDC / Microsoft Entra ID compatible configuration
