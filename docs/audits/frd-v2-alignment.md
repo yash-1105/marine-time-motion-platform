@@ -61,6 +61,13 @@ use the same four-timestamp model without creating fake records.
 
 ## 4.4.6 outlier and exception analysis
 
+Pre-v2 persisted turnaround outliers retain their original database row,
+benchmark, exclusion decision and audit identity. The API read model exposes
+those rows as `Time-based Outlier`, which is unambiguous from the governed
+metric, without relabelling the legacy benchmark as P90. They are regenerated
+with `OUT-V2-001` and its linear P90 threshold on the next governed dataset
+processing run.
+
 `config/outlier_rules.yaml` contains all 43 revised scenarios and the five FRD
 categories. The evaluator is deterministic and tenant-scoped. Default high and
 low thresholds are linear-interpolation P90 and P30; Anchorage Waiting uses P95

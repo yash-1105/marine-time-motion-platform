@@ -525,6 +525,41 @@ def test_outlier_persistence_is_strictly_tenant_scoped(db):
         db.commit()
 
 
+def test_pre_v2_turnaround_outlier_has_v2_read_category_without_rewriting_lineage(db):
+    """Legacy threshold lineage remains intact while the API exposes its unambiguous v2 category."""
+    suffix = uuid.uuid4().hex[:8]
+    tenant_id = f"legacy-outlier-tenant-{suffix}"
+    call = VesselCall(vessel_name="Legacy Vessel", vcn="LEGACY-VCN", tenant_id=tenant_id)
+    db.add(call)
+    db.flush()
+    record = OutlierRecord(
+        tenant_id=tenant_id,
+        vessel_call_id=call.id,
+        vcn=call.vcn,
+        outlier_type="OPERATIONAL_OUTLIER",
+        metric_name="Turnaround",
+        observed_value=12,
+        benchmark_or_p90=10,
+        divergence=2,
+        severity="HIGH",
+        detected_at=datetime.now(UTC),
+    )
+    db.add(record)
+    db.commit()
+    try:
+        rows = OutlierEngine(db, tenant_id).list_outliers(outlier_type="Time-based Outlier")
+        assert len(rows) == 1
+        assert rows[0]["id"] == str(record.id)
+        assert rows[0]["outlier_type"] == "Time-based Outlier"
+        assert rows[0]["benchmark_or_p90"] == 10
+        assert db.get(OutlierRecord, record.id).outlier_type == "OPERATIONAL_OUTLIER"
+    finally:
+        db.delete(record)
+        db.flush()
+        db.delete(call)
+        db.commit()
+
+
 def test_non_duration_only_bottleneck_ranking():
     """
     HARD REQUIREMENT: Never label the longest stage alone as the bottleneck.

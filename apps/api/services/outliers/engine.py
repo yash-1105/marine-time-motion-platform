@@ -49,6 +49,19 @@ def linear_percentile(values: Iterable[float], quantile: float) -> float | None:
     return ordered[lower] + (ordered[upper] - ordered[lower]) * (position - lower)
 
 
+def presented_outlier_category(outlier_type: str, metric_name: str | None) -> str:
+    """Expose a v2 category for lineage-preserved pre-v2 outlier rows.
+
+    Historical rows retain their stored rule/threshold semantics until the active
+    dataset is processed again. A turnaround anomaly is nevertheless
+    unambiguously time-based, so the read model can classify it without rewriting
+    or reinterpreting its persisted benchmark.
+    """
+    if outlier_type == "OPERATIONAL_OUTLIER" and metric_name == "Turnaround":
+        return "Time-based Outlier"
+    return outlier_type
+
+
 class OutlierEngine:
     CATEGORIES = frozenset(
         {
@@ -656,7 +669,20 @@ class OutlierEngine:
             .where(OutlierRecord.tenant_id == self.tenant_id, VesselCall.tenant_id == self.tenant_id)
         )
         if outlier_type:
-            query = query.where(OutlierRecord.outlier_type == outlier_type)
+            if outlier_type == "Time-based Outlier":
+                from sqlalchemy import and_, or_
+
+                query = query.where(
+                    or_(
+                        OutlierRecord.outlier_type == outlier_type,
+                        and_(
+                            OutlierRecord.outlier_type == "OPERATIONAL_OUTLIER",
+                            OutlierRecord.metric_name == "Turnaround",
+                        ),
+                    )
+                )
+            else:
+                query = query.where(OutlierRecord.outlier_type == outlier_type)
         if severity:
             query = query.where(OutlierRecord.severity == severity)
         if is_excluded is not None:
@@ -670,7 +696,7 @@ class OutlierEngine:
                 "vessel_call_id": str(row.vessel_call_id),
                 "vcn": row.vcn,
                 "vessel_name": vessel_name,
-                "outlier_type": row.outlier_type,
+                "outlier_type": presented_outlier_category(row.outlier_type, row.metric_name),
                 "rule_id": row.rule_id,
                 "metric_name": row.metric_name,
                 "observed_value": row.observed_value,

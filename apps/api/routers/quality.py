@@ -11,12 +11,20 @@ from apps.api.auth.dependencies import require
 from apps.api.auth.tenant import resolve_principal_tenant
 from apps.api.core.database import get_db
 from apps.api.models.analytics import OutlierRecord
-from apps.api.models.canonical import Delay, EventOccurrence, ServiceAssignment, ServiceExecution, ServiceRequest, VesselCall
+from apps.api.models.canonical import (
+    Delay,
+    EventOccurrence,
+    ServiceAssignment,
+    ServiceExecution,
+    ServiceRequest,
+    VesselCall,
+)
 from apps.api.models.ingestion import IngestionBatch, IngestionFile, StagingRecord
 from apps.api.models.quality import QualityIssue, QualityRule
 from apps.api.services.audit import log_audit_event
 from apps.api.services.ingestion.pipeline import IngestionPipeline
 from apps.api.services.ingestion.synthetic import reset_tenant_dataset
+from apps.api.services.outliers.engine import presented_outlier_category
 from apps.api.services.pipeline_runner import run_full_analytics_pipeline
 from apps.api.services.quality.engine import DataQualityEngine
 
@@ -275,7 +283,7 @@ def list_issues(
                 id=str(outlier.id), rule_id=outlier.rule_id or "OUTLIER", vessel_call_id=str(outlier.vessel_call_id),
                 record_reference=f"OutlierRecord:{outlier.id}", issue_status="EXCLUDED" if outlier.is_excluded_from_kpi else "OPEN",
                 rule_name=outlier.issue_text or outlier.metric_name, severity=outlier.severity,
-                scope=outlier.outlier_type, vcn=vc.vcn,
+                scope=presented_outlier_category(outlier.outlier_type, outlier.metric_name), vcn=vc.vcn,
                 vessel_name=vc.vessel_name, disposition="EXCLUDED" if outlier.is_excluded_from_kpi else "REVIEW",
                 workflow_state="EXCLUDED" if outlier.is_excluded_from_kpi else "OPEN", created_at=outlier.detected_at.isoformat() if outlier.detected_at else None,
                 issue_class="OUTLIER",
