@@ -2,7 +2,6 @@
 
 import { Fragment, useState } from 'react'
 import { ExternalLink, FileSearch, X } from 'lucide-react'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
 export type CopilotEvidenceContext = {
@@ -58,7 +57,6 @@ const labels: Array<[keyof CopilotEvidenceContext, string]> = [
  * displayed in-app rather than being represented by an opaque URL named “Open”.
  */
 export function CopilotReplyActions({ reply, onNavigate }: { reply: CopilotActionReply; onNavigate?: () => void }) {
-  const router = useRouter()
   const [evidenceOpen, setEvidenceOpen] = useState(false)
   const analysisPath = safePath(reply.analysis_path)
   const context = reply.evidence_context || {}
@@ -67,26 +65,18 @@ export function CopilotReplyActions({ reply, onNavigate }: { reply: CopilotActio
     .filter((path): path is string => Boolean(path))
   const hasEvidence = relatedPaths.length > 0 || Boolean(context.source_record_ids?.length || context.dataset_id || context.rule_id)
 
-  const openAnalysis = () => {
-    if (!analysisPath) return
-    // Start the App Router transition while this client component is still mounted.
-    // Closing the floating panel first unmounts this component and cancels the push.
-    router.push(analysisPath)
-    onNavigate?.()
-  }
-
   return (
     <>
       {(analysisPath || hasEvidence) && (
         <div className="mt-3 flex flex-wrap items-center gap-2">
           {analysisPath && (
-            <button
-              type="button"
-              onClick={openAnalysis}
+            <Link
+              href={analysisPath}
+              onNavigate={() => onNavigate?.()}
               className="inline-flex items-center gap-1 rounded-md bg-[var(--color-accent)] px-2.5 py-1.5 text-[10px] font-semibold text-white transition-colors hover:bg-[var(--color-accent-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] focus-visible:ring-offset-2"
             >
               View analysis <ExternalLink size={11} aria-hidden="true" />
-            </button>
+            </Link>
           )}
           {hasEvidence && (
             <button
