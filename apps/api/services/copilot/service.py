@@ -934,13 +934,16 @@ class CopilotService:
             return result.get("reason") or "I don't have governed data available to answer that question."
         if tool == "outlier_analysis":
             focus = result.get("focus")
-            if result.get("action") in {"worst", "explain"} and focus:
+            if result.get("action") == "explain" and focus:
                 threshold = focus.get("threshold_label") or "the governed threshold"
                 return (
-                    f"{focus['vcn']} has the highest-priority matching outlier: {focus['metric_name']}. "
-                    f"Observed {_hours(focus.get('observed_value'))}; {threshold}. "
-                    f"{focus.get('reason') or focus.get('issue_text') or 'No additional governed reason is available.'}"
+                    f"{focus['vcn']}'s {focus['metric_name']} was flagged because "
+                    f"{focus.get('reason') or focus.get('issue_text') or 'the governed outlier rule was met.'} "
+                    f"Observed {_hours(focus.get('observed_value'))}; threshold: {threshold}."
                 )
+            if result.get("action") == "worst" and focus:
+                threshold = focus.get("threshold_label") or "the governed threshold"
+                return f"{focus['vcn']} has the highest-priority matching outlier: {focus['metric_name']} at {_hours(focus.get('observed_value'))} (threshold: {threshold})."
             categories = (
                 ", ".join(f"{name}: {count}" for name, count in result.get("category_counts", {}).items()) or "none"
             )
@@ -1001,7 +1004,8 @@ class CopilotService:
             return f"{item['code']} — {item['name']} is {item['value']} {item.get('unit') or ''} ({item.get('band') or 'no status band'})."
         if tool == "vessel_journey":
             available = sum(stage.get("availability") == "AVAILABLE" for stage in result.get("stages", []))
-            return f"{result['vcn']} ({result.get('vessel_name') or 'unnamed vessel'}) has a {result.get('journey_status')} reconstructed journey with {available} available stages."
+            journey_status = (result.get("journey_status") or "unknown").replace("_", " ").lower()
+            return f"{result['vcn']} ({result.get('vessel_name') or 'unnamed vessel'}) has a {journey_status} journey with {available} available stages."
         if tool == "vessel_calls":
             return f"There are {result.get('total', 0)} vessel calls in your governed data scope."
         if tool == "ingestion_lineage":
