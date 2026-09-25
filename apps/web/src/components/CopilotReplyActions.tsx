@@ -69,8 +69,10 @@ export function CopilotReplyActions({ reply, onNavigate }: { reply: CopilotActio
 
   const openAnalysis = () => {
     if (!analysisPath) return
-    onNavigate?.()
+    // Start the App Router transition while this client component is still mounted.
+    // Closing the floating panel first unmounts this component and cancels the push.
     router.push(analysisPath)
+    onNavigate?.()
   }
 
   return (
