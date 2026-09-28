@@ -1,10 +1,17 @@
 import hashlib
 import json
+import logging
 import os
+import re
 import shutil
 import uuid
+from datetime import datetime
+from zipfile import BadZipFile
 
-import polars as pl
+import pytz
+from dateutil import parser as date_parser
+from openpyxl import load_workbook
+from openpyxl.utils.exceptions import InvalidFileException
 from sqlalchemy import insert, select
 from sqlalchemy.orm import Session
 
@@ -21,6 +28,28 @@ from apps.api.models.ingestion import IngestionBatch, IngestionFile, RawRecord, 
 from apps.api.services.delays.mapping import map_to_canonical_category
 from apps.api.services.ingestion.standardization import StandardizationRegistry
 
+logger = logging.getLogger(__name__)
+
+
+class WorkbookIngestionError(ValueError):
+    """A safe, user-facing workbook error with structured diagnostic context."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        workbook: str | None = None,
+        worksheet: str | None = None,
+        stage: str = "workbook_inspection",
+        batch_id: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.safe_message = message
+        self.workbook = workbook
+        self.worksheet = worksheet
+        self.stage = stage
+        self.batch_id = batch_id
+
 
 class IngestionPipeline:
     REQUIRED_COLUMNS = {
@@ -32,6 +61,20 @@ class IngestionPipeline:
     }
     GOVERNED_WORKSHEETS = frozenset(REQUIRED_COLUMNS)
     NON_GOVERNED_MESSAGE = "No supported Marine Time & Motion worksheet found."
+    DATETIME_COLUMNS = {
+        "Events": {"Event_Timestamp"},
+        "Services": {"Submission_Time", "Requested_Time", "Scheduled_Time", "Served_Time"},
+        "CargoOps": {"Cargo_Start", "Cargo_End"},
+        "Delays": {"Scheduled_Time", "Served_Time"},
+    }
+    CANONICAL_TABLES = {
+        "VesselCalls": "vessel_call",
+        "Events": "event_occurrence",
+        "Services": "service_request",
+        "CargoOps": "cargo_ops",
+        "Delays": "delay",
+    }
+    HEADER_SCAN_LIMIT = 50
 
     def __init__(self, db: Session, tenant_id: str = "default-tenant"):
         self.db = db
@@ -167,7 +210,16 @@ class IngestionPipeline:
             self._validate_staging(batch)
             for _, manifest in manifests:
                 if manifest.parse_status == "PARSED":
-                    manifest.validation_status = "VALIDATED"
+                    has_invalid_rows = self.db.execute(
+                        select(StagingRecord.id)
+                        .where(
+                            StagingRecord.ingestion_batch_id == batch.batch_id,
+                            StagingRecord.source_file_id == str(manifest.id),
+                            StagingRecord.validation_status == "INVALID",
+                        )
+                        .limit(1)
+                    ).scalar_one_or_none()
+                    manifest.validation_status = "VALIDATED_WITH_ISSUES" if has_invalid_rows else "VALIDATED"
 
             if dry_run:
                 try:
@@ -200,78 +252,231 @@ class IngestionPipeline:
         batch: IngestionBatch,
         source_file: IngestionFile | None = None,
     ) -> set[str]:
-        # Polars/fastexcel is the deterministic parser. No AI/OCR/mapping path is
-        # reachable from this governed workbook flow.
-        workbook = pl.read_excel(file_path, sheet_id=0)
-        seen_sheets = set(workbook).intersection(self.GOVERNED_WORKSHEETS)
-        if not seen_sheets:
-            return set()
+        filename = source_file.original_filename if source_file else os.path.basename(file_path)
+        try:
+            # data_only=True consumes cached formula values without executing any
+            # spreadsheet code. The parser remains deterministic and non-AI.
+            workbook = load_workbook(file_path, read_only=False, data_only=True)
+        except (InvalidFileException, BadZipFile, OSError, ValueError) as exc:
+            raise WorkbookIngestionError(
+                f"Workbook '{filename}' is corrupt or unsupported.",
+                workbook=filename,
+                stage="open_workbook",
+                batch_id=str(batch.batch_id),
+            ) from exc
 
-        for sheet_name, df in workbook.items():
-            if sheet_name not in self.GOVERNED_WORKSHEETS:
-                continue
-            normalized_columns = {
-                self.standardization.canonical_column(sheet_name, str(column))
-                for column in df.columns
-            }
-            missing_columns = self.REQUIRED_COLUMNS[sheet_name].difference(normalized_columns)
-            if missing_columns:
-                raise ValueError(f"{sheet_name} is missing required column(s): {', '.join(sorted(missing_columns))}")
-
-            # Raw lineage is intentionally cell-level, but creating one ORM object
-            # per cell makes ordinary workbooks needlessly slow over a remote
-            # database connection.  Core bulk inserts preserve exactly the same
-            # immutable values and source-file/sheet/row/column lineage while
-            # using bounded database round trips.
-            records: list[dict] = []
-            for row_idx, row in enumerate(df.iter_rows(named=True), start=2):
-                for col_name, val in row.items():
-                    val_str = "" if val is None else str(val)
-                    records.append(
-                        {
-                            "file_checksum": source_file.file_checksum if source_file else batch.file_checksum,
-                            "worksheet_name": sheet_name,
-                            "row_number": row_idx,
-                            "column_name": col_name,
-                            "original_value": val_str,
-                            "ingestion_batch_id": batch.batch_id,
-                            "source_record_id": row.get("VCN") or row.get("Source_Call_ID") or "",
-                            "source_file_id": str(source_file.id) if source_file else None,
+        seen_sheets: set[str] = set()
+        skipped_sheets: list[str] = []
+        try:
+            for sheet in workbook.worksheets:
+                detection = self._detect_header(sheet)
+                if detection is None:
+                    exact_target = self._target_from_sheet_name(sheet.title)
+                    if exact_target and self._sheet_has_content(sheet):
+                        best_headers = self._best_header_values(sheet, exact_target)
+                        normalized_columns = {
+                            self.standardization.canonical_column(exact_target, column) for column in best_headers
                         }
-                    )
+                        missing_columns = self.REQUIRED_COLUMNS[exact_target].difference(normalized_columns)
+                        raise WorkbookIngestionError(
+                            f"Worksheet '{sheet.title}' in '{filename}' is missing required column(s): "
+                            f"{', '.join(sorted(missing_columns))}",
+                            workbook=filename,
+                            worksheet=sheet.title,
+                            stage="header_detection",
+                            batch_id=str(batch.batch_id),
+                        )
+                    if self._sheet_has_content(sheet):
+                        skipped_sheets.append(sheet.title)
+                    continue
 
-                if len(records) >= 5000:
-                    self.db.execute(insert(RawRecord), records)
-                    self.db.flush()
-                    records = []
+                target, header_row, headers = detection
+                seen_sheets.add(target)
+                self._write_sheet_raw_records(
+                    sheet=sheet,
+                    target=target,
+                    header_row=header_row,
+                    headers=headers,
+                    batch=batch,
+                    source_file=source_file,
+                )
+        finally:
+            workbook.close()
 
-            if records:
-                self.db.execute(insert(RawRecord), records)
-                self.db.flush()
+        if source_file is not None and seen_sheets and skipped_sheets:
+            source_file.error_message = f"Skipped unrecognized worksheet(s): {', '.join(skipped_sheets)}."
 
         batch.status = "PARSED"
         self.db.commit()
         return seen_sheets
 
-    def _map_to_staging(self, batch: IngestionBatch):
-        sheets = (
-            self.db.execute(
-                select(RawRecord.worksheet_name).where(RawRecord.ingestion_batch_id == batch.batch_id).distinct()
-            )
-            .scalars()
-            .all()
-        )
+    @staticmethod
+    def _sheet_has_content(sheet) -> bool:
+        for row in sheet.iter_rows(
+            min_row=1, max_row=min(sheet.max_row, IngestionPipeline.HEADER_SCAN_LIMIT), values_only=True
+        ):
+            if any(value not in {None, ""} for value in row):
+                return True
+        return False
 
-        for sheet in sheets:
+    def _target_from_sheet_name(self, sheet_name: str) -> str | None:
+        token = "".join(character.lower() for character in sheet_name if character.isalnum())
+        for target in self.GOVERNED_WORKSHEETS:
+            if token == "".join(character.lower() for character in target if character.isalnum()):
+                return target
+        return None
+
+    def _classify_headers(self, headers: list[str], sheet_name: str) -> tuple[str, int] | None:
+        exact_target = self._target_from_sheet_name(sheet_name)
+        candidates: list[tuple[int, str]] = []
+        for target in self.GOVERNED_WORKSHEETS:
+            recognized = self.standardization.recognized_columns(target, headers)
+            if not self.REQUIRED_COLUMNS[target].issubset(recognized):
+                continue
+            # CargoOps and Delays both permit VCN as their only mandatory field;
+            # require one target-specific recognizable header before mapping a
+            # renamed sheet so an arbitrary VCN list is never silently guessed.
+            if target in {"CargoOps", "Delays"} and not exact_target and len(recognized - {"VCN"}) < 1:
+                continue
+            candidates.append((len(recognized), target))
+        if exact_target:
+            exact = next((candidate for candidate in candidates if candidate[1] == exact_target), None)
+            return (exact[1], exact[0]) if exact else None
+        if not candidates:
+            return None
+        best_score = max(score for score, _ in candidates)
+        best = [target for score, target in candidates if score == best_score]
+        if len(best) != 1:
+            return None
+        return best[0], best_score
+
+    def _detect_header(self, sheet) -> tuple[str, int, list[tuple[int, str]]] | None:
+        best: tuple[int, str, int, list[tuple[int, str]]] | None = None
+        max_row = min(sheet.max_row, self.HEADER_SCAN_LIMIT)
+        max_column = min(sheet.max_column, 512)
+        for row_number, row in enumerate(
+            sheet.iter_rows(min_row=1, max_row=max_row, max_col=max_column, values_only=True), start=1
+        ):
+            raw_headers = [(index, str(value)) for index, value in enumerate(row, start=1) if value not in {None, ""}]
+            if not raw_headers:
+                continue
+            classified = self._classify_headers([value for _, value in raw_headers], sheet.title)
+            if classified is None:
+                continue
+            target, score = classified
+            candidate = (score, target, row_number, raw_headers)
+            if best is None or score > best[0]:
+                best = candidate
+        if best is None:
+            return None
+        _, target, row_number, raw_headers = best
+        counts: dict[str, int] = {}
+        headers: list[tuple[int, str]] = []
+        for column_index, value in raw_headers:
+            base = value
+            duplicate_key = base.strip().casefold()
+            counts[duplicate_key] = counts.get(duplicate_key, 0) + 1
+            suffix = f"__duplicate_{counts[duplicate_key]}" if counts[duplicate_key] > 1 else ""
+            headers.append((column_index, f"{base}{suffix}"))
+        return target, row_number, headers
+
+    def _best_header_values(self, sheet, target: str) -> list[str]:
+        best: tuple[int, list[str]] = (0, [])
+        for row in sheet.iter_rows(
+            min_row=1,
+            max_row=min(sheet.max_row, self.HEADER_SCAN_LIMIT),
+            max_col=min(sheet.max_column, 512),
+            values_only=True,
+        ):
+            headers = [str(value).strip() for value in row if value not in {None, ""}]
+            score = len(self.standardization.recognized_columns(target, headers))
+            if score > best[0]:
+                best = (score, headers)
+        return best[1]
+
+    def _write_sheet_raw_records(
+        self, *, sheet, target: str, header_row: int, headers: list[tuple[int, str]], batch, source_file
+    ) -> None:
+        records: list[dict] = []
+        recognized_columns = self.standardization.recognized_columns(target, [header for _, header in headers])
+        blank_run = 0
+        for row_number in range(header_row + 1, sheet.max_row + 1):
+            values = {header: sheet.cell(row=row_number, column=column_index).value for column_index, header in headers}
+            if not any(value not in {None, ""} for value in values.values()):
+                blank_run += 1
+                continue
+            preceding_blank_rows = blank_run
+            blank_run = 0
+            normalized = self.standardization.normalize_row(target, values)
+            governed_values = [
+                value
+                for canonical, value in normalized.items()
+                if canonical in recognized_columns and value not in {None, ""}
+            ]
+            # Require at least one recognized governed value. This keeps footer
+            # notes/instructions out of the operational population.
+            if not governed_values:
+                continue
+            if (
+                preceding_blank_rows
+                and len(governed_values) == 1
+                and sum(value not in {None, ""} for value in values.values()) == 1
+            ):
+                continue
+            source_record_id = str(normalized.get("VCN") or normalized.get("Source_Call_ID") or "")
+            for column_name, value in values.items():
+                canonical = self.standardization.canonical_column(target, column_name)
+                value_string = self.standardization.source_value(
+                    value, is_datetime_column=canonical in self._datetime_columns(target)
+                )
+                records.append(
+                    {
+                        "file_checksum": source_file.file_checksum if source_file else batch.file_checksum,
+                        "worksheet_name": sheet.title,
+                        "row_number": row_number,
+                        "column_name": column_name,
+                        "original_value": value_string,
+                        "ingestion_batch_id": batch.batch_id,
+                        "source_record_id": source_record_id,
+                        "source_file_id": str(source_file.id) if source_file else None,
+                    }
+                )
+            if len(records) >= 5000:
+                self.db.execute(insert(RawRecord), records)
+                self.db.flush()
+                records = []
+        if records:
+            self.db.execute(insert(RawRecord), records)
+            self.db.flush()
+
+    def _map_to_staging(self, batch: IngestionBatch):
+        source_sheets = self.db.execute(
+            select(RawRecord.source_file_id, RawRecord.worksheet_name)
+            .where(RawRecord.ingestion_batch_id == batch.batch_id)
+            .distinct()
+        ).all()
+
+        for source_file_id, sheet in source_sheets:
             raw_records = (
                 self.db.execute(
                     select(RawRecord).where(
-                        RawRecord.ingestion_batch_id == batch.batch_id, RawRecord.worksheet_name == sheet
+                        RawRecord.ingestion_batch_id == batch.batch_id,
+                        RawRecord.source_file_id == source_file_id,
+                        RawRecord.worksheet_name == sheet,
                     )
                 )
                 .scalars()
                 .all()
             )
+            target_result = self._classify_headers([str(record.column_name) for record in raw_records], sheet)
+            if target_result is None:
+                raise WorkbookIngestionError(
+                    f"Worksheet '{sheet}' could not be mapped unambiguously after parsing.",
+                    worksheet=sheet,
+                    stage="mapping",
+                    batch_id=str(batch.batch_id),
+                )
+            target, _ = target_result
 
             row_map = {}
             for r in raw_records:
@@ -290,18 +495,8 @@ class IngestionPipeline:
 
             staging_records: list[dict] = []
             for (_, row_idx), row_info in row_map.items():
-                parsed_data = self.standardization.normalize_row(sheet, row_info["data"])
-                canonical_table = ""
-                if sheet == "VesselCalls":
-                    canonical_table = "vessel_call"
-                elif sheet == "Events":
-                    canonical_table = "event_occurrence"
-                elif sheet == "Services":
-                    canonical_table = "service_request"
-                elif sheet == "CargoOps":
-                    canonical_table = "cargo_ops"
-                elif sheet == "Delays":
-                    canonical_table = "delay"
+                parsed_data = self.standardization.normalize_row(target, row_info["data"])
+                canonical_table = self.CANONICAL_TABLES[target]
 
                 staging_records.append(
                     {
@@ -337,7 +532,11 @@ class IngestionPipeline:
         for row in rows:
             fingerprint = json.dumps(row.parsed_data, sort_keys=True, default=str, separators=(",", ":"))
             key = (row.canonical_table, fingerprint)
-            if key in seen:
+            timestamp_errors = self._timestamp_errors(row)
+            if timestamp_errors:
+                row.validation_status = "INVALID"
+                row.errors = {"invalid_timestamps": timestamp_errors}
+            elif key in seen:
                 row.validation_status = "DUPLICATE"
                 row.errors = {"duplicate": "Exact duplicate row in dataset group"}
             else:
@@ -346,13 +545,60 @@ class IngestionPipeline:
         batch.status = "VALIDATED"
         self.db.commit()
 
+    def _timestamp_errors(self, row: StagingRecord) -> list[str]:
+        target = next((name for name, table in self.CANONICAL_TABLES.items() if table == row.canonical_table), None)
+        if target is None:
+            return []
+        failures: list[str] = []
+        for column in self._datetime_columns(target):
+            value = row.parsed_data.get(column)
+            if value in {None, ""}:
+                continue
+            if self.parse_datetime(value) is None:
+                failures.append(f"Column '{column}' contains an invalid or ambiguous timestamp: {value!s}")
+        return failures
+
+    def _datetime_columns(self, target: str) -> set[str]:
+        columns = set(self.DATETIME_COLUMNS.get(target, set()))
+        if target == "CargoOps":
+            columns.update(
+                self.standardization.BERTH_TARGET_COLUMNS.get(field, field)
+                for field in self.standardization.berth_datetime_fields
+            )
+        return columns
+
+    @staticmethod
+    def parse_datetime(value, timezone_name: str = "Africa/Johannesburg"):
+        if value in {None, ""}:
+            return None
+        if isinstance(value, datetime):
+            parsed = value
+        else:
+            source = str(value).strip()
+            # A time without a governed date context is not safe to guess.
+            if re.fullmatch(r"\d{1,2}:\d{2}(?::\d{2}(?:\.\d+)?)?\s*(?:AM|PM)?", source, re.IGNORECASE):
+                return None
+            slash_date = re.match(r"^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})(?:\D|$)", source)
+            if slash_date and int(slash_date.group(1)) <= 12 and int(slash_date.group(2)) <= 12:
+                return None
+            try:
+                parsed = date_parser.parse(source, fuzzy=False)
+            except (ValueError, TypeError, OverflowError):
+                return None
+        try:
+            if parsed.tzinfo is None:
+                parsed = pytz.timezone(timezone_name).localize(parsed)
+            return parsed.astimezone(pytz.utc)
+        except (ValueError, pytz.UnknownTimeZoneError):
+            return None
+
     def _commit_to_canonical(self, batch: IngestionBatch, completion_status: str = "COMMITTED"):
         vessel_records = (
             self.db.execute(
                 select(StagingRecord).where(
                     StagingRecord.ingestion_batch_id == batch.batch_id,
                     StagingRecord.canonical_table == "vessel_call",
-                    StagingRecord.validation_status.notin_(["DUPLICATE", "EXCLUDED"]),
+                    StagingRecord.validation_status.notin_(["DUPLICATE", "EXCLUDED", "INVALID"]),
                 )
             )
             .scalars()
@@ -417,7 +663,7 @@ class IngestionPipeline:
                 select(StagingRecord).where(
                     StagingRecord.ingestion_batch_id == batch.batch_id,
                     StagingRecord.canonical_table == "event_occurrence",
-                    StagingRecord.validation_status.notin_(["DUPLICATE", "EXCLUDED"]),
+                    StagingRecord.validation_status.notin_(["DUPLICATE", "EXCLUDED", "INVALID"]),
                 )
             )
             .scalars()
@@ -444,9 +690,6 @@ class IngestionPipeline:
             event_defs = self.db.execute(select(EventDefinition)).scalars().all()
             event_def_map = {e.name: e.id for e in event_defs}
 
-        import pytz
-        from dateutil import parser
-
         event_counters = {}
         event_keys_with_source: set[tuple[object, object]] = set()
         for r in event_records:
@@ -472,12 +715,8 @@ class IngestionPipeline:
             utc_val = None
             if timestamp_str and timestamp_str != "":
                 try:
-                    dt = parser.parse(timestamp_str)
-                    tz = pytz.timezone(tz_str)
-                    if dt.tzinfo is None:
-                        dt = tz.localize(dt)
-                    utc_val = dt.astimezone(pytz.utc)
-                    parsed_tz = dt
+                    utc_val = self.parse_datetime(timestamp_str, tz_str)
+                    parsed_tz = utc_val.astimezone(pytz.timezone(tz_str)) if utc_val else None
                 except Exception:
                     pass
 
@@ -485,7 +724,11 @@ class IngestionPipeline:
             scope = {"INWARD": "ARRIVAL", "OUTWARD": "SAILING", "DEPARTURE": "SAILING"}.get(scope, scope)
             if scope not in {"ARRIVAL", "SHIFTING", "SAILING"}:
                 scope = "ARRIVAL"
-            if not pd.get("Movement_Type") and event_name and ("SAILING" in event_name or "DEPARTURE" in event_name or "OUT" in event_name):
+            if (
+                not pd.get("Movement_Type")
+                and event_name
+                and ("SAILING" in event_name or "DEPARTURE" in event_name or "OUT" in event_name)
+            ):
                 scope = "SAILING"
             elif not pd.get("Movement_Type") and event_name and "SHIFT" in event_name:
                 scope = "SHIFTING"
@@ -520,11 +763,22 @@ class IngestionPipeline:
                     attributes={
                         key: value
                         for key, value in pd.items()
-                        if key not in {
-                            "VCN", "Event_Name", "Event_Timestamp", "Movement_Type", "Operation_Type",
-                            "Timezone", "Source_System", "Event_ID", "Verification_Status", "Confidence_Score",
-                        } and value not in {None, ""}
-                    } | {"source_event_name": source_event_name},
+                        if key
+                        not in {
+                            "VCN",
+                            "Event_Name",
+                            "Event_Timestamp",
+                            "Movement_Type",
+                            "Operation_Type",
+                            "Timezone",
+                            "Source_System",
+                            "Event_ID",
+                            "Verification_Status",
+                            "Confidence_Score",
+                        }
+                        and value not in {None, ""}
+                    }
+                    | {"source_event_name": source_event_name},
                     is_quarantined=False,
                 )
                 self.db.add(ev)
@@ -538,23 +792,13 @@ class IngestionPipeline:
         from apps.api.models.canonical import ServiceAssignment, ServiceExecution, ServiceRequest
 
         def dt_parse(dt_str):
-            import pytz
-            from dateutil import parser
-
-            if not dt_str:
-                return None
-            try:
-                dt = parser.parse(dt_str)
-                if dt.tzinfo is None:
-                    dt = pytz.timezone("Africa/Johannesburg").localize(dt)
-                return dt.astimezone(pytz.utc)
-            except Exception:
-                return None
+            return self.parse_datetime(dt_str)
 
         service_records = [
             r
             for r in batch_staging
-            if r.canonical_table == "service_request" and r.validation_status not in {"DUPLICATE", "EXCLUDED"}
+            if r.canonical_table == "service_request"
+            and r.validation_status not in {"DUPLICATE", "EXCLUDED", "INVALID"}
         ]
         for r in service_records:
             pd_data = r.parsed_data
@@ -595,7 +839,7 @@ class IngestionPipeline:
         delay_records = [
             r
             for r in batch_staging
-            if r.canonical_table == "delay" and r.validation_status not in {"DUPLICATE", "EXCLUDED"}
+            if r.canonical_table == "delay" and r.validation_status not in {"DUPLICATE", "EXCLUDED", "INVALID"}
         ]
         for r in delay_records:
             pd_data = r.parsed_data
@@ -679,7 +923,7 @@ class IngestionPipeline:
         cargo_records = [
             r
             for r in batch_staging
-            if r.canonical_table == "cargo_ops" and r.validation_status not in {"DUPLICATE", "EXCLUDED"}
+            if r.canonical_table == "cargo_ops" and r.validation_status not in {"DUPLICATE", "EXCLUDED", "INVALID"}
         ]
         for r in cargo_records:
             pd_data = r.parsed_data
@@ -722,11 +966,23 @@ class IngestionPipeline:
                 attributes={
                     key: value
                     for key, value in pd_data.items()
-                    if key not in {
-                        "VCN", "Cargo_Operation_ID", "Cargo_Type", "Operation_Type", "Planned_Quantity",
-                        "Unit", "Cargo_Start", "Cargo_End", "Working_Hours", "Resources_Deployed",
-                        "Downtime_Hours", "Actual_Quantity", "Data_Status",
-                    } and value not in {None, ""}
+                    if key
+                    not in {
+                        "VCN",
+                        "Cargo_Operation_ID",
+                        "Cargo_Type",
+                        "Operation_Type",
+                        "Planned_Quantity",
+                        "Unit",
+                        "Cargo_Start",
+                        "Cargo_End",
+                        "Working_Hours",
+                        "Resources_Deployed",
+                        "Downtime_Hours",
+                        "Actual_Quantity",
+                        "Data_Status",
+                    }
+                    and value not in {None, ""}
                 },
             )
             self.db.add(cg)
@@ -754,25 +1010,27 @@ class IngestionPipeline:
                 if (vc_id, event_def_id) in event_keys_with_source:
                     continue
                 event_counters[(vc_id, event_def_id)] = event_counters.get((vc_id, event_def_id), 0) + 1
-                self.db.add(EventOccurrence(
-                    source_lineage_id=f"{r.source_file_id}:{r.worksheet_name}:{r.row_number}",
-                    vessel_call_id=vc_id,
-                    event_definition_id=event_def_id,
-                    occurrence_index=event_counters[(vc_id, event_def_id)],
-                    movement_scope="ARRIVAL",
-                    operation_type=pd_data.get("Operation_Type"),
-                    attributes={"source_field": event_name, "source_worksheet": "CargoOps"},
-                    original_string=str(source_value),
-                    parsed_value=event_time,
-                    source_timezone="Africa/Johannesburg",
-                    utc_value=event_time,
-                    capture_method="SYSTEM",
-                    verification_status="Unverified",
-                    source_system="CargoOps",
-                    source_record_id=pd_data.get("Cargo_Operation_ID"),
-                    ingestion_batch_id=batch.batch_id,
-                    is_quarantined=False,
-                ))
+                self.db.add(
+                    EventOccurrence(
+                        source_lineage_id=f"{r.source_file_id}:{r.worksheet_name}:{r.row_number}",
+                        vessel_call_id=vc_id,
+                        event_definition_id=event_def_id,
+                        occurrence_index=event_counters[(vc_id, event_def_id)],
+                        movement_scope="ARRIVAL",
+                        operation_type=pd_data.get("Operation_Type"),
+                        attributes={"source_field": event_name, "source_worksheet": "CargoOps"},
+                        original_string=str(source_value),
+                        parsed_value=event_time,
+                        source_timezone="Africa/Johannesburg",
+                        utc_value=event_time,
+                        capture_method="SYSTEM",
+                        verification_status="Unverified",
+                        source_system="CargoOps",
+                        source_record_id=pd_data.get("Cargo_Operation_ID"),
+                        ingestion_batch_id=batch.batch_id,
+                        is_quarantined=False,
+                    )
+                )
                 event_keys_with_source.add((vc_id, event_def_id))
 
             # Update vessel_call quantity_unit and quantity_value from cargo ops

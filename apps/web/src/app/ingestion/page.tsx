@@ -6,6 +6,7 @@ import { useAuth } from '@/lib/auth-context'
 import { useDatasetStatus } from '@/lib/dataset-context'
 import { PageHeader, Card, SectionHeader, StatusBadge, ErrorState, LoadingState } from '@/components/ui'
 import { CheckCircle2, FileSpreadsheet, LayoutDashboard, Plus, Trash2, UploadCloud } from 'lucide-react'
+import { appendWorkbookSelection, MAX_WORKBOOKS } from './file-selection'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
@@ -73,12 +74,14 @@ export default function IngestionPage() {
   const [files, setFiles] = useState<File[]>([])
   const [uploadState, setUploadState] = useState<UploadState>('idle')
   const [uploadedName, setUploadedName] = useState<string>('')
+  const [errorTitle, setErrorTitle] = useState<string>('Dataset processing failed')
   const [errorMessage, setErrorMessage] = useState<string>('')
   const [fileResults, setFileResults] = useState<FileResult[]>([])
   const [batchStatus, setBatchStatus] = useState<string>('')
   const [confirmingRemoval, setConfirmingRemoval] = useState(false)
   const [removing, setRemoving] = useState(false)
   const addNewInputRef = useRef<HTMLInputElement>(null)
+  const selectionInputRef = useRef<HTMLInputElement>(null)
 
   if (!can('create:vessel_call')) {
     return (
@@ -107,8 +110,21 @@ export default function IngestionPage() {
     // Processing happens on the durable worker so the upload request is not held
     // open across a browser/proxy timeout.  Keep the user informed until the
     // persisted batch reaches a terminal state.
+    let consecutiveNetworkFailures = 0
     for (let attempt = 0; attempt < 300; attempt += 1) {
-      const outcome = await resolveBatchOutcome(batchId)
+      let outcome: BatchOutcome | null = null
+      try {
+        outcome = await resolveBatchOutcome(batchId)
+        consecutiveNetworkFailures = 0
+      } catch (error) {
+        if (!(error instanceof TypeError) || !/fetch|network/i.test(error.message)) throw error
+        consecutiveNetworkFailures += 1
+        if (consecutiveNetworkFailures >= 5) {
+          throw new Error(
+            'The upload was accepted, but its processing status is temporarily unavailable. Refresh this page to resume from the persisted batch state.'
+          )
+        }
+      }
       if (outcome) {
         setBatchStatus(outcome.status)
         if (outcome.files) setFileResults(outcome.files)
@@ -121,6 +137,7 @@ export default function IngestionPage() {
 
   const processUpload = async (targetFiles: File[]) => {
     setUploadState('uploading')
+    setErrorTitle('Dataset processing failed')
     setErrorMessage('')
     setBatchStatus('UPLOADING')
     setFileResults(targetFiles.map((targetFile) => ({
@@ -130,15 +147,19 @@ export default function IngestionPage() {
       validation_status: 'PENDING',
     })))
 
-    const formData = new FormData()
-    targetFiles.forEach((targetFile) => formData.append('files', targetFile))
+    const uploadBody = () => {
+      const formData = new FormData()
+      targetFiles.forEach((targetFile) => formData.append('files', targetFile, targetFile.name))
+      return formData
+    }
 
+    let uploadAccepted = false
     try {
       let headers = getActiveAuthHeaders()
       let res = await fetch(`${API}/api/v1/ingestion/upload`, {
         method: 'POST',
         headers,
-        body: formData,
+        body: uploadBody(),
       })
 
       // If unauthorized, attempt to refresh access token once and retry
@@ -149,7 +170,7 @@ export default function IngestionPage() {
           res = await fetch(`${API}/api/v1/ingestion/upload`, {
             method: 'POST',
             headers,
-            body: formData,
+            body: uploadBody(),
           })
         }
       }
@@ -170,11 +191,18 @@ export default function IngestionPage() {
         throw new Error(parsedMessage)
       }
       const data = await res.json()
+      if (data.file_count !== targetFiles.length) {
+        throw new Error(
+          `Upload integrity check failed: ${targetFiles.length} workbooks were selected but the server received ${data.file_count ?? 0}.`
+        )
+      }
+      uploadAccepted = true
       if (Array.isArray(data.file_results)) setFileResults(data.file_results)
       setBatchStatus(data.status)
       const outcome = await waitForBatchOutcome(data.batch_id)
       if (outcome?.status === 'FAILED' || outcome?.status === 'SUPERSEDED') {
         setUploadState('error')
+        setErrorTitle(outcome.status === 'SUPERSEDED' ? 'Dataset upload superseded' : 'Dataset processing failed')
         setErrorMessage(outcome.error_message || (outcome.status === 'SUPERSEDED'
           ? 'This upload was superseded by a newer dataset upload. Refresh to view its persisted status.'
           : 'Dataset processing failed.'))
@@ -187,8 +215,25 @@ export default function IngestionPage() {
     } catch (error) {
       const e = error as Error
       setUploadState('error')
-      setErrorMessage(e.message)
+      setErrorTitle(uploadAccepted ? 'Processing status unavailable' : 'Dataset upload failed')
+      setErrorMessage(
+        e instanceof TypeError && /fetch|network/i.test(e.message)
+          ? 'Could not reach the ingestion service. Check your connection and retry; the active dataset was not changed.'
+          : e.message
+      )
     }
+  }
+
+  const addToSelection = (incoming: File[]) => {
+    const excelFiles = incoming.filter((candidate) => candidate.name.toLowerCase().endsWith('.xlsx'))
+    const ignoredTypeCount = incoming.length - excelFiles.length
+    const result = appendWorkbookSelection(files, excelFiles)
+    setFiles(result.files)
+    const messages: string[] = []
+    if (ignoredTypeCount) messages.push(`${ignoredTypeCount} non-XLSX file${ignoredTypeCount === 1 ? ' was' : 's were'} ignored.`)
+    if (result.duplicateCount) messages.push(`${result.duplicateCount} duplicate selection${result.duplicateCount === 1 ? ' was' : 's were'} ignored.`)
+    if (result.rejectedForLimit) messages.push(`A maximum of ${MAX_WORKBOOKS} workbooks is allowed. File #16 was not added.`)
+    setErrorMessage(messages.join(' '))
   }
 
   const handleInitialUpload = async () => {
@@ -211,6 +256,7 @@ export default function IngestionPage() {
 
   const retry = () => {
     setUploadState('idle')
+    setErrorTitle('Dataset processing failed')
     setErrorMessage('')
     setFileResults([])
     setBatchStatus('')
@@ -256,7 +302,7 @@ export default function IngestionPage() {
           </Card>
         ) : uploadState === 'error' ? (
           <Card>
-            <ErrorState title="Dataset processing failed" description={errorMessage} onRetry={retry} />
+            <ErrorState title={errorTitle} description={errorMessage} onRetry={retry} />
             <FileHandlingSummary files={fileResults} batchStatus={batchStatus} />
           </Card>
         ) : datasetStatus === 'loading' ? (
@@ -309,13 +355,7 @@ export default function IngestionPage() {
               onDragOver={(event) => event.preventDefault()}
               onDrop={(event) => {
                 event.preventDefault()
-                const selected = Array.from(event.dataTransfer.files).filter((candidate) => candidate.name.toLowerCase().endsWith('.xlsx'))
-                if (selected.length > 15) {
-                  setErrorMessage('A dataset group supports a maximum of 15 workbooks. File #16 was not added.')
-                  setUploadState('error')
-                  return
-                }
-                setFiles(selected)
+                addToSelection(Array.from(event.dataTransfer.files))
               }}
             >
             <Card className="text-center">
@@ -325,16 +365,30 @@ export default function IngestionPage() {
               <SectionHeader className="justify-center" title="Upload vessel operations dataset" description="Drop one to fifteen governed Excel workbooks here, or select them below, for one atomic dataset ingestion." />
               <div className="mx-auto mt-6 max-w-xl space-y-4 text-left">
                 <input
+                  ref={selectionInputRef}
                   type="file"
                   accept=".xlsx"
                   multiple
                   onChange={(e) => {
                     const selected = Array.from(e.target.files || [])
-                    if (selected.length > 15) { setErrorMessage('A dataset group supports a maximum of 15 workbooks. Remove files and try again.'); setUploadState('error'); return }
-                    setFiles(selected)
+                    e.target.value = ''
+                    addToSelection(selected)
                   }}
-                  className="block w-full text-sm text-[var(--color-text-secondary)] border border-dashed border-[var(--color-border-strong)] rounded-[var(--radius-lg)] bg-[var(--color-surface-subtle)] p-3 file:mr-3 file:px-3 file:py-2 file:rounded-[var(--radius-md)] file:border-0 file:text-xs file:font-semibold file:bg-[var(--color-accent-soft)] file:text-[var(--color-accent-strong)] cursor-pointer hover:border-[var(--color-accent-soft-border)]"
+                  className="sr-only"
+                  aria-label="Select Excel workbooks"
                 />
+                <button
+                  type="button"
+                  onClick={() => selectionInputRef.current?.click()}
+                  disabled={files.length >= MAX_WORKBOOKS}
+                  className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-[var(--radius-lg)] border border-dashed border-[var(--color-border-strong)] bg-[var(--color-surface-subtle)] px-4 py-3 text-xs font-semibold text-[var(--color-accent-strong)] hover:border-[var(--color-accent-soft-border)] hover:bg-[var(--color-accent-soft)] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Plus size={15} aria-hidden="true" />
+                  {files.length ? 'Add more workbooks' : 'Choose workbooks'}
+                </button>
+                {errorMessage && (
+                  <p role="status" className="text-xs text-[var(--color-warning)]">{errorMessage}</p>
+                )}
                 <button
                   onClick={handleInitialUpload}
                   disabled={!files.length}
@@ -342,8 +396,8 @@ export default function IngestionPage() {
                 >
                   <UploadCloud size={16} aria-hidden="true" /> Upload {files.length || ''} {files.length === 1 ? 'workbook' : 'workbooks'} &amp; Process
                 </button>
-                <p className="text-center text-[11px] text-[var(--color-text-tertiary)]">Files selected: {files.length} / 15 · Excel (.xlsx) · validated, lineage-tracked, and processed as one dataset group</p>
-                {files.length > 0 && <ul className="space-y-1 text-xs text-[var(--color-text-secondary)]">{files.map((selected, index) => <li key={`${selected.name}-${index}`} className="flex justify-between gap-3 rounded border border-[var(--color-border)] px-2 py-1.5"><span className="truncate">{selected.name} · {(selected.size / 1024 / 1024).toFixed(2)} MB · Queued</span><button type="button" onClick={() => setFiles((current) => current.filter((_, i) => i !== index))} className="text-[var(--color-critical)] cursor-pointer">Remove</button></li>)}</ul>}
+                <p className="text-center text-[11px] text-[var(--color-text-tertiary)]">Files selected: {files.length} / {MAX_WORKBOOKS} · Excel (.xlsx) · validated, lineage-tracked, and processed as one dataset group</p>
+                {files.length > 0 && <ul className="space-y-1 text-xs text-[var(--color-text-secondary)]">{files.map((selected, index) => <li key={`${selected.name}-${selected.size}-${selected.lastModified}`} className="flex items-center justify-between gap-3 rounded border border-[var(--color-border)] px-2 py-1.5"><span className="min-w-0 truncate" title={selected.name}>{selected.name} · {(selected.size / 1024 / 1024).toFixed(2)} MB</span><button type="button" aria-label={`Remove ${selected.name}`} onClick={() => setFiles((current) => current.filter((_, i) => i !== index))} className="shrink-0 text-[var(--color-critical)] cursor-pointer">Remove</button></li>)}</ul>}
               </div>
             </Card>
             </div>

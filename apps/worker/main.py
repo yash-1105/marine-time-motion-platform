@@ -1,3 +1,5 @@
+import logging
+
 import dramatiq
 from dramatiq.brokers.redis import RedisBroker
 
@@ -5,6 +7,7 @@ from apps.api.core.config import settings
 
 redis_broker = RedisBroker(url=settings.redis_url)
 dramatiq.set_broker(redis_broker)
+logger = logging.getLogger(__name__)
 
 
 @dramatiq.actor
@@ -126,11 +129,20 @@ def process_ingestion_analytics_task(batch_id: str, tenant_id: str, file_checksu
             db.commit()
     except Exception as exc:
         db.rollback()
+        logger.exception(
+            "ingestion_worker_failed batch_id=%s tenant_id=%s stage=canonical_analytics",
+            batch_id,
+            tenant_id,
+        )
         batch = db.execute(select(IngestionBatch).where(IngestionBatch.batch_id == batch_id)).scalar_one_or_none()
         if batch:
             batch.status = "FAILED"
             batch.is_active = False
-            batch.error_message = str(exc)
+            batch.error_message = (
+                str(exc)
+                if isinstance(exc, ValueError)
+                else f"Dataset processing failed during governed analytics. Reference ingestion run {batch_id}."
+            )
             db.commit()
         raise
     finally:

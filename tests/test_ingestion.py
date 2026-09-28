@@ -50,6 +50,49 @@ def _supplemental_workbook(path: Path, sheet_name: str = "Notes") -> str:
     return str(path)
 
 
+def _real_world_layout_workbook(path: Path) -> str:
+    """Exercise title rows, aliases, reordered/blank columns, dates, and extra sheets."""
+    from openpyxl import Workbook
+
+    book = Workbook()
+    calls = book.active
+    calls.title = "Port Calls"
+    calls.merge_cells("A1:E1")
+    calls["A1"] = "Client vessel call export"
+    calls.append([None, None, None, None, None])
+    calls.append([" Vessel Name ", "Unrelated", " vCn ", None, "IMO No."])
+    calls.append(["Málaga Star", "kept as lineage", "REAL-001", None, "9876543"])
+    calls.append([None, None, None, None, None])
+    calls.append(["Unicode 船", None, "REAL-002", None, "1234567"])
+
+    services = book.create_sheet("Marine Services")
+    services.append(["Instructions: operational services below"])
+    services.append(
+        [
+            "Actual Service Time",
+            "Service Type",
+            "VCN",
+            "Scheduled Service Time",
+            "Service Requested Time",
+            "Service Request Submission Time",
+        ]
+    )
+    services.append(
+        [
+            datetime(2026, 1, 2, 12, 30),
+            "Pilotage Service",
+            "REAL-001",
+            "2026-01-02 12:00",
+            "2026/01/02 11:45",
+            "2026-01-02T11:30:00",
+        ]
+    )
+    notes = book.create_sheet("Read Me")
+    notes.append(["This unrelated sheet must be ignored safely."])
+    book.save(path)
+    return str(path)
+
+
 def _delete_uncommitted_group(db_session, batch_id: str) -> None:
     """Remove an isolated parse-only test group without touching the active dataset."""
     for model in (StagingRecord, RawRecord):
@@ -589,6 +632,72 @@ def test_fatal_file_schema_failure_keeps_group_inactive(db_session, tmp_path):
     ).scalar_one()
     assert manifest.parse_status == "FAILED"
     _delete_uncommitted_group(db_session, failed.batch_id)
+
+
+def test_real_world_layout_detects_alias_headers_and_preserves_source_sheet_lineage(db_session, tmp_path):
+    path = _real_world_layout_workbook(tmp_path / "client-export.xlsx")
+    pipeline = IngestionPipeline(db_session, tenant_id="real-layout-test")
+    batch_id = pipeline.process_files([(path, "client-export.xlsx")], force_new=True, commit_canonical=False)
+    try:
+        rows = db_session.execute(
+            select(StagingRecord).where(StagingRecord.ingestion_batch_id == batch_id)
+        ).scalars().all()
+        assert {row.canonical_table for row in rows} == {"vessel_call", "service_request"}
+        vessel = next(
+            row
+            for row in rows
+            if row.canonical_table == "vessel_call" and row.parsed_data.get("VCN") == "REAL-001"
+        )
+        service = next(row for row in rows if row.canonical_table == "service_request")
+        assert vessel.worksheet_name == "Port Calls"
+        assert vessel.row_number == 4
+        assert vessel.parsed_data["VCN"] == "REAL-001"
+        assert vessel.parsed_data["Vessel_Name"] == "Málaga Star"
+        assert service.worksheet_name == "Marine Services"
+        assert service.parsed_data["Served_Time"] == "2026-01-02 12:30:00"
+        assert service.validation_status == "VALID"
+        raw_sheets = {
+            row.worksheet_name
+            for row in db_session.execute(
+                select(RawRecord).where(RawRecord.ingestion_batch_id == batch_id)
+            ).scalars()
+        }
+        assert raw_sheets == {"Port Calls", "Marine Services"}
+    finally:
+        _delete_uncommitted_group(db_session, batch_id)
+
+
+def test_malformed_timestamp_is_controlled_staging_issue(db_session, tmp_path):
+    from openpyxl import Workbook
+
+    path = tmp_path / "invalid-timestamp.xlsx"
+    book = Workbook()
+    calls = book.active
+    calls.title = "VesselCalls"
+    calls.append(["VCN", "Vessel Name"])
+    calls.append(["INVALID-DATE-001", "Invalid Date Vessel"])
+    events = book.create_sheet("Events")
+    events.append(["VCN", "Event Name", "Event Timestamp"])
+    events.append(["INVALID-DATE-001", "ETA", "not-a-timestamp"])
+    book.save(path)
+
+    pipeline = IngestionPipeline(db_session, tenant_id="invalid-date-test")
+    batch_id = pipeline.process_files([(str(path), path.name)], force_new=True, commit_canonical=False)
+    try:
+        invalid = db_session.execute(
+            select(StagingRecord).where(
+                StagingRecord.ingestion_batch_id == batch_id,
+                StagingRecord.canonical_table == "event_occurrence",
+            )
+        ).scalar_one()
+        assert invalid.validation_status == "INVALID"
+        assert "invalid_timestamps" in invalid.errors
+        manifest = db_session.execute(
+            select(IngestionFile).where(IngestionFile.group_batch_id == batch_id)
+        ).scalar_one()
+        assert manifest.validation_status == "VALIDATED_WITH_ISSUES"
+    finally:
+        _delete_uncommitted_group(db_session, batch_id)
 
 
 def test_older_worker_cannot_supersede_a_newer_upload_during_processing(db_session, monkeypatch):

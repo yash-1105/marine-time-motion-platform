@@ -4,15 +4,21 @@ No inference is performed here. Ambiguous aliases require an explicit movement
 scope; otherwise the original value is retained for steward review and lineage.
 """
 
+import re
+from datetime import date, datetime, time
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 import yaml
+from openpyxl.utils.datetime import from_excel
 
 
 def _token(value: str) -> str:
     return "".join(character.lower() for character in value if character.isalnum())
+
+
+_DUPLICATE_HEADER_SUFFIX = re.compile(r"__duplicate_\d+$", re.IGNORECASE)
 
 
 @lru_cache(maxsize=1)
@@ -180,10 +186,59 @@ class StandardizationRegistry:
         self.aliases = load_aliases()
 
     def canonical_column(self, worksheet: str, source_column: str) -> str:
+        source_column = _DUPLICATE_HEADER_SUFFIX.sub("", source_column).strip()
         return self.column_aliases.get(worksheet, {}).get(_token(source_column), source_column)
 
+    def recognized_columns(self, worksheet: str, source_columns: list[str] | tuple[str, ...]) -> set[str]:
+        aliases = self.column_aliases.get(worksheet, {})
+        return {
+            aliases[token]
+            for source_column in source_columns
+            if (token := _token(_DUPLICATE_HEADER_SUFFIX.sub("", str(source_column)))) in aliases
+        }
+
+    @staticmethod
+    def source_value(value: Any, *, is_datetime_column: bool = False) -> str:
+        """Return a deterministic raw string without guessing spreadsheet dates.
+
+        openpyxl already resolves native Excel date cells from their number format.
+        Numeric Excel serials are converted only for a field that the governed
+        mapping identifies as a datetime; all other numbers remain untouched.
+        """
+        if value is None:
+            return ""
+        if isinstance(value, datetime):
+            return value.isoformat(sep=" ")
+        if isinstance(value, date):
+            return value.isoformat()
+        if isinstance(value, time):
+            return value.isoformat()
+        if is_datetime_column and isinstance(value, (int, float)):
+            try:
+                converted = from_excel(value)
+                if isinstance(converted, datetime):
+                    return converted.isoformat(sep=" ")
+                if isinstance(converted, date):
+                    return converted.isoformat()
+            except (TypeError, ValueError, OverflowError):
+                pass
+        # Raw source strings are evidence: retain whitespace and Unicode exactly.
+        return value if isinstance(value, str) else str(value)
+
     def normalize_row(self, worksheet: str, values: dict[str, Any]) -> dict[str, Any]:
-        normalized = {self.canonical_column(worksheet, str(column)): value for column, value in values.items()}
+        normalized: dict[str, Any] = {}
+        duplicate_counts: dict[str, int] = {}
+        for column, value in values.items():
+            canonical = self.canonical_column(worksheet, str(column))
+            if canonical not in normalized or normalized[canonical] in {None, ""}:
+                normalized[canonical] = value
+                continue
+            if value in {None, ""} or value == normalized[canonical]:
+                continue
+            # Preserve conflicting duplicate-looking columns for lineage/steward
+            # review instead of silently overwriting the first source value.
+            duplicate_counts[canonical] = duplicate_counts.get(canonical, 1) + 1
+            normalized[f"{canonical}__source_{duplicate_counts[canonical]}"] = value
         if worksheet == "Events" and normalized.get("Event_Name"):
             normalized["Event_Name"] = self.canonical_event_name(
                 str(normalized["Event_Name"]), normalized.get("Movement_Type")

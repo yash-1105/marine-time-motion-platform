@@ -1,3 +1,4 @@
+import logging
 import os
 import uuid
 from pathlib import Path
@@ -11,12 +12,13 @@ from apps.api.auth.tenant import resolve_principal_tenant
 from apps.api.core.config import settings
 from apps.api.core.database import get_db
 from apps.api.models.ingestion import IngestionBatch, IngestionFile
-from apps.api.services.ingestion.pipeline import IngestionPipeline
+from apps.api.services.ingestion.pipeline import IngestionPipeline, WorkbookIngestionError
 from apps.api.services.ingestion.synthetic import reset_tenant_dataset
 from apps.api.services.pipeline_runner import run_full_analytics_pipeline
 from apps.worker.main import process_ingestion_analytics_task
 
 router = APIRouter(prefix="/ingestion", tags=["ingestion"])
+logger = logging.getLogger(__name__)
 
 
 def _resolve_tenant(principal) -> str:
@@ -58,7 +60,9 @@ def upload_file(
         for upload in uploads:
             safe_name = Path(upload.filename or "").name
             if not safe_name.lower().endswith(".xlsx"):
-                raise HTTPException(status_code=415, detail="Only .xlsx workbooks are accepted for governed dataset groups")
+                raise HTTPException(
+                    status_code=415, detail="Only .xlsx workbooks are accepted for governed dataset groups"
+                )
             temp_path = f"/tmp/uploads/{uuid.uuid4()}_{safe_name}"
             temp_files.append((temp_path, safe_name))
             with open(temp_path, "wb") as buffer:
@@ -124,10 +128,45 @@ def upload_file(
         if db is not None:
             db.rollback()
         raise
+    except WorkbookIngestionError as exc:
+        if db is not None:
+            db.rollback()
+        logger.warning(
+            "ingestion_workbook_error workbook=%s worksheet=%s stage=%s batch_id=%s error=%s",
+            exc.workbook,
+            exc.worksheet,
+            exc.stage,
+            exc.batch_id,
+            exc.safe_message,
+        )
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "WORKBOOK_VALIDATION_ERROR",
+                "message": exc.safe_message,
+                "workbook": exc.workbook,
+                "worksheet": exc.worksheet,
+                "stage": exc.stage,
+                "ingestion_run_id": exc.batch_id,
+            },
+        ) from exc
     except Exception as e:
         if db is not None:
             db.rollback()
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.exception("ingestion_upload_failed files=%s", [name for _, name in temp_files])
+        if isinstance(e, ValueError):
+            status_code = 400 if str(e).startswith("No governed worksheets were found") else 422
+            raise HTTPException(
+                status_code=status_code,
+                detail={"code": "INGESTION_VALIDATION_ERROR", "message": str(e)},
+            ) from e
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "code": "INGESTION_PROCESSING_ERROR",
+                "message": "The workbooks could not be processed. The prior active dataset was not changed.",
+            },
+        ) from e
     finally:
         for temp_path, _ in temp_files:
             if os.path.exists(temp_path):
