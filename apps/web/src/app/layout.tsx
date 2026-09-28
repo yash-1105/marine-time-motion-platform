@@ -12,7 +12,7 @@ const inter = Inter({
 })
 
 export const metadata: Metadata = {
-  title: 'Marine Time & Motion Platform',
+  title: 'Marine Time & Motion Analytics',
   description: 'Port Marine Operations Time Release Platform',
 }
 

@@ -6,7 +6,7 @@ export function BrandMark({ className = '' }: { className?: string }) {
     <svg
       viewBox="0 0 28 28"
       role="img"
-      aria-label="Marine Time & Motion"
+      aria-label="Marine Time & Motion Analytics"
       className={className}
       fill="none"
       xmlns="http://www.w3.org/2000/svg"

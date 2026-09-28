@@ -115,7 +115,7 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
   }
 
   const currentRole = roles[0] || 'Platform Administrator'
-  const currentTitle = PAGE_TITLES[pathname] || 'Marine Time & Motion'
+  const currentTitle = PAGE_TITLES[pathname] || 'Marine Time & Motion Analytics'
   const showScopeFilter = SCOPE_FILTER_PATHS.has(pathname)
   const isIngestionPage = pathname === '/ingestion'
   const showDatasetGate = !isIngestionPage && datasetStatus !== 'ready' && datasetStatus !== 'loading'
@@ -137,7 +137,7 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
         <div className="h-16 px-4 flex items-center gap-2.5 border-b border-[var(--color-border)]">
           <BrandMark className="h-7 w-7 flex-shrink-0" />
           <span className="font-semibold text-[13px] tracking-[-0.015em] text-[var(--color-text-primary)]">
-            Marine Time &amp; Motion
+            Marine Time &amp; Motion Analytics
           </span>
         </div>
 

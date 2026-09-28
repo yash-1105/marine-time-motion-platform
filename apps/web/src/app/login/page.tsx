@@ -57,7 +57,7 @@ export default function LoginPage() {
         <div className="w-full max-w-sm justify-self-center md:px-4 lg:px-0 lg:text-white">
           <div className="mb-6 flex items-center gap-3">
             <BrandMark className="h-10 w-10" />
-            <span className="text-sm font-semibold tracking-tight">Marine Time &amp; Motion</span>
+            <span className="text-sm font-semibold tracking-tight">Marine Time &amp; Motion Analytics</span>
           </div>
           <div className="inline-flex items-center gap-2 mb-4 px-2.5 py-1 rounded-md bg-white/10 border border-white/15">
             <ShieldCheck size={13} aria-hidden="true" />
@@ -66,10 +66,10 @@ export default function LoginPage() {
             </span>
           </div>
           <h1 className="text-3xl sm:text-4xl font-semibold tracking-[-0.035em] text-[var(--color-text-primary)] lg:text-white leading-tight">
-            Operational clarity,<br />from arrival to departure.
+            Operational clarity,<br />from arrival to departure
           </h1>
           <p className="mt-4 text-sm lg:text-white/70 text-[var(--color-text-secondary)] max-w-sm leading-6">
-            Governed time-and-motion analytics for precise, traceable port operations decisions.
+            Governed time-and-motion analytics for precise, traceable port operations decisions
           </p>
         </div>
 
