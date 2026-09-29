@@ -2,13 +2,14 @@
 
 import { useRef, useState } from 'react'
 import Link from 'next/link'
+import { BACKEND_PROXY_BASE } from '@/lib/api-base'
 import { useAuth } from '@/lib/auth-context'
 import { useDatasetStatus } from '@/lib/dataset-context'
 import { PageHeader, Card, SectionHeader, StatusBadge, ErrorState, LoadingState } from '@/components/ui'
 import { CheckCircle2, FileSpreadsheet, LayoutDashboard, Plus, Trash2, UploadCloud } from 'lucide-react'
 import { appendWorkbookSelection, MAX_WORKBOOKS } from './file-selection'
 
-const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+const API = BACKEND_PROXY_BASE
 
 type UploadState = 'idle' | 'uploading' | 'error'
 

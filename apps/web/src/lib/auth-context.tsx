@@ -1,6 +1,7 @@
 'use client'
 
 import React, { createContext, useContext, useEffect, useState } from 'react'
+import { BACKEND_PROXY_BASE } from './api-base'
 
 export interface DataScope {
   tenant_id: string
@@ -61,7 +62,7 @@ const AuthContext = createContext<AuthContextType>({
   refreshAccessToken: async () => null,
 })
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+const API_BASE = BACKEND_PROXY_BASE
 
 function isJwtExpired(jwtToken: string): boolean {
   try {

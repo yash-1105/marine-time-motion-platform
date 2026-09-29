@@ -3,10 +3,11 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
+import { BACKEND_PROXY_BASE } from '@/lib/api-base'
 import { useAuth } from '../lib/auth-context'
 import { Anchor, ArrowUpRight, Box, CircleCheck, Info, RefreshCw, Scale, TriangleAlert, UsersRound, X } from 'lucide-react'
 
-const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+const API = BACKEND_PROXY_BASE
 
 interface LeadTimeStat {
   name: string

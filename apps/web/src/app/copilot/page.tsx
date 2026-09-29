@@ -2,11 +2,12 @@
 
 import { FormEvent, useState } from 'react'
 import { Send, Sparkles } from 'lucide-react'
+import { BACKEND_PROXY_BASE } from '@/lib/api-base'
 import { useAuth } from '@/lib/auth-context'
 import { Card, EmptyState, PageHeader, StatusBadge } from '@/components/ui'
 import { CopilotReplyActions, type CopilotEvidenceContext } from '@/components/CopilotReplyActions'
 
-const api = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000') + '/api/v1'
+const api = BACKEND_PROXY_BASE + '/api/v1'
 
 type Reply = {
   answer: string

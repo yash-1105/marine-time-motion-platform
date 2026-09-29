@@ -4,9 +4,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { CalendarClock, FileChartColumn, Play, X } from 'lucide-react'
 import { Card, EmptyState, LoadingState, PageHeader, StatusBadge } from '@/components/ui'
+import { BACKEND_PROXY_BASE } from '@/lib/api-base'
 import { useAuth } from '@/lib/auth-context'
 
-const api = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000') + '/api/v1'
+const api = BACKEND_PROXY_BASE + '/api/v1'
 type Template = { template_id: string; name: string; version: string; status: string; sections: string[] }
 type Run = { report_run_id: string; status: string; progress: number; template_id: string; formats: string[]; failure_reason?: string | null; version: number }
 type ReportResult = { report_run_id: string; status: string; result: { metadata: Record<string, unknown>; sections: Record<string, { title: string; value: unknown }> } }

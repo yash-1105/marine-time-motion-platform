@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
+import { BACKEND_PROXY_BASE } from '@/lib/api-base'
 import { useAuth } from '../../lib/auth-context'
 import { RefreshCw, Search, X, Ban } from 'lucide-react'
 import {
@@ -16,7 +17,7 @@ import {
   FilterChip,
 } from '@/components/ui'
 
-const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+const API = BACKEND_PROXY_BASE
 
 interface QualityIssue {
   id: string

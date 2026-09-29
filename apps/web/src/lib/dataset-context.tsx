@@ -1,6 +1,7 @@
 'use client'
 
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react'
+import { BACKEND_PROXY_BASE } from './api-base'
 import { useAuth } from './auth-context'
 
 export type DatasetState = 'loading' | 'none' | 'processing' | 'ready' | 'failed'
@@ -50,7 +51,7 @@ const DatasetContext = createContext<DatasetContextType>({
   clearDataset: async () => {},
 })
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+const API_BASE = BACKEND_PROXY_BASE
 
 export const DatasetStatusProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { token, isLoading: authLoading } = useAuth()

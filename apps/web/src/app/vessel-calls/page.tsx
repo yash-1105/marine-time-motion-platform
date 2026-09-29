@@ -3,11 +3,12 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
+import { BACKEND_PROXY_BASE } from '@/lib/api-base'
 import { useAuth } from '../../lib/auth-context'
 import { PageHeader, StatusBadge, EmptyState, ErrorState, LoadingState } from '@/components/ui'
 import { CircleMinus, Search, X } from 'lucide-react'
 
-const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+const API = BACKEND_PROXY_BASE
 
 interface DurationTraceability {
   duration_hours: number | null

@@ -1,12 +1,13 @@
 'use client'
 
 import { FormEvent, useEffect, useState } from 'react'
+import { BACKEND_PROXY_BASE } from '@/lib/api-base'
 import { useAuth } from '@/lib/auth-context'
 import { Send, Sparkles, X } from 'lucide-react'
 import { BrandMark } from './BrandMark'
 import { CopilotReplyActions, type CopilotEvidenceContext } from './CopilotReplyActions'
 
-const API = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000') + '/api/v1'
+const API = BACKEND_PROXY_BASE + '/api/v1'
 
 type CopilotReply = {
   answer: string

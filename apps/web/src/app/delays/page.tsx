@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
+import { BACKEND_PROXY_BASE } from '@/lib/api-base'
 import { useAuth } from '../../lib/auth-context'
 import { X } from 'lucide-react'
 import {
@@ -14,7 +15,7 @@ import {
   ErrorState,
 } from '@/components/ui'
 
-const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+const API = BACKEND_PROXY_BASE
 
 // ── Interfaces ──────────────────────────────────────────────────────────────
 
