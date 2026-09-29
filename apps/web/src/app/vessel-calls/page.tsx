@@ -383,7 +383,7 @@ function VesselCallsContent() {
                     {/* VCN */}
                     <td className="px-3 py-2.5 font-mono font-semibold text-[var(--color-text-primary)] whitespace-nowrap">
                       <Link
-                        href={`/vessel-journey?vcn=${c.vcn}`}
+                        href={`/vessel-journey?vcn=${encodeURIComponent(c.vcn)}`}
                         className="text-[var(--color-accent)] hover:text-[var(--color-accent-hover)] hover:underline flex items-center gap-1.5"
                         title="Drill into Vessel Journey"
                       >
@@ -554,7 +554,7 @@ function VesselCallsContent() {
                     {/* Action Button: Drill-down to Journey */}
                     <td className="px-3 py-2.5 text-center whitespace-nowrap">
                       <Link
-                        href={`/vessel-journey?vcn=${c.vcn}`}
+                        href={`/vessel-journey?vcn=${encodeURIComponent(c.vcn)}`}
                         className="px-2.5 py-1 bg-[var(--color-accent)] text-white rounded-md text-[11px] font-medium hover:bg-[var(--color-accent-hover)] transition-colors cursor-pointer"
                       >
                         Journey →
@@ -749,7 +749,7 @@ function VesselCallsContent() {
               {/* Direct Drill-Through CTA */}
               <div className="pt-2">
                 <Link
-                  href={`/vessel-journey?vcn=${traceabilityTarget.call.vcn}`}
+                  href={`/vessel-journey?vcn=${encodeURIComponent(traceabilityTarget.call.vcn)}`}
                   className="w-full py-2 bg-[var(--color-accent)] text-white rounded-md text-center block text-xs font-semibold hover:bg-[var(--color-accent-hover)] transition-colors"
                 >
                   Inspect Full Journey Swimlane →

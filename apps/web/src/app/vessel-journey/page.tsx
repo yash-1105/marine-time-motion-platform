@@ -12,10 +12,8 @@ interface VesselCallSummary {
   id: string
   vcn: string
   vessel_name: string
-  ata?: string
-  atd?: string
-  tenant_id: string
-  is_merged: boolean
+  journey_available: boolean
+  journey_status: string
 }
 
 interface StageRow {
@@ -50,9 +48,10 @@ interface JourneyData {
   vessel_call_id: string
   vcn: string
   vessel_name: string
-  journey_instance_id: string
+  journey_instance_id: string | null
   status: string
-  reconstruction_version: number
+  unavailable_reason?: string
+  reconstruction_version: number | null
   rule_version?: string
   computed_at?: string
   coverage_summary?: {
@@ -278,37 +277,6 @@ function VesselJourneyContent() {
     return t ? { Authorization: `Bearer ${t}` } : {}
   }, [token])
 
-  // Load vessel call list
-  useEffect(() => {
-    setLoadingList(true)
-    fetch(`${API}/api/v1/operations/vessel-calls?limit=200`, { headers: getActiveAuthHeaders() })
-      .then((r) => r.json())
-      .then((d) => {
-        const items: VesselCallSummary[] = Array.isArray(d) ? d : (d.items ?? [])
-        const cleanCalls = items.filter((v) => !v.is_merged)
-        setVesselCalls(cleanCalls)
-
-        // Check if query params specify a VCN or ID
-        const targetVcn = searchParams.get('vcn')
-        const targetId = searchParams.get('id')
-        if (targetVcn) {
-          const match = cleanCalls.find((c) => c.vcn.toLowerCase() === targetVcn.toLowerCase())
-          if (match) {
-            setSelectedVcId(match.id)
-            loadJourney(match.id)
-          }
-        } else if (targetId) {
-          const match = cleanCalls.find((c) => c.id === targetId)
-          if (match) {
-            setSelectedVcId(match.id)
-            loadJourney(match.id)
-          }
-        }
-      })
-      .catch(() => setError('Failed to load vessel calls'))
-      .finally(() => setLoadingList(false))
-  }, [token, getActiveAuthHeaders]) // eslint-disable-line react-hooks/exhaustive-deps
-
   const loadJourney = useCallback(
     (vcId: string) => {
       setLoadingJourney(true)
@@ -344,6 +312,64 @@ function VesselJourneyContent() {
     },
     [token, getActiveAuthHeaders] // eslint-disable-line react-hooks/exhaustive-deps
   )
+
+  // Load the complete, lightweight selector population. The API removes merged
+  // calls before pagination, so source duplicates cannot hide later VCNs.
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadVesselCalls() {
+      setLoadingList(true)
+      setError(null)
+      try {
+        const pageSize = 200
+        let skip = 0
+        let total = Number.POSITIVE_INFINITY
+        const allCalls: VesselCallSummary[] = []
+
+        while (skip < total) {
+          const response = await fetch(
+            `${API}/api/v1/journey/vessel-calls?skip=${skip}&limit=${pageSize}`,
+            { headers: getActiveAuthHeaders() }
+          )
+          if (!response.ok) throw new Error(`Vessel selector request failed (${response.status})`)
+          const page = await response.json()
+          const items: VesselCallSummary[] = page.items ?? []
+          total = page.total ?? items.length
+          allCalls.push(...items)
+          if (items.length === 0) break
+          skip += items.length
+        }
+
+        if (!cancelled) setVesselCalls(allCalls)
+      } catch {
+        if (!cancelled) setError('Failed to load vessel calls')
+      } finally {
+        if (!cancelled) setLoadingList(false)
+      }
+    }
+
+    loadVesselCalls()
+    return () => { cancelled = true }
+  }, [token, getActiveAuthHeaders])
+
+  const targetVcn = searchParams.get('vcn')
+  const targetId = searchParams.get('id')
+
+  // Resolve deep links after every selector load and whenever the URL changes.
+  // This does not depend on the currently rendered page because all identities
+  // are loaded from the paginated selector endpoint.
+  useEffect(() => {
+    const match = targetVcn
+      ? vesselCalls.find((call) => call.vcn.toLowerCase() === targetVcn.toLowerCase())
+      : targetId
+      ? vesselCalls.find((call) => call.id === targetId)
+      : undefined
+    if (match && selectedVcId !== match.id) {
+      setSelectedVcId(match.id)
+      loadJourney(match.id)
+    }
+  }, [targetVcn, targetId, vesselCalls, selectedVcId, loadJourney])
 
   const handleSelect = (vcId: string) => {
     setSelectedVcId(vcId)
@@ -384,6 +410,11 @@ function VesselJourneyContent() {
     (v) =>
       v.vcn.toLowerCase().includes(search.toLowerCase()) ||
       v.vessel_name.toLowerCase().includes(search.toLowerCase())
+  )
+  const journeyUnavailable = Boolean(
+    journey &&
+      (journey.status === 'UNAVAILABLE' ||
+        (journey.status === 'FAILED' && (journey.coverage_summary?.stages_available ?? 0) === 0))
   )
 
   return (
@@ -458,7 +489,7 @@ function VesselJourneyContent() {
                       Status: <StatusBadge status={journey.status} showGlyph={false} className="ml-1" />
                     </span>
                     <span>
-                      Version: <span className="font-semibold text-[var(--color-text-primary)]">{journey.reconstruction_version}</span>
+                      Version: <span className="font-semibold text-[var(--color-text-primary)]">{journey.reconstruction_version ?? '—'}</span>
                     </span>
                     <span>
                       Rule: <span className="font-semibold text-[var(--color-text-primary)]">{journey.rule_version ?? '—'}</span>
@@ -538,8 +569,14 @@ function VesselJourneyContent() {
 
             {/* Tab content */}
             <div className="flex-1 overflow-y-auto p-6">
+              {journeyUnavailable && (
+                <EmptyState
+                  title="Journey unavailable"
+                  description={journey.unavailable_reason || 'Insufficient governed events are available to reconstruct this vessel journey.'}
+                />
+              )}
               {/* ── Operational Swimlane ── */}
-              {tab === 'swimlane' && (
+              {!journeyUnavailable && tab === 'swimlane' && (
                 <div className="space-y-5">
                   {/* Path comparison banner */}
                   <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg p-4 text-xs">

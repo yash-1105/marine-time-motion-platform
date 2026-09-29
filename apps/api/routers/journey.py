@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from apps.api.auth.dependencies import require
 from apps.api.auth.principal import UserPrincipal
+from apps.api.auth.scope import DataScope
 from apps.api.auth.tenant import resolve_principal_tenant
 from apps.api.core.database import get_db
 from apps.api.models.canonical import VesselCall
@@ -18,6 +19,7 @@ from apps.api.models.journey import (
     ReconstructionHistory,
     StageOccurrence,
 )
+from apps.api.repository.vessel_call import VesselCallRepository
 from apps.api.services.journey.corrections import JourneyCorrectionService
 from apps.api.services.journey.narrative import JourneyNarrativeService
 from apps.api.services.journey.reconstructor import JourneyReconstructionEngine
@@ -65,6 +67,59 @@ def run_reconstruction(
     return {"status": "success", **summary}
 
 
+@router.get("/vessel-calls")
+def list_journey_vessel_calls(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(200, ge=1, le=500),
+    search: str | None = Query(None),
+    db: Session = Depends(get_db),
+    principal: UserPrincipal = Depends(require("view", "vessel_call")),
+):
+    """Lightweight selector population independent of journey reconstruction availability."""
+    scope = DataScope(
+        tenant_id=resolve_principal_tenant(principal),
+        port_id=principal.data_scope.port_id,
+        terminal_id=principal.data_scope.terminal_id,
+    )
+    repository = VesselCallRepository(db)
+    calls = repository.list(
+        scope=scope,
+        skip=skip,
+        limit=limit,
+        search=search,
+        is_merged=False,
+        sort_by="vcn",
+        sort_dir="asc",
+    )
+    total = repository.count(scope=scope, search=search, is_merged=False)
+
+    call_ids = [call.id for call in calls]
+    journeys = {}
+    if call_ids:
+        journeys = {
+            row.vessel_call_id: row
+            for row in db.execute(
+                select(JourneyInstance).where(JourneyInstance.vessel_call_id.in_(call_ids))
+            ).scalars()
+        }
+
+    return {
+        "items": [
+            {
+                "id": str(call.id),
+                "vcn": call.vcn,
+                "vessel_name": call.vessel_name,
+                "journey_available": call.id in journeys,
+                "journey_status": journeys[call.id].status if call.id in journeys else "UNAVAILABLE",
+            }
+            for call in calls
+        ],
+        "total": total,
+        "skip": skip,
+        "limit": limit,
+    }
+
+
 @router.get("/{vessel_call_id}")
 def get_journey(
     vessel_call_id: str,
@@ -78,7 +133,28 @@ def get_journey(
         select(JourneyInstance).where(JourneyInstance.vessel_call_id == vessel_call_id)
     ).scalar_one_or_none()
     if not instance:
-        raise HTTPException(status_code=404, detail="No reconstructed journey for this vessel call")
+        return {
+            "vessel_call_id": vessel_call_id,
+            "vcn": vc.vcn,
+            "vessel_name": vc.vessel_name,
+            "journey_instance_id": None,
+            "status": "UNAVAILABLE",
+            "unavailable_reason": "Journey unavailable / insufficient governed events",
+            "reconstruction_version": None,
+            "rule_version": None,
+            "computed_at": None,
+            "coverage_summary": {
+                "stages_total": 0,
+                "stages_available": 0,
+                "stages_missing": 0,
+                "stages_inferred": 0,
+                "shifting_occurrences": 0,
+            },
+            "time_decomposition": None,
+            "deviation_report": [],
+            "stages": [],
+            "handovers": [],
+        }
 
     stages = db.execute(
         select(StageOccurrence)
