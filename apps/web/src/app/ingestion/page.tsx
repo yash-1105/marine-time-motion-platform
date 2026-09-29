@@ -12,6 +12,7 @@ import { appendWorkbookSelection, MAX_WORKBOOKS } from './file-selection'
 const API = BACKEND_PROXY_BASE
 
 type UploadState = 'idle' | 'uploading' | 'error'
+type UploadMode = 'initial' | 'append'
 
 type FileResult = {
   filename: string
@@ -74,11 +75,13 @@ export default function IngestionPage() {
   const { status: datasetStatus, fileName, files: persistedFiles, refresh: refreshDataset, clearDataset } = useDatasetStatus()
   const [files, setFiles] = useState<File[]>([])
   const [uploadState, setUploadState] = useState<UploadState>('idle')
+  const [uploadMode, setUploadMode] = useState<UploadMode>('initial')
   const [uploadedName, setUploadedName] = useState<string>('')
   const [errorTitle, setErrorTitle] = useState<string>('Dataset processing failed')
   const [errorMessage, setErrorMessage] = useState<string>('')
   const [fileResults, setFileResults] = useState<FileResult[]>([])
   const [batchStatus, setBatchStatus] = useState<string>('')
+  const [noticeMessage, setNoticeMessage] = useState<string>('')
   const [confirmingRemoval, setConfirmingRemoval] = useState(false)
   const [removing, setRemoving] = useState(false)
   const addNewInputRef = useRef<HTMLInputElement>(null)
@@ -136,17 +139,20 @@ export default function IngestionPage() {
     throw new Error('Upload was accepted but processing is still running. Refresh this page to check its persisted batch status.')
   }
 
-  const processUpload = async (targetFiles: File[]) => {
+  const processUpload = async (targetFiles: File[], mode: UploadMode) => {
+    setUploadMode(mode)
     setUploadState('uploading')
     setErrorTitle('Dataset processing failed')
     setErrorMessage('')
     setBatchStatus('UPLOADING')
-    setFileResults(targetFiles.map((targetFile) => ({
-      filename: targetFile.name,
-      byte_size: targetFile.size,
-      parse_status: 'QUEUED',
-      validation_status: 'PENDING',
-    })))
+    setNoticeMessage('')
+    const queuedFiles = targetFiles.map((targetFile) => ({
+        filename: targetFile.name,
+        byte_size: targetFile.size,
+        parse_status: 'QUEUED',
+        validation_status: 'PENDING',
+      }))
+    setFileResults(mode === 'append' ? [...persistedFiles, ...queuedFiles] : queuedFiles)
 
     const uploadBody = () => {
       const formData = new FormData()
@@ -157,7 +163,8 @@ export default function IngestionPage() {
     let uploadAccepted = false
     try {
       let headers = getActiveAuthHeaders()
-      let res = await fetch(`${API}/api/v1/ingestion/upload`, {
+      const endpoint = mode === 'append' ? 'append' : 'upload'
+      let res = await fetch(`${API}/api/v1/ingestion/${endpoint}`, {
         method: 'POST',
         headers,
         body: uploadBody(),
@@ -168,7 +175,7 @@ export default function IngestionPage() {
         const freshToken = await refreshAccessToken()
         if (freshToken) {
           headers = { Authorization: `Bearer ${freshToken}` }
-          res = await fetch(`${API}/api/v1/ingestion/upload`, {
+          res = await fetch(`${API}/api/v1/ingestion/${endpoint}`, {
             method: 'POST',
             headers,
             body: uploadBody(),
@@ -192,9 +199,10 @@ export default function IngestionPage() {
         throw new Error(parsedMessage)
       }
       const data = await res.json()
-      if (data.file_count !== targetFiles.length) {
+      const receivedFileCount = data.received_file_count ?? data.file_count
+      if (receivedFileCount !== targetFiles.length) {
         throw new Error(
-          `Upload integrity check failed: ${targetFiles.length} workbooks were selected but the server received ${data.file_count ?? 0}.`
+          `Upload integrity check failed: ${targetFiles.length} workbooks were selected but the server received ${receivedFileCount ?? 0}.`
         )
       }
       uploadAccepted = true
@@ -209,10 +217,21 @@ export default function IngestionPage() {
           : 'Dataset processing failed.'))
         return
       }
-      setUploadedName(targetFiles.length === 1 ? targetFiles[0].name : `${targetFiles.length} workbooks`)
+      setUploadedName(
+        mode === 'append'
+          ? `${data.file_count} workbooks`
+          : targetFiles.length === 1
+          ? targetFiles[0].name
+          : `${targetFiles.length} workbooks`
+      )
       setFiles([])
       setUploadState('idle')
       await refreshDataset()
+      if (Array.isArray(data.duplicate_files) && data.duplicate_files.length) {
+        setNoticeMessage(`${data.duplicate_files.join(', ')} already existed and was not added again.`)
+      } else if (mode === 'append') {
+        setNoticeMessage(`${data.added_file_count ?? targetFiles.length} workbook${(data.added_file_count ?? targetFiles.length) === 1 ? '' : 's'} added to the active dataset.`)
+      }
     } catch (error) {
       const e = error as Error
       setUploadState('error')
@@ -239,7 +258,7 @@ export default function IngestionPage() {
 
   const handleInitialUpload = async () => {
     if (!files.length) return
-    await processUpload(files)
+    await processUpload(files, 'initial')
   }
 
   const handleAddNewFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -247,12 +266,12 @@ export default function IngestionPage() {
     if (!selected.length) return
     // Reset the input value so the same file can be re-selected if needed
     e.target.value = ''
-    if (selected.length > 15) {
-      setErrorMessage('A dataset group supports a maximum of 15 workbooks. File #16 was not added.')
-      setUploadState('error')
+    const remaining = MAX_WORKBOOKS - persistedFiles.length
+    if (selected.length > remaining) {
+      setErrorMessage(`The active dataset has ${persistedFiles.length} workbooks; only ${remaining} more can be added (${MAX_WORKBOOKS} total maximum).`)
       return
     }
-    await processUpload(selected)
+    await processUpload(selected, 'append')
   }
 
   const retry = () => {
@@ -298,7 +317,7 @@ export default function IngestionPage() {
       <div className="max-w-3xl w-full space-y-6">
         {uploadState === 'uploading' ? (
           <Card>
-            <LoadingState label="Uploading and processing dataset…" />
+            <LoadingState label={uploadMode === 'append' ? 'Adding workbooks to the active dataset…' : 'Uploading and processing dataset…'} />
             <FileHandlingSummary files={fileResults} batchStatus={batchStatus} />
           </Card>
         ) : uploadState === 'error' ? (
@@ -329,8 +348,9 @@ export default function IngestionPage() {
               <div className="flex items-center gap-2 flex-wrap">
                 <button
                   onClick={() => addNewInputRef.current?.click()}
-                  className="inline-flex min-h-9 items-center gap-1.5 px-3.5 py-2 bg-[var(--color-surface)] hover:bg-[var(--color-surface-muted)] text-[var(--color-text-primary)] rounded-[var(--radius-md)] text-xs font-semibold border border-[var(--color-border-strong)] cursor-pointer"
-                  title="Select one to fifteen Excel workbooks to replace the active dataset"
+                  disabled={persistedFiles.length >= MAX_WORKBOOKS}
+                  className="inline-flex min-h-9 items-center gap-1.5 px-3.5 py-2 bg-[var(--color-surface)] hover:bg-[var(--color-surface-muted)] text-[var(--color-text-primary)] rounded-[var(--radius-md)] text-xs font-semibold border border-[var(--color-border-strong)] cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+                  title={persistedFiles.length >= MAX_WORKBOOKS ? 'The active dataset already contains 15 workbooks' : `Add up to ${MAX_WORKBOOKS - persistedFiles.length} workbooks to the active dataset`}
                 >
                   <Plus size={14} aria-hidden="true" /> Add New
                 </button>
@@ -348,6 +368,11 @@ export default function IngestionPage() {
                 </button>
               </div>
             </div>
+            {(noticeMessage || errorMessage) && (
+              <p role="status" className={`mt-4 text-xs ${errorMessage ? 'text-[var(--color-warning)]' : 'text-[var(--color-good)]'}`}>
+                {errorMessage || noticeMessage}
+              </p>
+            )}
             <FileHandlingSummary files={fileResults.length ? fileResults : persistedFiles} batchStatus={batchStatus || 'COMMITTED'} />
           </Card>
         ) : (

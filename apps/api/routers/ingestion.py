@@ -37,6 +37,88 @@ def _file_result(manifest: IngestionFile) -> dict:
     }
 
 
+def _write_uploads_to_temp(uploads: list[UploadFile], temp_files: list[tuple[str, str]]) -> None:
+    """Stream validated XLSX uploads to bounded temporary files without buffering them in memory."""
+    os.makedirs("/tmp/uploads", exist_ok=True)
+    for upload in uploads:
+        safe_name = Path(upload.filename or "").name
+        if not safe_name.lower().endswith(".xlsx"):
+            raise HTTPException(status_code=415, detail="Only .xlsx workbooks are accepted for governed dataset groups")
+        temp_path = f"/tmp/uploads/{uuid.uuid4()}_{safe_name}"
+        temp_files.append((temp_path, safe_name))
+        with open(temp_path, "wb") as buffer:
+            written = 0
+            while chunk := upload.file.read(1024 * 1024):
+                written += len(chunk)
+                if written > settings.upload_max_bytes:
+                    raise HTTPException(status_code=413, detail=f"{safe_name} exceeds configured file size limit")
+                buffer.write(chunk)
+        with open(temp_path, "rb") as stored_upload:
+            if stored_upload.read(4) != b"PK\x03\x04":
+                raise HTTPException(status_code=415, detail=f"{safe_name} is not a valid OOXML XLSX container")
+
+
+def _queue_candidate(
+    db: Session,
+    tenant_id: str,
+    candidate_files: list[tuple[str, str]],
+    *,
+    received_file_count: int,
+    added_file_count: int,
+    duplicate_files: list[str] | None = None,
+    is_synthetic: bool = False,
+) -> dict:
+    """Parse a complete candidate group and enqueue its atomic activation."""
+    pipeline = IngestionPipeline(db, tenant_id=tenant_id)
+    batch_id = pipeline.process_files(
+        candidate_files,
+        force_new=True,
+        commit_canonical=False,
+        is_synthetic=is_synthetic,
+    )
+    new_batch = db.query(IngestionBatch).filter(IngestionBatch.batch_id == batch_id).first()
+    if not new_batch:
+        raise RuntimeError("Accepted ingestion batch could not be found")
+    new_batch.status = "PROCESSING"
+    new_batch.is_active = False
+    db.commit()
+
+    process_ingestion_analytics_task.send(batch_id, tenant_id, new_batch.file_checksum)
+
+    manifests = (
+        db.execute(
+            select(IngestionFile)
+            .where(IngestionFile.group_batch_id == batch_id)
+            .order_by(IngestionFile.created_at, IngestionFile.id)
+        )
+        .scalars()
+        .all()
+    )
+    skipped_count = sum(manifest.parse_status == "SKIPPED" for manifest in manifests)
+    return {
+        "batch_id": batch_id,
+        "file_count": len(manifests),
+        "received_file_count": received_file_count,
+        "added_file_count": added_file_count,
+        "duplicate_files": duplicate_files or [],
+        "files": [manifest.original_filename for manifest in manifests],
+        "file_results": [
+            {
+                "filename": manifest.original_filename,
+                "checksum": manifest.file_checksum,
+                "byte_size": manifest.byte_size,
+                "parse_status": manifest.parse_status,
+                "validation_status": manifest.validation_status,
+                "message": manifest.error_message,
+            }
+            for manifest in manifests
+        ],
+        "governed_file_count": len(manifests) - skipped_count,
+        "skipped_file_count": skipped_count,
+        "status": "PROCESSING",
+    }
+
+
 @router.post("/upload", status_code=202)
 def upload_file(
     background_tasks: BackgroundTasks,
@@ -54,76 +136,16 @@ def upload_file(
     uploads = files if isinstance(files, list) else ([] if file is None else [file])
     if not 1 <= len(uploads) <= 15:
         raise HTTPException(status_code=400, detail="Upload between 1 and 15 Excel workbooks per dataset group")
-    os.makedirs("/tmp/uploads", exist_ok=True)
     temp_files: list[tuple[str, str]] = []
     try:
-        for upload in uploads:
-            safe_name = Path(upload.filename or "").name
-            if not safe_name.lower().endswith(".xlsx"):
-                raise HTTPException(
-                    status_code=415, detail="Only .xlsx workbooks are accepted for governed dataset groups"
-                )
-            temp_path = f"/tmp/uploads/{uuid.uuid4()}_{safe_name}"
-            temp_files.append((temp_path, safe_name))
-            with open(temp_path, "wb") as buffer:
-                written = 0
-                while chunk := upload.file.read(1024 * 1024):
-                    written += len(chunk)
-                    if written > settings.upload_max_bytes:
-                        raise HTTPException(status_code=413, detail=f"{safe_name} exceeds configured file size limit")
-                    buffer.write(chunk)
-            if open(temp_path, "rb").read(4) != b"PK\x03\x04":
-                raise HTTPException(status_code=415, detail=f"{safe_name} is not a valid OOXML XLSX container")
-
-        pipeline = IngestionPipeline(db, tenant_id=tenant_id)
-        checksums = [pipeline.calculate_checksum(path) for path, _ in temp_files]
-        checksum = __import__("hashlib").sha256("".join(sorted(checksums)).encode()).hexdigest()
-
-        # Parse/map/validate before replacing an active dataset.  A malformed workbook
-        # therefore cannot erase a currently usable dataset.
-        batch_id = pipeline.process_files(temp_files, force_new=True, commit_canonical=False)
-
-        # Do not delete the active canonical dataset in the request.  A prior worker
-        # may still be calculating it; replacement is serialized by the worker so a
-        # newer upload cannot race a running analytics transaction.
-        new_batch = db.query(IngestionBatch).filter(IngestionBatch.batch_id == batch_id).first()
-        if not new_batch:
-            raise RuntimeError("Accepted ingestion batch could not be found")
-        new_batch.status = "PROCESSING"
-        new_batch.is_active = False
-        db.commit()
-
-        # Redis/Dramatiq is the durable execution boundary shared with the worker.
-        process_ingestion_analytics_task.send(batch_id, tenant_id, checksum)
-
-        manifests = (
-            db.execute(
-                select(IngestionFile)
-                .where(IngestionFile.group_batch_id == batch_id)
-                .order_by(IngestionFile.created_at, IngestionFile.id)
-            )
-            .scalars()
-            .all()
+        _write_uploads_to_temp(uploads, temp_files)
+        return _queue_candidate(
+            db,
+            tenant_id,
+            temp_files,
+            received_file_count=len(uploads),
+            added_file_count=len(uploads),
         )
-        skipped_count = sum(manifest.parse_status == "SKIPPED" for manifest in manifests)
-        return {
-            "batch_id": batch_id,
-            "file_count": len(temp_files),
-            "files": [name for _, name in temp_files],
-            "file_results": [
-                {
-                    "filename": manifest.original_filename,
-                    "byte_size": manifest.byte_size,
-                    "parse_status": manifest.parse_status,
-                    "validation_status": manifest.validation_status,
-                    "message": manifest.error_message,
-                }
-                for manifest in manifests
-            ],
-            "governed_file_count": len(manifests) - skipped_count,
-            "skipped_file_count": skipped_count,
-            "status": "PROCESSING",
-        }
     except HTTPException:
         if db is not None:
             db.rollback()
@@ -167,6 +189,158 @@ def upload_file(
                 "message": "The workbooks could not be processed. The prior active dataset was not changed.",
             },
         ) from e
+    finally:
+        for temp_path, _ in temp_files:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+
+
+@router.post("/append", status_code=202)
+def append_files_to_active_dataset(
+    files: list[UploadFile] = File(...),
+    db: Session = Depends(get_db),
+    principal=Depends(require("create", "vessel_call")),
+):
+    """Atomically add unique workbooks to the tenant's active governed dataset.
+
+    The active batch remains untouched while a complete candidate revision is
+    parsed and processed. Existing immutable originals are included exactly once
+    by checksum; only a successful worker transaction activates the union.
+    """
+    tenant_id = _resolve_tenant(principal)
+    uploads = files if isinstance(files, list) else []
+    if not 1 <= len(uploads) <= 15:
+        raise HTTPException(status_code=400, detail="Select between 1 and 15 Excel workbooks to add")
+
+    active_batch = (
+        db.execute(
+            select(IngestionBatch)
+            .where(
+                IngestionBatch.tenant_id == tenant_id,
+                IngestionBatch.is_active.is_(True),
+                IngestionBatch.status == "COMMITTED",
+            )
+            .order_by(desc(IngestionBatch.created_at))
+        )
+        .scalars()
+        .first()
+    )
+    if not active_batch:
+        raise HTTPException(status_code=409, detail="No active dataset exists. Use the initial upload flow first.")
+
+    active_manifests = (
+        db.execute(
+            select(IngestionFile)
+            .where(IngestionFile.group_batch_id == active_batch.batch_id)
+            .order_by(IngestionFile.created_at, IngestionFile.id)
+        )
+        .scalars()
+        .all()
+    )
+    if len(active_manifests) >= 15:
+        raise HTTPException(status_code=400, detail="The active dataset already contains the maximum of 15 workbooks")
+
+    temp_files: list[tuple[str, str]] = []
+    try:
+        _write_uploads_to_temp(uploads, temp_files)
+        pipeline = IngestionPipeline(db, tenant_id=tenant_id)
+        active_checksums = {manifest.file_checksum for manifest in active_manifests}
+        candidate_checksums = set(active_checksums)
+        unique_new_files: list[tuple[str, str]] = []
+        duplicate_files: list[str] = []
+        for temp_file in temp_files:
+            checksum = pipeline.calculate_checksum(temp_file[0])
+            if checksum in candidate_checksums:
+                duplicate_files.append(temp_file[1])
+                continue
+            candidate_checksums.add(checksum)
+            unique_new_files.append(temp_file)
+
+        if not unique_new_files:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "DUPLICATE_WORKBOOK",
+                    "message": "The selected workbook is already present in the active dataset.",
+                    "duplicate_files": duplicate_files,
+                },
+            )
+
+        combined_count = len(active_manifests) + len(unique_new_files)
+        if combined_count > 15:
+            remaining = 15 - len(active_manifests)
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "code": "DATASET_FILE_LIMIT_EXCEEDED",
+                    "message": (
+                        f"The active dataset has {len(active_manifests)} workbooks; "
+                        f"only {remaining} more can be added (15 total maximum)."
+                    ),
+                },
+            )
+
+        existing_files: list[tuple[str, str]] = []
+        for manifest in active_manifests:
+            storage_reference = manifest.storage_reference or ""
+            if not storage_reference or not Path(storage_reference).is_file():
+                raise RuntimeError(
+                    f"Stored source workbook '{manifest.original_filename}' is unavailable for atomic append"
+                )
+            existing_files.append((storage_reference, manifest.original_filename))
+
+        return _queue_candidate(
+            db,
+            tenant_id,
+            existing_files + unique_new_files,
+            received_file_count=len(uploads),
+            added_file_count=len(unique_new_files),
+            duplicate_files=duplicate_files,
+            is_synthetic=bool(active_batch.is_synthetic),
+        )
+    except HTTPException:
+        db.rollback()
+        raise
+    except WorkbookIngestionError as exc:
+        db.rollback()
+        logger.warning(
+            "ingestion_append_workbook_error workbook=%s worksheet=%s stage=%s batch_id=%s error=%s",
+            exc.workbook,
+            exc.worksheet,
+            exc.stage,
+            exc.batch_id,
+            exc.safe_message,
+        )
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "WORKBOOK_VALIDATION_ERROR",
+                "message": exc.safe_message,
+                "workbook": exc.workbook,
+                "worksheet": exc.worksheet,
+                "stage": exc.stage,
+                "ingestion_run_id": exc.batch_id,
+            },
+        ) from exc
+    except Exception as exc:
+        db.rollback()
+        logger.exception(
+            "ingestion_append_failed active_batch_id=%s files=%s",
+            active_batch.batch_id,
+            [name for _, name in temp_files],
+        )
+        if isinstance(exc, ValueError):
+            raise HTTPException(
+                status_code=422,
+                detail={"code": "INGESTION_VALIDATION_ERROR", "message": str(exc)},
+            ) from exc
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "code": "INGESTION_APPEND_ERROR",
+                "message": "The workbooks could not be added. The existing active dataset was not changed.",
+            },
+        ) from exc
     finally:
         for temp_path, _ in temp_files:
             if os.path.exists(temp_path):
